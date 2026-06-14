@@ -21,6 +21,7 @@ const checkboxKeys = ["lipEnabled", "notchesEnabled"];
 const inputs = Object.fromEntries([...numericKeys, ...checkboxKeys].map((key) => [key, document.getElementById(key)]));
 let state = { ...defaults };
 let armyRecommendations = [];
+let armyParseReport = { lines: 0, candidates: 0 };
 let toastTimer;
 
 function clamp(value, minimum, maximum) {
@@ -294,7 +295,12 @@ const baseCatalogue = [
   { id: "dragon-ogres", name: "Dragon Ogres", width: 50, depth: 75, aliases: ["dragon ogres", "dragon ogre"] },
   { id: "razorgor-herds", name: "Razorgor Herds", width: 50, depth: 75, aliases: ["razorgor herds", "razorgor herd", "razorgors"] },
   { id: "beastmen-chariots", name: "Beastmen Chariots", width: 50, depth: 100, aliases: ["beastmen chariots", "beastmen chariot", "tuskgor chariots", "tuskgor chariot"] },
-  { id: "razorgor-chariots", name: "Razorgor Chariots", width: 50, depth: 100, aliases: ["razorgor chariots", "razorgor chariot"] }
+  { id: "razorgor-chariots", name: "Razorgor Chariots", width: 50, depth: 100, aliases: ["razorgor chariots", "razorgor chariot"] },
+  { id: "chracian-woodsmen", name: "Chracian Woodsmen", width: 25, depth: 25, aliases: ["chracian woodsmen", "chracian woodsman"] },
+  { id: "white-lions-of-chrace", name: "White Lions of Chrace", width: 25, depth: 25, aliases: ["white lions of chrace", "white lion of chrace", "white lions"] },
+  { id: "war-lions", name: "War Lions", width: 30, depth: 60, aliases: ["war lions", "war lion"] },
+  { id: "lion-guard", name: "Lion Guard", width: 25, depth: 25, aliases: ["lion guard"] },
+  { id: "lion-chariot-of-chrace", name: "Lion Chariot of Chrace", width: 50, depth: 100, aliases: ["lion chariot of chrace", "lion chariots of chrace"] }
 ];
 
 function normalizeText(value) {
@@ -330,6 +336,22 @@ function quantityFromLine(line, alias = "") {
   const beforeAlias = normalized.slice(0, Math.max(0, aliasIndex));
   const beforeMatches = [...beforeAlias.matchAll(/\b(\d{1,3})\s*x?\b/g)];
   if (beforeMatches.length) return Number(beforeMatches.at(-1)[1]);
+  const rawAliasIndex = line.toLowerCase().indexOf(alias);
+  const afterAlias = rawAliasIndex >= 0 ? line.slice(rawAliasIndex + alias.length) : "";
+  const afterPatterns = [
+    /^\s*(?:x|:|-)?\s*[\[(]\s*(\d{1,3})\s*[\])]/i,
+    /^\s*(?:x|:|-)\s*(\d{1,3})\b/i,
+    /^\s+(\d{1,3})\s*(?:models?|strong)?\b/i,
+    /\b(?:models?|unit size|quantity|qty)\s*[:x-]?\s*(\d{1,3})\b/i
+  ];
+  for (const pattern of afterPatterns) {
+    const match = afterAlias.match(pattern);
+    if (match) {
+      const remainder = afterAlias.slice(match[0].length);
+      if (/^\s*(?:pts?|points?)\b/i.test(remainder)) continue;
+      return Number(match[1]);
+    }
+  }
   return leading ? Number(leading[1]) : 0;
 }
 
@@ -341,6 +363,23 @@ function unknownNameFromLine(line) {
     .replace(/\s+[-:]\s+\d+\s*(pts?|points?).*$/i, "")
     .replace(/\s+\d+\s*(pts?|points?).*$/i, "")
     .trim();
+}
+
+function firstPlausibleQuantity(line) {
+  const withoutPoints = line
+    .replace(/\b\d[\d,]*\s*(?:pts?|points?)\b/gi, "")
+    .replace(/\[\s*\d[\d,]*\s*(?:pts?|points?)?[^\]]*\]/gi, "");
+  const patterns = [
+    /^\s*[+\-*•]?\s*(\d{1,3})\s*x?\s+/i,
+    /[\[(]\s*(\d{1,3})\s*[\])]/,
+    /\b(?:models?|unit size|quantity|qty)\s*[:x-]?\s*(\d{1,3})\b/i,
+    /\s[-:]\s*(\d{1,3})\s*$/
+  ];
+  for (const pattern of patterns) {
+    const match = withoutPoints.match(pattern);
+    if (match) return Number(match[1]);
+  }
+  return 0;
 }
 
 function learnedBases() {
@@ -366,17 +405,22 @@ function parseArmyList(text) {
   const found = new Map();
   const learned = learnedBases();
   const ignoredNames = new Set(["points", "models", "core", "special", "rare", "characters", "lords", "heroes", "total"]);
+  let lines = 0;
+  let candidates = 0;
   text.split(/\r?\n/).forEach((rawLine) => {
     const line = rawLine.trim();
     if (!line) return;
+    if (/^[-•]\s+/.test(line)) return;
+    lines += 1;
     const normalized = normalizeText(line);
     const matches = baseCatalogue
       .flatMap((entry) => entry.aliases.map((alias) => ({ entry, alias })))
       .filter(({ alias }) => normalized.includes(alias))
       .sort((a, b) => b.alias.length - a.alias.length);
     const catalogueMatch = matches[0];
-    const count = quantityFromLine(line, catalogueMatch?.alias);
+    const count = quantityFromLine(line, catalogueMatch?.alias) || firstPlausibleQuantity(line);
     if (count < 2 || count > 500) return;
+    candidates += 1;
 
     const parsedName = catalogueMatch?.entry.name || unknownNameFromLine(line);
     const learnedMatch = learned[normalizeText(parsedName)];
@@ -400,6 +444,7 @@ function parseArmyList(text) {
       matched: Boolean(catalogueMatch || learnedMatch)
     });
   });
+  armyParseReport = { lines, candidates };
   return [...found.values()];
 }
 
@@ -430,12 +475,13 @@ function renderArmyRecommendations() {
   const container = document.getElementById("armyResults");
   const summary = document.getElementById("armySummary");
   if (!armyRecommendations.length) {
-    summary.textContent = "No ranked units found";
-    container.innerHTML = `<div class="empty-army">No usable unit lines were found. Try lines such as "20 Ungor Raiders" or "20x Bestigor Herds".</div>`;
+    summary.textContent = `${armyParseReport.lines} lines checked - no ranked units found`;
+    container.innerHTML = `<div class="empty-army">No unit quantities were recognised. Keep each unit and its model count on one line, such as "16 White Lions of Chrace [242 pts]".</div>`;
     return;
   }
   const recognised = armyRecommendations.filter((item) => item.matched).length;
-  summary.textContent = `${armyRecommendations.length} units - ${recognised} catalogue matches`;
+  const unknown = armyRecommendations.length - recognised;
+  summary.textContent = `${armyRecommendations.length} tray types - ${unknown} need base sizes`;
   container.innerHTML = armyRecommendations.map((item) => {
     const ready = item.baseSize > 0 && item.baseDepth > 0;
     const capacity = item.columns * item.rows;
@@ -464,9 +510,20 @@ function renderArmyRecommendations() {
 }
 
 function analyzeArmyList() {
-  armyRecommendations = parseArmyList(document.getElementById("armyList").value);
+  const textarea = document.getElementById("armyList");
+  const text = textarea.value.trim();
+  if (!text) {
+    armyRecommendations = [];
+    document.getElementById("armySummary").textContent = "Waiting for a list";
+    document.getElementById("armyResults").innerHTML = `<div class="empty-army">Paste an army list above, then choose Suggest trays.</div>`;
+    showToast("Paste an army list first");
+    textarea.focus();
+    return;
+  }
+  armyRecommendations = parseArmyList(text);
   renderArmyRecommendations();
-  showToast(armyRecommendations.length ? `${armyRecommendations.length} tray suggestions ready` : "No ranked units found");
+  showToast(armyRecommendations.length ? `${armyRecommendations.length} tray suggestions ready` : "No units with quantities were recognised");
+  document.querySelector(".army-results-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function showToast(message) {
