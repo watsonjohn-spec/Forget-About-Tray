@@ -18,6 +18,11 @@
         <label>Password<input id="loginPassword" autocomplete="current-password" required type="password"></label>
         <p class="login-error" id="loginError" role="alert"></p>
         <button class="button button-primary" type="submit">Sign in</button>
+        <div class="login-divider"><span>or continue with</span></div>
+        <div class="oauth-actions">
+          <button class="button oauth-button" data-oauth-provider="google" type="button"><b>G</b> Google</button>
+          <button class="button oauth-button" data-oauth-provider="apple" type="button"><b>A</b> Apple</button>
+        </div>
         <div class="login-secondary-actions">
           <button class="button button-ghost" id="createAccountButton" type="button">Create account</button>
           <button class="button button-ghost" id="forgotPasswordButton" type="button">Forgot password</button>
@@ -37,11 +42,19 @@
       </a>
       <p class="top-tagline"><strong>Build the formation.</strong><em>Print the advantage.</em></p>
       <div class="top-actions">
-        <span class="status-dot"><i></i> Ready to print</span>
-        <button class="button button-ghost" id="savePresetTop" type="button">Save preset</button>
-        <button class="button button-primary" id="exportTop" type="button">Export STL</button>
-        <button class="button button-ghost" id="accountButton" type="button">Account</button>
-        <button class="button button-ghost" id="logoutButton" type="button">Log out</button>
+        <span class="status-dot single-only"><i></i> Ready to print</span>
+        <button class="button button-ghost single-only" id="savePresetTop" type="button">Save preset</button>
+        <button class="button button-primary single-only" id="exportTop" type="button">Export STL</button>
+        <div class="account-menu-wrap">
+          <button class="button button-ghost account-menu-button" id="accountButton" type="button" aria-expanded="false">Account <span>▾</span></button>
+          <div class="account-menu" id="accountMenu" hidden>
+            <strong id="accountMenuEmail">Workshop account</strong>
+            <button type="button" data-account-view="profile">Profile and address</button>
+            <button type="button" data-account-view="password">Change password</button>
+            <button type="button" data-account-view="orders">Order history</button>
+            <button type="button" id="logoutButton">Log out</button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -76,7 +89,10 @@
               <span class="step">01</span>
               <h2>Tray setup</h2>
             </div>
-            <button class="text-button" id="resetButton" type="button">Reset</button>
+            <div class="panel-heading-actions">
+              <button class="text-button" id="openSingleCatalogue" type="button">Base catalogue</button>
+              <button class="text-button" id="resetButton" type="button">Reset</button>
+            </div>
           </div>
 
           <div class="control-section">
@@ -108,21 +124,33 @@
 
           <div class="control-section">
             <div class="section-label"><span>Model fit</span></div>
+            <div class="base-shape-toggle" id="baseShapeToggle" aria-label="Base shape">
+              <button type="button" class="active" data-base-shape="square">Square</button>
+              <button type="button" data-base-shape="rectangle">Rectangle</button>
+            </div>
             <label class="field-label" for="baseSize">Base width</label>
             <div class="choice-row" id="baseChoices">
-              <button type="button" data-base="20">20</button>
               <button type="button" data-base="25" class="active">25</button>
-              <button type="button" data-base="32">32</button>
+              <button type="button" data-base="30">30</button>
               <button type="button" data-base="40">40</button>
+              <button type="button" data-base="50">50</button>
               <div class="number-field compact">
-                <input id="baseSize" type="number" min="10" max="100" step="0.5" value="25" />
+                <input id="baseSize" type="number" min="20" max="150" step="0.5" value="25" />
                 <span>mm</span>
               </div>
             </div>
             <div class="two-fields">
-              <label class="number-field">
-                <span>Base depth</span>
-                <span class="input-wrap"><input id="baseDepth" type="number" min="10" max="150" step="0.5" value="25" /><b>mm</b></span>
+              <label class="number-field" id="baseDepthField">
+                <span>Base length</span>
+                <span class="input-wrap">
+                  <select id="baseDepth" min="10" max="150" aria-label="Base length">
+                    <option value="50">50 mm</option>
+                    <option value="60">60 mm</option>
+                    <option value="75">75 mm</option>
+                    <option value="100">100 mm</option>
+                    <option value="150">150 mm</option>
+                  </select>
+                </span>
               </label>
               <label class="number-field">
                 <span>Gap between bases</span>
@@ -283,18 +311,22 @@
       <div class="catalogue-layout">
         <section>
           <label class="dialog-label" for="catalogueSearch">Add an existing unit</label>
-          <input class="dialog-input" id="catalogueSearch" type="search" placeholder="Search units..." />
+          <div class="catalogue-filters">
+            <select class="dialog-input" id="catalogueArmyFilter" aria-label="Filter catalogue by army"></select>
+            <input class="dialog-input" id="catalogueSearch" type="search" placeholder="Search units..." />
+          </div>
+          <p class="catalogue-note">Catalogue dimensions are a working reference. Confirm unusual models against the latest army publication before printing.</p>
           <div class="catalogue-list" id="catalogueList"></div>
         </section>
         <form class="custom-unit-form" id="customUnitForm">
           <h3>Add a custom unit</h3>
           <label>Name<input id="customUnitName" required type="text" placeholder="e.g. Spearmen"></label>
           <div class="dialog-field-grid">
-            <label>Models<input id="customUnitCount" required type="number" min="2" max="500" value="10"></label>
+            <label id="customUnitCountField">Models<input id="customUnitCount" required type="number" min="2" max="500" value="10"></label>
             <label>Base width<input id="customUnitWidth" required type="number" min="10" max="150" value="25"></label>
             <label>Base depth<input id="customUnitDepth" required type="number" min="10" max="150" value="25"></label>
           </div>
-          <button class="button button-primary" type="submit">Add tray tab</button>
+          <button class="button button-primary" id="customUnitSubmit" type="submit">Add tray tab</button>
         </form>
       </div>
     </dialog>
@@ -328,8 +360,14 @@
           <label>Country code<input id="accountCountry" type="text" maxlength="2" value="GB" autocomplete="country"></label>
           <label class="account-consent"><input id="accountMarketingConsent" type="checkbox"> Send me occasional product news</label>
           <button class="button button-primary" type="submit">Save profile</button>
+          <section class="password-panel" id="accountPasswordSection">
+            <h3>Change password</h3>
+            <label>New password<input id="accountNewPassword" type="password" minlength="8" autocomplete="new-password"></label>
+            <label>Confirm password<input id="accountConfirmPassword" type="password" minlength="8" autocomplete="new-password"></label>
+            <button class="button button-secondary" id="changePasswordButton" type="button">Update password</button>
+          </section>
         </form>
-        <section class="account-orders">
+        <section class="account-orders" id="accountOrdersSection">
           <h3>Purchase history</h3>
           <p>Paid STL access and physical print orders appear here.</p>
           <div id="accountOrdersList"></div>
@@ -397,6 +435,7 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="account.js"></script>
+    <script src="catalogue.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

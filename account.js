@@ -4,6 +4,7 @@
   let session = null;
   let user = null;
   let authType = "";
+  let authError = "";
 
   function apiBase() {
     return document.querySelector('meta[name="checkout-api-url"]').content.trim().replace(/\/$/, "");
@@ -65,6 +66,11 @@
     try {
       const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
       authType = hash.get("type") || "";
+      authError = hash.get("error_description") || "";
+      if (authError) {
+        history.replaceState({}, "", window.location.pathname + window.location.search);
+        return null;
+      }
       if (hash.get("access_token")) {
         storeSession({
           access_token: hash.get("access_token"),
@@ -103,6 +109,15 @@
     });
     if (result.access_token) storeSession(result);
     return result;
+  }
+
+  async function signInWithProvider(provider) {
+    await loadConfig();
+    const redirectTo = `${window.location.origin}${window.location.pathname}`;
+    const url = new URL(`${config.supabaseUrl}/auth/v1/authorize`);
+    url.searchParams.set("provider", provider);
+    url.searchParams.set("redirect_to", redirectTo);
+    window.location.assign(url.toString());
   }
 
   async function resetPassword(email) {
@@ -216,6 +231,7 @@
   window.accountService = {
     init,
     signIn,
+    signInWithProvider,
     signUp,
     signOut,
     resetPassword,
@@ -232,6 +248,7 @@
     importLocalData,
     authHeaders,
     authType: () => authType,
+    authError: () => authError,
     isSignedIn: () => Boolean(session?.access_token),
     currentUser: () => user
   };

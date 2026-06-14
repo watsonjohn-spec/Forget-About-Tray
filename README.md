@@ -10,7 +10,7 @@ A browser-based prototype for configuring and exporting printable miniature move
 - Save tray presets and army projects to a Supabase account
 - Download an account-gated printable ASCII STL, or order the tray from the print service
 - Paste an army list to get editable per-unit tray recommendations
-- Match Beastmen units from the starter base catalogue and remember corrected base sizes locally
+- Filter a broad Old World base catalogue by army and remember corrected base sizes locally
 - Save and reload complete army tray projects
 - Add catalogue or custom units as new visual tray tabs
 - Edit army trays in place using the full visual designer
@@ -44,6 +44,10 @@ Paid unlimited-download access and the single sponsored download are recorded ag
 Set `DOWNLOAD_TOKEN_SECRET` to a long random value before deployment so sponsored-download permits cannot be forged.
 
 Before running the account-enabled app for the first time, open the Supabase SQL Editor and run `supabase/schema.sql`. This creates profiles, saved designs, army lists, entitlements, immutable order snapshots, VAT-ready order fields, and Row Level Security policies.
+
+To enable Google and Apple sign-in, open **Supabase Dashboard → Authentication → Providers**, configure Google and Apple, then add the deployed app URL to **Authentication → URL Configuration → Redirect URLs**. Email and password sign-in remains available.
+
+The bundled catalogue covers ranked units across the main and legacy Old World armies. Base dimensions can change with rules updates, so confirm unusual models against the current army publication before printing.
 
 GitHub Pages cannot securely run this checkout endpoint because it is static hosting. For the public site, deploy `server.mjs` to a Node host and set the `checkout-api-url` meta tag in `index.html` to that backend origin.
 

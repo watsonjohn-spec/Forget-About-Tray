@@ -3,6 +3,7 @@ const defaults = {
   rows: 3,
   baseSize: 25,
   baseDepth: 25,
+  baseShape: "square",
   gap: 1,
   clearance: 1,
   plateThickness: 2,
@@ -18,6 +19,7 @@ const numericKeys = [
   "wallHeight", "wallThickness", "notchWidth"
 ];
 const checkboxKeys = ["lipEnabled", "notchesEnabled"];
+const rectangleBaseLengths = [50, 60, 75, 100, 150];
 const inputs = Object.fromEntries([...numericKeys, ...checkboxKeys].map((key) => [key, document.getElementById(key)]));
 let state = { ...defaults };
 let armyRecommendations = [];
@@ -33,24 +35,41 @@ let unlimitedExportsVerified = false;
 let accountExportState = { freeExportUsed: false, unlimitedExports: false };
 let cloudPresets = [];
 let cloudArmyProjects = [];
+let catalogueContext = "army";
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function rectangleDepth(width, preferred) {
+  if (preferred && preferred !== width && rectangleBaseLengths.includes(preferred)) return preferred;
+  return rectangleBaseLengths.find((length) => length > width) || rectangleBaseLengths.find((length) => length !== width);
+}
+
 function readState() {
   numericKeys.forEach((key) => {
     const input = inputs[key];
-    state[key] = clamp(Number(input.value) || defaults[key], Number(input.min), Number(input.max));
+    state[key] = clamp(Number(input.value) || defaults[key], Number(input.getAttribute("min")), Number(input.getAttribute("max")));
     input.value = state[key];
   });
   checkboxKeys.forEach((key) => { state[key] = inputs[key].checked; });
+  state.baseShape = document.querySelector("[data-base-shape].active")?.dataset.baseShape || "square";
+  if (state.baseShape === "square") {
+    state.baseDepth = state.baseSize;
+  } else if (!inputs.baseDepth.value || state.baseDepth === state.baseSize) {
+    state.baseDepth = rectangleDepth(state.baseSize, state.baseDepth);
+    inputs.baseDepth.value = state.baseDepth;
+  }
 }
 
 function writeState(nextState) {
   state = { ...defaults, ...nextState };
+  state.baseShape = nextState.baseShape || (state.baseSize === state.baseDepth ? "square" : "rectangle");
+  if (state.baseShape === "square") state.baseDepth = state.baseSize;
+  else state.baseDepth = rectangleDepth(state.baseSize, state.baseDepth);
   numericKeys.forEach((key) => { inputs[key].value = state[key]; });
   checkboxKeys.forEach((key) => { inputs[key].checked = state[key]; });
+  document.querySelectorAll("[data-base-shape]").forEach((button) => button.classList.toggle("active", button.dataset.baseShape === state.baseShape));
   render();
 }
 
@@ -132,8 +151,10 @@ function render() {
   document.getElementById("bodyCount").textContent = metrics.boxes.length;
   document.getElementById("exportFilename").textContent = fileName();
   document.getElementById("lipFields").classList.toggle("disabled", !state.lipEnabled);
+  document.getElementById("baseDepthField").hidden = state.baseShape === "square";
+  document.querySelectorAll("[data-base-shape]").forEach((button) => button.classList.toggle("active", button.dataset.baseShape === state.baseShape));
   document.querySelectorAll("[data-base]").forEach((button) => {
-    button.classList.toggle("active", Number(button.dataset.base) === state.baseSize && state.baseSize === state.baseDepth);
+    button.classList.toggle("active", Number(button.dataset.base) === state.baseSize);
   });
   drawPreview(metrics);
 }
@@ -483,24 +504,7 @@ function renderPresets() {
   }).join("");
 }
 
-const baseCatalogue = [
-  { id: "ungor-raiders", name: "Ungor Raiders", width: 25, depth: 25, aliases: ["ungor raiders", "ungor raider"] },
-  { id: "ungor-herds", name: "Ungor Herds", width: 25, depth: 25, aliases: ["ungor herds", "ungor herd", "ungors"] },
-  { id: "gor-herds", name: "Gor Herds", width: 25, depth: 25, aliases: ["gor herds", "gor herd", "gors"] },
-  { id: "bestigor-herds", name: "Bestigor Herds", width: 30, depth: 30, aliases: ["bestigor herds", "bestigor herd", "bestigors", "bestigor"] },
-  { id: "minotaur-herds", name: "Minotaur Herds", width: 50, depth: 50, aliases: ["minotaur herds", "minotaur herd", "minotaurs", "minotaur"] },
-  { id: "chaos-warhounds", name: "Chaos Warhounds", width: 25, depth: 50, aliases: ["chaos warhounds", "chaos warhound", "warhounds"] },
-  { id: "centigor-herds", name: "Centigor Herds", width: 30, depth: 60, aliases: ["centigor herds", "centigor herd", "centigors", "centigor"] },
-  { id: "dragon-ogres", name: "Dragon Ogres", width: 50, depth: 75, aliases: ["dragon ogres", "dragon ogre"] },
-  { id: "razorgor-herds", name: "Razorgor Herds", width: 50, depth: 75, aliases: ["razorgor herds", "razorgor herd", "razorgors"] },
-  { id: "beastmen-chariots", name: "Beastmen Chariots", width: 50, depth: 100, aliases: ["beastmen chariots", "beastmen chariot", "tuskgor chariots", "tuskgor chariot"] },
-  { id: "razorgor-chariots", name: "Razorgor Chariots", width: 50, depth: 100, aliases: ["razorgor chariots", "razorgor chariot"] },
-  { id: "chracian-woodsmen", name: "Chracian Woodsmen", width: 25, depth: 25, aliases: ["chracian woodsmen", "chracian woodsman"] },
-  { id: "white-lions-of-chrace", name: "White Lions of Chrace", width: 25, depth: 25, aliases: ["white lions of chrace", "white lion of chrace", "white lions"] },
-  { id: "war-lions", name: "War Lions", width: 30, depth: 60, aliases: ["war lions", "war lion"] },
-  { id: "lion-guard", name: "Lion Guard", width: 25, depth: 25, aliases: ["lion guard"] },
-  { id: "lion-chariot-of-chrace", name: "Lion Chariot of Chrace", width: 50, depth: 100, aliases: ["lion chariot of chrace", "lion chariots of chrace"] }
-];
+const baseCatalogue = window.baseCatalogue || [];
 
 function customCatalogue() {
   try {
@@ -513,13 +517,17 @@ function customCatalogue() {
 function allCatalogueEntries() {
   const learned = Object.entries(learnedBases()).map(([key, entry]) => ({
     id: `learned-${key}`,
+    army: "Learned bases",
     name: entry.name,
     width: entry.width,
     depth: entry.depth,
     aliases: [key]
   }));
   const entries = [...baseCatalogue, ...customCatalogue(), ...learned];
-  return entries.filter((entry, index) => entries.findIndex((candidate) => normalizeText(candidate.name) === normalizeText(entry.name)) === index);
+  return entries.filter((entry, index) => entries.findIndex((candidate) => (
+    normalizeText(candidate.army || "") === normalizeText(entry.army || "")
+    && normalizeText(candidate.name) === normalizeText(entry.name)
+  )) === index);
 }
 
 function localArmyProjects() {
@@ -546,6 +554,7 @@ function addCatalogueRecommendation(entry, count) {
     rows: formation.rows,
     baseSize: entry.width,
     baseDepth: entry.depth,
+    baseShape: entry.width === entry.depth ? "square" : "rectangle",
     matched: true
   });
   activeArmyRecommendationId = id;
@@ -554,14 +563,49 @@ function addCatalogueRecommendation(entry, count) {
   showToast(`${entry.name} added to this army`);
 }
 
-function renderCatalogue(filter = "") {
-  const query = normalizeText(filter);
-  const entries = allCatalogueEntries().filter((entry) => normalizeText(entry.name).includes(query));
+function catalogueArmies() {
+  return [...new Set(allCatalogueEntries().map((entry) => entry.army || "Other"))].sort();
+}
+
+function prepareCatalogue(context) {
+  catalogueContext = context;
+  const filter = document.getElementById("catalogueArmyFilter");
+  const current = filter.value;
+  filter.innerHTML = `<option value="">All armies</option>${catalogueArmies().map((army) => `<option value="${escapeHtml(army)}">${escapeHtml(army)}</option>`).join("")}`;
+  filter.value = current;
+  document.getElementById("customUnitCountField").hidden = context === "single";
+  document.getElementById("customUnitSubmit").textContent = context === "single" ? "Use this base" : "Add tray tab";
+  renderCatalogue();
+  document.getElementById("catalogueDialog").showModal();
+}
+
+function applyCatalogueEntry(entry, count = 10) {
+  if (catalogueContext === "single") {
+    writeState({
+      ...state,
+      baseSize: entry.width,
+      baseDepth: entry.depth,
+      baseShape: entry.width === entry.depth ? "square" : "rectangle"
+    });
+    document.getElementById("catalogueDialog").close();
+    showToast(`${entry.name} base applied`);
+    return;
+  }
+  addCatalogueRecommendation(entry, count);
+}
+
+function renderCatalogue() {
+  const query = normalizeText(document.getElementById("catalogueSearch").value);
+  const army = document.getElementById("catalogueArmyFilter").value;
+  const entries = allCatalogueEntries().filter((entry) => (
+    (!army || entry.army === army)
+    && (!query || normalizeText(`${entry.name} ${entry.army || ""}`).includes(query))
+  ));
   document.getElementById("catalogueList").innerHTML = entries.map((entry) => `
-    <article class="catalogue-entry" data-catalogue-id="${escapeHtml(entry.id)}">
-      <div><strong>${escapeHtml(entry.name)}</strong><small>${entry.width} x ${entry.depth} mm</small></div>
-      <input type="number" min="2" max="500" value="10" aria-label="Model count for ${escapeHtml(entry.name)}">
-      <button type="button">Add</button>
+    <article class="catalogue-entry ${catalogueContext === "single" ? "single-catalogue-entry" : ""}" data-catalogue-id="${escapeHtml(entry.id)}">
+      <div><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.army || "Other")} · ${entry.width} x ${entry.depth} mm</small></div>
+      ${catalogueContext === "single" ? "" : `<input type="number" min="2" max="500" value="10" aria-label="Model count for ${escapeHtml(entry.name)}">`}
+      <button type="button">${catalogueContext === "single" ? "Use base" : "Add"}</button>
     </article>
   `).join("") || `<div class="dialog-empty">No matching catalogue entries.</div>`;
 }
@@ -751,6 +795,7 @@ function parseArmyList(text) {
       rows: formation.rows,
       baseSize: catalogueMatch?.entry.width || learnedMatch?.width || 0,
       baseDepth: catalogueMatch?.entry.depth || learnedMatch?.depth || 0,
+      baseShape: (catalogueMatch?.entry.width || learnedMatch?.width) === (catalogueMatch?.entry.depth || learnedMatch?.depth) ? "square" : "rectangle",
       matched: Boolean(catalogueMatch || learnedMatch)
     });
   });
@@ -765,7 +810,8 @@ function recommendationConfig(recommendation) {
     columns: recommendation.columns,
     rows: recommendation.rows,
     baseSize: recommendation.baseSize,
-    baseDepth: recommendation.baseDepth
+    baseDepth: recommendation.baseDepth,
+    baseShape: recommendation.baseShape || (recommendation.baseSize === recommendation.baseDepth ? "square" : "rectangle")
   };
 }
 
@@ -818,6 +864,7 @@ function exitArmyEdit(save, silent = false) {
     recommendation.rows = state.rows;
     recommendation.baseSize = state.baseSize;
     recommendation.baseDepth = state.baseDepth;
+    recommendation.baseShape = state.baseShape;
     recommendation.config = { ...state };
     rememberUnitBase(recommendation);
   } else if (armyEditOriginalState) {
@@ -961,7 +1008,9 @@ async function refreshCloudData() {
 function setAuthenticated(authenticated) {
   document.getElementById("authGate").classList.toggle("hidden", authenticated);
   document.body.classList.toggle("authenticated", authenticated);
-  document.getElementById("accountButton").textContent = "Account";
+  document.getElementById("accountMenuEmail").textContent = accountService.currentUser()?.email || "Workshop account";
+  document.getElementById("accountMenu").hidden = true;
+  document.getElementById("accountButton").setAttribute("aria-expanded", "false");
   if (!authenticated) {
     document.getElementById("loginForm").reset();
     document.getElementById("loginError").textContent = "";
@@ -969,7 +1018,7 @@ function setAuthenticated(authenticated) {
   }
 }
 
-async function loadAccountDialog() {
+async function loadAccountDialog(view = "profile") {
   try {
     const [profile, orders] = await Promise.all([accountService.loadProfile(), accountService.loadOrders()]);
     const address = profile?.default_address || {};
@@ -990,6 +1039,8 @@ async function loadAccountDialog() {
       </article>
     `).join("") : `<div class="dialog-empty">No purchases yet.</div>`;
     document.getElementById("accountDialog").showModal();
+    const target = view === "password" ? document.getElementById("accountPasswordSection") : view === "orders" ? document.getElementById("accountOrdersSection") : document.getElementById("accountProfileForm");
+    setTimeout(() => target.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   } catch (error) {
     showToast(error.message);
   }
@@ -1009,7 +1060,10 @@ async function initializeAccount() {
   try {
     const session = await accountService.init();
     setAuthenticated(Boolean(session));
-    if (!session) return;
+    if (!session) {
+      document.getElementById("loginError").textContent = accountService.authError();
+      return;
+    }
     if (accountService.authType() === "recovery") {
       const password = window.prompt("Enter your new password");
       if (password) {
@@ -1027,6 +1081,19 @@ async function initializeAccount() {
 }
 
 Object.values(inputs).forEach((input) => input.addEventListener("input", render));
+document.querySelectorAll("[data-base-shape]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("[data-base-shape]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+    if (button.dataset.baseShape === "square") {
+      state.baseShape = "square";
+      state.baseDepth = Number(inputs.baseSize.value);
+    } else {
+      state.baseShape = "rectangle";
+      inputs.baseDepth.value = rectangleDepth(Number(inputs.baseSize.value), Number(inputs.baseDepth.value));
+    }
+    render();
+  });
+});
 document.querySelectorAll("[data-mode]").forEach((button) => {
   button.addEventListener("click", () => switchMode(button.dataset.mode));
 });
@@ -1072,6 +1139,16 @@ document.getElementById("forgotPasswordButton").addEventListener("click", async 
     document.getElementById("loginError").textContent = error.message;
   }
 });
+document.querySelectorAll("[data-oauth-provider]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    try {
+      document.getElementById("loginError").textContent = `Opening ${button.textContent.trim()} sign in...`;
+      await accountService.signInWithProvider(button.dataset.oauthProvider);
+    } catch (error) {
+      document.getElementById("loginError").textContent = error.message;
+    }
+  });
+});
 document.getElementById("logoutButton").addEventListener("click", async () => {
   await accountService.signOut();
   cloudPresets = [];
@@ -1080,7 +1157,23 @@ document.getElementById("logoutButton").addEventListener("click", async () => {
   unlimitedExportsVerified = false;
   setAuthenticated(false);
 });
-document.getElementById("accountButton").addEventListener("click", loadAccountDialog);
+document.getElementById("accountButton").addEventListener("click", () => {
+  const menu = document.getElementById("accountMenu");
+  menu.hidden = !menu.hidden;
+  document.getElementById("accountButton").setAttribute("aria-expanded", String(!menu.hidden));
+});
+document.querySelectorAll("[data-account-view]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.getElementById("accountMenu").hidden = true;
+    document.getElementById("accountButton").setAttribute("aria-expanded", "false");
+    loadAccountDialog(button.dataset.accountView);
+  });
+});
+document.addEventListener("click", (event) => {
+  if (event.target.closest(".account-menu-wrap")) return;
+  document.getElementById("accountMenu").hidden = true;
+  document.getElementById("accountButton").setAttribute("aria-expanded", "false");
+});
 document.getElementById("accountProfileForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
@@ -1097,6 +1190,20 @@ document.getElementById("accountProfileForm").addEventListener("submit", async (
       marketing_consent: document.getElementById("accountMarketingConsent").checked
     });
     showToast("Profile saved");
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+document.getElementById("changePasswordButton").addEventListener("click", async () => {
+  const password = document.getElementById("accountNewPassword").value;
+  const confirmation = document.getElementById("accountConfirmPassword").value;
+  if (password.length < 8) return showToast("Use a password with at least 8 characters");
+  if (password !== confirmation) return showToast("The new passwords do not match");
+  try {
+    await accountService.updatePassword(password);
+    document.getElementById("accountNewPassword").value = "";
+    document.getElementById("accountConfirmPassword").value = "";
+    showToast("Password updated");
   } catch (error) {
     showToast(error.message);
   }
@@ -1137,7 +1244,7 @@ document.querySelectorAll("[data-step]").forEach((button) => {
 document.querySelectorAll("[data-base]").forEach((button) => {
   button.addEventListener("click", () => {
     inputs.baseSize.value = button.dataset.base;
-    inputs.baseDepth.value = button.dataset.base;
+    if (state.baseShape === "square") state.baseDepth = Number(button.dataset.base);
     render();
   });
 });
@@ -1178,21 +1285,21 @@ Special
   analyzeArmyList();
 });
 document.getElementById("analyzeArmy").addEventListener("click", analyzeArmyList);
-document.getElementById("openCatalogue").addEventListener("click", () => {
-  renderCatalogue();
-  document.getElementById("catalogueDialog").showModal();
-});
-document.getElementById("catalogueSearch").addEventListener("input", (event) => renderCatalogue(event.target.value));
+document.getElementById("openCatalogue").addEventListener("click", () => prepareCatalogue("army"));
+document.getElementById("openSingleCatalogue").addEventListener("click", () => prepareCatalogue("single"));
+document.getElementById("catalogueSearch").addEventListener("input", renderCatalogue);
+document.getElementById("catalogueArmyFilter").addEventListener("change", renderCatalogue);
 document.getElementById("catalogueList").addEventListener("click", (event) => {
   const card = event.target.closest("[data-catalogue-id]");
   if (!card || event.target.tagName !== "BUTTON") return;
   const entry = allCatalogueEntries().find((item) => item.id === card.dataset.catalogueId);
-  if (entry) addCatalogueRecommendation(entry, Number(card.querySelector("input").value) || 10);
+  if (entry) applyCatalogueEntry(entry, Number(card.querySelector("input")?.value) || 10);
 });
 document.getElementById("customUnitForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const entry = {
     id: `custom-${Date.now()}`,
+    army: "Custom",
     name: document.getElementById("customUnitName").value.trim(),
     width: Number(document.getElementById("customUnitWidth").value),
     depth: Number(document.getElementById("customUnitDepth").value),
@@ -1201,8 +1308,11 @@ document.getElementById("customUnitForm").addEventListener("submit", (event) => 
   const custom = customCatalogue();
   custom.push(entry);
   localStorage.setItem("movement-tray-custom-catalogue", JSON.stringify(custom));
-  addCatalogueRecommendation(entry, Number(document.getElementById("customUnitCount").value));
+  applyCatalogueEntry(entry, Number(document.getElementById("customUnitCount").value));
   event.target.reset();
+  document.getElementById("customUnitCount").value = "10";
+  document.getElementById("customUnitWidth").value = "25";
+  document.getElementById("customUnitDepth").value = "25";
   renderCatalogue();
 });
 document.getElementById("saveArmyProject").addEventListener("click", saveArmyProject);
@@ -1273,6 +1383,9 @@ document.getElementById("armyResults").addEventListener("input", (event) => {
   const recommendation = armyRecommendations.find((item) => item.id === card.dataset.recommendation);
   if (!recommendation) return;
   recommendation[field] = Number(event.target.value) || 0;
+  if (field === "baseSize" || field === "baseDepth") {
+    recommendation.baseShape = recommendation.baseSize === recommendation.baseDepth ? "square" : "rectangle";
+  }
   const ready = recommendation.baseSize > 0 && recommendation.baseDepth > 0;
   card.querySelectorAll("[data-army-action]").forEach((button) => { button.disabled = !ready; });
 });
