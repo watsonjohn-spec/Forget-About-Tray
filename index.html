@@ -12,13 +12,17 @@
     <div class="auth-gate" id="authGate">
       <form class="login-card" id="loginForm">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-        <div><p class="eyebrow">Prototype access</p><h1>Enter the workshop</h1></div>
-        <p>Sign in to access your saved trays and army projects on this device.</p>
-        <label>Username<input id="loginUsername" autocomplete="username" required type="text"></label>
+        <div><p class="eyebrow">Your workshop account</p><h1>Enter the workshop</h1></div>
+        <p>Sign in to access your trays, armies, downloads, and orders on any device.</p>
+        <label>Email<input id="loginUsername" autocomplete="email" required type="email"></label>
         <label>Password<input id="loginPassword" autocomplete="current-password" required type="password"></label>
         <p class="login-error" id="loginError" role="alert"></p>
         <button class="button button-primary" type="submit">Sign in</button>
-        <small>Prototype credentials: user / password</small>
+        <div class="login-secondary-actions">
+          <button class="button button-ghost" id="createAccountButton" type="button">Create account</button>
+          <button class="button button-ghost" id="forgotPasswordButton" type="button">Forgot password</button>
+        </div>
+        <small>Email confirmation is required when creating an account.</small>
       </form>
     </div>
     <header class="topbar">
@@ -36,6 +40,7 @@
         <span class="status-dot"><i></i> Ready to print</span>
         <button class="button button-ghost" id="savePresetTop" type="button">Save preset</button>
         <button class="button button-primary" id="exportTop" type="button">Export STL</button>
+        <button class="button button-ghost" id="accountButton" type="button">Account</button>
         <button class="button button-ghost" id="logoutButton" type="button">Log out</button>
       </div>
     </header>
@@ -194,7 +199,7 @@
             <div>
               <span class="step">03</span>
               <h2>Make it physical</h2>
-              <p>The STL is generated entirely on this device. Import it into your slicer, choose your settings, and print.</p>
+              <p>Download the STL for your own slicer, or order the finished tray from the print service.</p>
             </div>
             <div class="action-buttons">
               <button class="button button-secondary" id="savePreset" type="button">Save preset</button>
@@ -212,7 +217,7 @@
             <p class="eyebrow">Return to formation</p>
             <h2>Saved presets</h2>
           </div>
-          <p>Your configurations stay private in this browser.</p>
+          <p>Your configurations are saved to your workshop account.</p>
         </div>
         <div id="presets" class="presets-grid"></div>
       </section>
@@ -302,12 +307,51 @@
       <div id="savedArmiesList" class="saved-armies-list"></div>
     </dialog>
 
+    <dialog class="app-dialog account-dialog" id="accountDialog">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Workshop account</p><h2>Account and orders</h2></div>
+        <button class="dialog-close" type="button" data-close-dialog="accountDialog" aria-label="Close">×</button>
+      </div>
+      <div class="account-layout">
+        <form class="account-profile-form" id="accountProfileForm">
+          <h3>Profile and default address</h3>
+          <p>Keep your preferred address with your account. Checkout collects the delivery address, and completed orders retain the address used at purchase for accounting records.</p>
+          <label>Email<input id="accountEmail" type="email" disabled></label>
+          <label>Display name<input id="accountDisplayName" type="text" autocomplete="name"></label>
+          <label>Address line 1<input id="accountAddressLine1" type="text" autocomplete="address-line1"></label>
+          <label>Address line 2<input id="accountAddressLine2" type="text" autocomplete="address-line2"></label>
+          <div class="dialog-field-grid">
+            <label>Town or city<input id="accountCity" type="text" autocomplete="address-level2"></label>
+            <label>County<input id="accountCounty" type="text" autocomplete="address-level1"></label>
+            <label>Postcode<input id="accountPostcode" type="text" autocomplete="postal-code"></label>
+          </div>
+          <label>Country code<input id="accountCountry" type="text" maxlength="2" value="GB" autocomplete="country"></label>
+          <label class="account-consent"><input id="accountMarketingConsent" type="checkbox"> Send me occasional product news</label>
+          <button class="button button-primary" type="submit">Save profile</button>
+        </form>
+        <section class="account-orders">
+          <h3>Purchase history</h3>
+          <p>Paid STL access and physical print orders appear here.</p>
+          <div id="accountOrdersList"></div>
+          <div class="account-data-actions">
+            <button class="button button-secondary" id="downloadAccountData" type="button">Download my data</button>
+            <button class="button button-ghost" id="requestAccountDeletion" type="button">Request account deletion</button>
+          </div>
+          <small>Deletion requests remove account data where possible. Order and VAT records required by law remain restricted until their retention period expires.</small>
+        </section>
+      </div>
+    </dialog>
+
     <dialog class="app-dialog export-dialog" id="exportDialog">
       <div class="dialog-heading">
         <div><p class="eyebrow">Choose fulfilment</p><h2 id="exportDialogTitle">Get this tray</h2></div>
         <button class="dialog-close" type="button" data-close-dialog="exportDialog" aria-label="Close">×</button>
       </div>
       <div id="exportChoices" class="export-choices">
+        <button class="export-choice" id="chooseUnlockedExport" type="button" hidden>
+          <span class="choice-icon">STL</span><strong>Download STL</strong>
+          <small>Your account has unlimited STL exports. Download this tray immediately.</small>
+        </button>
         <button class="export-choice" id="chooseAdExport" type="button">
           <span class="choice-icon">STL</span><strong>Watch sponsor message</strong>
           <small>Your first STL download is free after one 30-second sponsor placement.</small>
@@ -333,7 +377,7 @@
       <section class="print-order" id="unlockExports" hidden>
         <div class="print-order-mark">STL</div>
         <h3>Unlock unlimited STL exports</h3>
-        <p>Make one £5 payment through secure Stripe Checkout. Once Stripe confirms payment, unlimited STL downloads unlock in this browser.</p>
+        <p>Make one £5 payment through secure Stripe Checkout. Once Stripe confirms payment, unlimited STL downloads unlock on your account.</p>
         <dl>
           <div><dt>Access</dt><dd>Unlimited STL exports</dd></div>
           <div><dt>One-off price</dt><dd id="unlockExportsPrice">£5.00</dd></div>
@@ -352,6 +396,7 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="account.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

@@ -7,16 +7,16 @@ A browser-based prototype for configuring and exporting printable miniature move
 - Configure rows, columns, base size, spacing, and clearance
 - Add a perimeter lip and interval notches
 - Live isometric preview and exact dimensions
-- Save presets in browser storage
-- Export a printable ASCII STL without uploading data
+- Save tray presets and army projects to a Supabase account
+- Download an account-gated printable ASCII STL, or order the tray from the print service
 - Paste an army list to get editable per-unit tray recommendations
 - Match Beastmen units from the starter base catalogue and remember corrected base sizes locally
 - Save and reload complete army tray projects
 - Add catalogue or custom units as new visual tray tabs
 - Edit army trays in place using the full visual designer
 - Route exports through a sponsor-view download or Stripe print-order checkout
-- Offer one sponsored STL download per browser, then a one-off £5 unlimited-download unlock
-- Prototype login gate using `user` / `password`
+- Offer one sponsored STL download per account, then a one-off GBP 5 unlimited-download unlock
+- Supabase user accounts with cloud-saved trays, armies, profiles, and order history
 - Server-side Stripe Checkout sessions with test-mode protection
 
 ## Run locally
@@ -34,19 +34,24 @@ Then open `http://localhost:4173`.
 ## Stripe Checkout
 
 1. Copy `.env.example` to `.env`.
-2. Add a Stripe test-mode restricted key beginning with `rk_test_` and grant it **Checkout Sessions: Write** access. A test secret key beginning with `sk_test_` also works.
+2. Add a Stripe test-mode restricted key beginning with `rk_test_` and grant it **Checkout Sessions: Read and Write** access. A test secret key beginning with `sk_test_` also works.
 3. Adjust the pricing and shipping-country environment values.
 4. Run `npm start`.
 
 The server calculates the displayed quote and creates Stripe Checkout sessions. Secret keys are never sent to the browser. Live Stripe keys are rejected unless `ALLOW_LIVE_STRIPE=true`.
 
-Paid unlimited-download access is verified against the completed Stripe Checkout Session and stored as a signed entitlement in that browser. Set `DOWNLOAD_ENTITLEMENT_SECRET` to a long random value before production; changing it invalidates existing browser entitlements.
+Paid unlimited-download access and the single sponsored download are recorded against the signed-in Supabase account.
+Set `DOWNLOAD_TOKEN_SECRET` to a long random value before deployment so sponsored-download permits cannot be forged.
 
-The single sponsored download is currently enforced per browser because the prototype login does not identify individual customers. Enforcing one sponsored download per person requires real user accounts and server-side storage.
+Before running the account-enabled app for the first time, open the Supabase SQL Editor and run `supabase/schema.sql`. This creates profiles, saved designs, army lists, entitlements, immutable order snapshots, VAT-ready order fields, and Row Level Security policies.
 
 GitHub Pages cannot securely run this checkout endpoint because it is static hosting. For the public site, deploy `server.mjs` to a Node host and set the `checkout-api-url` meta tag in `index.html` to that backend origin.
 
-Before fulfilling live orders, add a Stripe webhook that verifies `checkout.session.completed`. The return page is only a customer-facing status message and is not proof of payment.
+Before fulfilling live orders, configure the Stripe webhook that verifies `checkout.session.completed`. The return page is only a customer-facing status message and is not proof of payment.
+
+Set the Stripe webhook endpoint to `/api/stripe/webhook`, subscribe to `checkout.session.completed` and `checkout.session.async_payment_succeeded`, and store its signing secret as `STRIPE_WEBHOOK_SECRET`.
+
+The account page lets users download their stored data and submit an account-deletion request. Deletion requests require an administrative review because legally required order and VAT records must remain restricted until their retention period expires.
 
 ## Verify
 
@@ -56,6 +61,6 @@ npm run check
 
 ## Deploy
 
-The app is fully static. Run `Publish to GitHub.cmd`, then open **Settings → Pages** and select **Deploy from a branch**, `gh-pages`, and `/ (root)`.
+The account, order, and payment features require the Node server. Deploy the repository as a Node web service with `npm start`, then add the values from `.env.example` as private host environment variables.
 
-The app can also be deployed by copying `index.html`, `styles.css`, and `app.js` to any static host.
+GitHub Pages can display the frontend but cannot run the secure account, Stripe, webhook, or order-record endpoints.

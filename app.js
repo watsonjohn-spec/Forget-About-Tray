@@ -30,8 +30,9 @@ let pendingExportPrefix = "";
 let adCountdownTimer = null;
 let toastTimer;
 let unlimitedExportsVerified = false;
-const freeExportUsedKey = "movement-tray-free-export-used";
-const downloadEntitlementKey = "movement-tray-download-entitlement";
+let accountExportState = { freeExportUsed: false, unlimitedExports: false };
+let cloudPresets = [];
+let cloudArmyProjects = [];
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -208,44 +209,16 @@ function slugify(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "movement-tray";
 }
 
-function boxTriangles({ x, y, z, w, d, h }) {
-  const p = [
-    [x,y,z], [x+w,y,z], [x+w,y+d,z], [x,y+d,z],
-    [x,y,z+h], [x+w,y,z+h], [x+w,y+d,z+h], [x,y+d,z+h]
-  ];
-  return [
-    [p[0],p[2],p[1]], [p[0],p[3],p[2]],
-    [p[4],p[5],p[6]], [p[4],p[6],p[7]],
-    [p[0],p[1],p[5]], [p[0],p[5],p[4]],
-    [p[1],p[2],p[6]], [p[1],p[6],p[5]],
-    [p[2],p[3],p[7]], [p[2],p[7],p[6]],
-    [p[3],p[0],p[4]], [p[3],p[4],p[7]]
-  ];
-}
-
-function normal([a, b, c]) {
-  const u = b.map((value, index) => value - a[index]);
-  const v = c.map((value, index) => value - a[index]);
-  const cross = [
-    u[1] * v[2] - u[2] * v[1],
-    u[2] * v[0] - u[0] * v[2],
-    u[0] * v[1] - u[1] * v[0]
-  ];
-  const length = Math.hypot(...cross) || 1;
-  return cross.map((value) => value / length);
-}
-
-function stlText(config = state) {
-  const triangles = trayMetrics(config).boxes.flatMap(boxTriangles);
-  const facets = triangles.map((triangle) => {
-    const n = normal(triangle);
-    return `  facet normal ${n.join(" ")}\n    outer loop\n${triangle.map((vertex) => `      vertex ${vertex.join(" ")}`).join("\n")}\n    endloop\n  endfacet`;
-  }).join("\n");
-  return `solid movement_tray\n${facets}\nendsolid movement_tray\n`;
-}
-
-function exportStl(config = state, prefix = "movement-tray") {
-  const blob = new Blob([stlText(config)], { type: "model/stl" });
+async function exportStl(config = state, prefix = "movement-tray", downloadToken = "") {
+  const response = await authorizedFetch("/api/account/export-stl", {
+    method: "POST",
+    body: JSON.stringify({ config, name: prefix, downloadToken })
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.error || "The STL could not be downloaded.");
+  }
+  const blob = await response.blob();
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = fileName(config, prefix);
@@ -255,40 +228,49 @@ function exportStl(config = state, prefix = "movement-tray") {
 }
 
 function freeExportUsed() {
-  return localStorage.getItem(freeExportUsedKey) === "true";
+  return accountExportState.freeExportUsed;
+}
+
+async function authorizedFetch(path, options = {}) {
+  return fetch(checkoutApiUrl(path), {
+    ...options,
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...await accountService.authHeaders(),
+      ...(options.headers || {})
+    }
+  });
+}
+
+async function refreshExportState() {
+  if (!accountService.isSignedIn()) return accountExportState;
+  try {
+    const response = await authorizedFetch("/api/account/export-status");
+    if (!response.ok) throw new Error("Export access could not be checked.");
+    const result = await response.json();
+    accountExportState = result;
+    unlimitedExportsVerified = Boolean(result.unlimitedExports);
+  } catch {
+    accountExportState = { freeExportUsed: true, unlimitedExports: false };
+  }
+  return accountExportState;
 }
 
 async function hasUnlimitedExports() {
   if (unlimitedExportsVerified) return true;
-  const entitlement = localStorage.getItem(downloadEntitlementKey);
-  if (!entitlement) return false;
-  try {
-    const response = await fetch(checkoutApiUrl("/api/checkout/unlock/status"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entitlement })
-    });
-    if (!response.ok) return false;
-    const result = await response.json();
-    unlimitedExportsVerified = Boolean(result.unlocked);
-    if (!unlimitedExportsVerified) localStorage.removeItem(downloadEntitlementKey);
-    return unlimitedExportsVerified;
-  } catch {
-    return false;
-  }
+  return Boolean((await refreshExportState()).unlimitedExports);
 }
 
 async function requestExport(config = state, prefix = "movement-tray") {
   pendingExportConfig = { ...config };
   pendingExportPrefix = prefix;
-  if (await hasUnlimitedExports()) {
-    exportStl(pendingExportConfig, pendingExportPrefix);
-    return;
-  }
+  const unlimited = await hasUnlimitedExports();
   clearInterval(adCountdownTimer);
   document.getElementById("exportDialogTitle").textContent = fileName(config, prefix);
   document.getElementById("exportChoices").hidden = false;
-  document.getElementById("chooseAdExport").hidden = freeExportUsed();
+  document.getElementById("chooseUnlockedExport").hidden = !unlimited;
+  document.getElementById("chooseAdExport").hidden = unlimited || freeExportUsed();
+  document.getElementById("chooseUnlimitedExport").hidden = unlimited;
   document.getElementById("adGate").hidden = true;
   document.getElementById("unlockExports").hidden = true;
   document.getElementById("printOrder").hidden = true;
@@ -378,9 +360,8 @@ async function beginStripeCheckout() {
   button.disabled = true;
   status.textContent = "Creating secure Stripe Checkout...";
   try {
-    const response = await fetch(checkoutApiUrl("/api/checkout/session"), {
+    const response = await authorizedFetch("/api/checkout/session", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ config: pendingExportConfig, name: pendingExportPrefix || "Printed movement tray" })
     });
     const result = await response.json();
@@ -404,7 +385,7 @@ async function configureUnlockCheckout() {
     document.getElementById("unlockExportsPrice").textContent = formatMoney(config.unlimitedExportsPrice, config.currency);
     if (!config.enabled) throw new Error(config.reason || "Stripe is not configured.");
     button.disabled = false;
-    status.textContent = `${config.mode === "test" ? "Stripe test mode" : "Stripe live mode"} - one payment unlocks this browser.`;
+    status.textContent = `${config.mode === "test" ? "Stripe test mode" : "Stripe live mode"} - one payment unlocks your account.`;
   } catch (error) {
     status.textContent = `${error.message} Open the checkout-enabled version of the site to purchase.`;
   }
@@ -416,9 +397,8 @@ async function beginUnlockCheckout() {
   button.disabled = true;
   status.textContent = "Creating secure Stripe Checkout...";
   try {
-    const response = await fetch(checkoutApiUrl("/api/checkout/unlock/session"), {
+    const response = await authorizedFetch("/api/checkout/unlock/session", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: "{}"
     });
     const result = await response.json();
@@ -432,16 +412,15 @@ async function beginUnlockCheckout() {
 
 async function verifyUnlockPurchase(sessionId) {
   try {
-    const response = await fetch(checkoutApiUrl("/api/checkout/unlock/verify"), {
+    const response = await authorizedFetch("/api/checkout/unlock/verify", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId })
     });
     const result = await response.json();
-    if (!response.ok || !result.unlocked || !result.entitlement) throw new Error(result.error || "Stripe could not confirm the purchase.");
-    localStorage.setItem(downloadEntitlementKey, result.entitlement);
+    if (!response.ok || !result.unlocked) throw new Error(result.error || "Stripe could not confirm the purchase.");
     unlimitedExportsVerified = true;
-    showToast("Unlimited STL exports unlocked in this browser.");
+    accountExportState.unlimitedExports = true;
+    showToast("Unlimited STL exports unlocked on your account.");
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -449,7 +428,7 @@ async function verifyUnlockPurchase(sessionId) {
   }
 }
 
-function presets() {
+function localPresets() {
   try {
     return JSON.parse(localStorage.getItem("movement-tray-presets")) || [];
   } catch {
@@ -457,14 +436,30 @@ function presets() {
   }
 }
 
-function savePreset() {
-  const saved = presets();
+function presets() {
+  return accountService.isSignedIn() ? cloudPresets : localPresets();
+}
+
+async function persistPreset(name, config, clientRef = `${Date.now()}`) {
+  if (!accountService.isSignedIn()) {
+    const saved = localPresets();
+    saved.unshift({ id: clientRef, name, state: config });
+    localStorage.setItem("movement-tray-presets", JSON.stringify(saved.slice(0, 12)));
+    return;
+  }
+  await accountService.upsertTrayDesign({ client_ref: clientRef, name, configuration: config });
+  await refreshCloudData();
+}
+
+async function savePreset() {
+  try {
   const name = `${state.columns} × ${state.rows} · ${state.baseSize}mm`;
-  const id = `${Date.now()}`;
-  saved.unshift({ id, name, state: { ...state } });
-  localStorage.setItem("movement-tray-presets", JSON.stringify(saved.slice(0, 12)));
-  renderPresets();
-  showToast(`${name} preset saved`);
+    await persistPreset(name, { ...state });
+    renderPresets();
+    showToast(`${name} preset saved`);
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 function renderPresets() {
@@ -527,12 +522,16 @@ function allCatalogueEntries() {
   return entries.filter((entry, index) => entries.findIndex((candidate) => normalizeText(candidate.name) === normalizeText(entry.name)) === index);
 }
 
-function armyProjects() {
+function localArmyProjects() {
   try {
     return JSON.parse(localStorage.getItem("movement-tray-army-projects")) || [];
   } catch {
     return [];
   }
+}
+
+function armyProjects() {
+  return accountService.isSignedIn() ? cloudArmyProjects : localArmyProjects();
 }
 
 function addCatalogueRecommendation(entry, count) {
@@ -567,7 +566,7 @@ function renderCatalogue(filter = "") {
   `).join("") || `<div class="dialog-empty">No matching catalogue entries.</div>`;
 }
 
-function saveArmyProject() {
+async function saveArmyProject() {
   if (!armyRecommendations.length) {
     showToast("Add or parse some trays before saving");
     return;
@@ -581,11 +580,26 @@ function saveArmyProject() {
     listText: document.getElementById("armyList").value,
     recommendations: structuredClone(armyRecommendations)
   };
-  if (existing >= 0) saved.splice(existing, 1);
-  saved.unshift(project);
-  localStorage.setItem("movement-tray-army-projects", JSON.stringify(saved.slice(0, 20)));
-  document.getElementById("armyProjectName").value = name;
-  showToast(`${name} saved`);
+  try {
+    if (accountService.isSignedIn()) {
+      const clientRef = existing >= 0 ? saved[existing].clientRef : project.id;
+      await accountService.upsertArmyList({
+        client_ref: clientRef,
+        name,
+        original_list_text: project.listText,
+        parsed_units: project.recommendations
+      });
+      await refreshCloudData();
+    } else {
+      if (existing >= 0) saved.splice(existing, 1);
+      saved.unshift(project);
+      localStorage.setItem("movement-tray-army-projects", JSON.stringify(saved.slice(0, 20)));
+    }
+    document.getElementById("armyProjectName").value = name;
+    showToast(`${name} saved`);
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 function renderSavedArmies() {
@@ -755,17 +769,15 @@ function recommendationConfig(recommendation) {
   };
 }
 
-function saveRecommendation(recommendation) {
-  const saved = presets();
+async function saveRecommendation(recommendation) {
   const config = recommendationConfig(recommendation);
-  saved.unshift({
-    id: `${Date.now()}`,
-    name: `${recommendation.name} - ${recommendation.columns} x ${recommendation.rows}`,
-    state: config
-  });
-  localStorage.setItem("movement-tray-presets", JSON.stringify(saved.slice(0, 12)));
-  renderPresets();
-  showToast(`${recommendation.name} preset saved`);
+  try {
+    await persistPreset(`${recommendation.name} - ${recommendation.columns} x ${recommendation.rows}`, config);
+    renderPresets();
+    showToast(`${recommendation.name} preset saved`);
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 function trayThumbnailSvg(config) {
@@ -926,10 +938,30 @@ function switchMode(mode) {
   });
 }
 
+async function refreshCloudData() {
+  if (!accountService.isSignedIn()) return;
+  const [trays, armies] = await Promise.all([accountService.loadTrayDesigns(), accountService.loadArmyLists()]);
+  cloudPresets = trays.map((tray) => ({
+    id: tray.id,
+    clientRef: tray.client_ref,
+    name: tray.name,
+    state: tray.configuration
+  }));
+  cloudArmyProjects = armies.map((army) => ({
+    id: army.id,
+    clientRef: army.client_ref,
+    name: army.name,
+    listText: army.original_list_text,
+    recommendations: army.parsed_units
+  }));
+  renderPresets();
+  renderSavedArmies();
+}
+
 function setAuthenticated(authenticated) {
-  sessionStorage.setItem("movement-tray-authenticated", authenticated ? "true" : "false");
   document.getElementById("authGate").classList.toggle("hidden", authenticated);
   document.body.classList.toggle("authenticated", authenticated);
+  document.getElementById("accountButton").textContent = "Account";
   if (!authenticated) {
     document.getElementById("loginForm").reset();
     document.getElementById("loginError").textContent = "";
@@ -937,22 +969,164 @@ function setAuthenticated(authenticated) {
   }
 }
 
+async function loadAccountDialog() {
+  try {
+    const [profile, orders] = await Promise.all([accountService.loadProfile(), accountService.loadOrders()]);
+    const address = profile?.default_address || {};
+    document.getElementById("accountEmail").value = accountService.currentUser()?.email || "";
+    document.getElementById("accountDisplayName").value = profile?.display_name || "";
+    document.getElementById("accountAddressLine1").value = address.line1 || "";
+    document.getElementById("accountAddressLine2").value = address.line2 || "";
+    document.getElementById("accountCity").value = address.city || "";
+    document.getElementById("accountCounty").value = address.county || "";
+    document.getElementById("accountPostcode").value = address.postcode || "";
+    document.getElementById("accountCountry").value = address.country || "GB";
+    document.getElementById("accountMarketingConsent").checked = Boolean(profile?.marketing_consent);
+    document.getElementById("accountOrdersList").innerHTML = orders.length ? orders.map((order) => `
+      <article class="account-order">
+        <div><strong>${escapeHtml(order.invoice_number || "Pending invoice")}</strong><small>${order.order_type === "unlimited_stl" ? "Unlimited STL exports" : "Printed movement tray"} · ${escapeHtml(order.status)}</small></div>
+        <b>${formatMoney(order.total_inc_vat, order.currency)}</b>
+        <small>${new Date(order.paid_at || order.created_at).toLocaleDateString()}</small>
+      </article>
+    `).join("") : `<div class="dialog-empty">No purchases yet.</div>`;
+    document.getElementById("accountDialog").showModal();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function processCheckoutResult() {
+  const checkoutParameters = new URLSearchParams(window.location.search);
+  const checkoutResult = checkoutParameters.get("checkout");
+  if (checkoutResult === "success") showToast("Checkout completed. Payment confirmation is pending.");
+  if (checkoutResult === "cancelled") showToast("Stripe Checkout was cancelled.");
+  if (checkoutResult === "unlock-success") await verifyUnlockPurchase(checkoutParameters.get("session_id"));
+  if (checkoutResult === "unlock-cancelled") showToast("Unlimited STL unlock was cancelled.");
+  if (checkoutResult && checkoutResult !== "unlock-success") history.replaceState({}, "", window.location.pathname);
+}
+
+async function initializeAccount() {
+  try {
+    const session = await accountService.init();
+    setAuthenticated(Boolean(session));
+    if (!session) return;
+    if (accountService.authType() === "recovery") {
+      const password = window.prompt("Enter your new password");
+      if (password) {
+        await accountService.updatePassword(password);
+        showToast("Password updated");
+      }
+    }
+    await accountService.importLocalData(localPresets(), localArmyProjects());
+    await Promise.all([refreshCloudData(), refreshExportState()]);
+    await processCheckoutResult();
+  } catch (error) {
+    setAuthenticated(false);
+    document.getElementById("loginError").textContent = error.message;
+  }
+}
+
 Object.values(inputs).forEach((input) => input.addEventListener("input", render));
 document.querySelectorAll("[data-mode]").forEach((button) => {
   button.addEventListener("click", () => switchMode(button.dataset.mode));
 });
-document.getElementById("loginForm").addEventListener("submit", (event) => {
+document.getElementById("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const username = document.getElementById("loginUsername").value;
+  const email = document.getElementById("loginUsername").value;
   const password = document.getElementById("loginPassword").value;
-  if (username === "user" && password === "password") {
+  document.getElementById("loginError").textContent = "Signing in...";
+  try {
+    await accountService.signIn(email, password);
     setAuthenticated(true);
+    await accountService.importLocalData(localPresets(), localArmyProjects());
+    await Promise.all([refreshCloudData(), refreshExportState()]);
+    await processCheckoutResult();
     showToast("Welcome to the workshop");
-  } else {
-    document.getElementById("loginError").textContent = "Incorrect username or password.";
+  } catch (error) {
+    document.getElementById("loginError").textContent = error.message;
   }
 });
-document.getElementById("logoutButton").addEventListener("click", () => setAuthenticated(false));
+document.getElementById("createAccountButton").addEventListener("click", async () => {
+  const email = document.getElementById("loginUsername").value;
+  const password = document.getElementById("loginPassword").value;
+  if (!email || !password) return document.getElementById("loginError").textContent = "Enter an email and password first.";
+  try {
+    const result = await accountService.signUp(email, password);
+    document.getElementById("loginError").textContent = result.access_token ? "Account created." : "Check your email to confirm your account.";
+    if (result.access_token) {
+      setAuthenticated(true);
+      await accountService.importLocalData(localPresets(), localArmyProjects());
+      await Promise.all([refreshCloudData(), refreshExportState()]);
+    }
+  } catch (error) {
+    document.getElementById("loginError").textContent = error.message;
+  }
+});
+document.getElementById("forgotPasswordButton").addEventListener("click", async () => {
+  const email = document.getElementById("loginUsername").value;
+  if (!email) return document.getElementById("loginError").textContent = "Enter your email first.";
+  try {
+    await accountService.resetPassword(email);
+    document.getElementById("loginError").textContent = "Password reset email sent.";
+  } catch (error) {
+    document.getElementById("loginError").textContent = error.message;
+  }
+});
+document.getElementById("logoutButton").addEventListener("click", async () => {
+  await accountService.signOut();
+  cloudPresets = [];
+  cloudArmyProjects = [];
+  accountExportState = { freeExportUsed: false, unlimitedExports: false };
+  unlimitedExportsVerified = false;
+  setAuthenticated(false);
+});
+document.getElementById("accountButton").addEventListener("click", loadAccountDialog);
+document.getElementById("accountProfileForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await accountService.saveProfile({
+      display_name: document.getElementById("accountDisplayName").value.trim() || null,
+      default_address: {
+        line1: document.getElementById("accountAddressLine1").value.trim(),
+        line2: document.getElementById("accountAddressLine2").value.trim(),
+        city: document.getElementById("accountCity").value.trim(),
+        county: document.getElementById("accountCounty").value.trim(),
+        postcode: document.getElementById("accountPostcode").value.trim(),
+        country: document.getElementById("accountCountry").value.trim().toUpperCase()
+      },
+      marketing_consent: document.getElementById("accountMarketingConsent").checked
+    });
+    showToast("Profile saved");
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+document.getElementById("downloadAccountData").addEventListener("click", async () => {
+  try {
+    const response = await authorizedFetch("/api/account/data-export");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Account data could not be exported.");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    link.download = `movement-tray-account-data-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    showToast("Account data exported");
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+document.getElementById("requestAccountDeletion").addEventListener("click", async () => {
+  if (!window.confirm("Request account deletion? Legally required order and VAT records will still be retained for their required period.")) return;
+  try {
+    const response = await authorizedFetch("/api/account/deletion-request", { method: "POST", body: "{}" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Deletion request could not be submitted.");
+    showToast("Account deletion request submitted");
+  } catch (error) {
+    showToast(error.message);
+  }
+});
 document.querySelectorAll("[data-step]").forEach((button) => {
   button.addEventListener("click", () => {
     const input = inputs[button.dataset.step];
@@ -973,7 +1147,7 @@ document.getElementById("resetButton").addEventListener("click", () => {
   writeState(defaults);
   showToast("Tray reset to defaults");
 });
-document.getElementById("presets").addEventListener("click", (event) => {
+document.getElementById("presets").addEventListener("click", async (event) => {
   const loadId = event.target.dataset.load;
   const deleteId = event.target.dataset.delete;
   if (loadId) {
@@ -981,7 +1155,12 @@ document.getElementById("presets").addEventListener("click", (event) => {
     if (preset) writeState(preset.state);
   }
   if (deleteId) {
-    localStorage.setItem("movement-tray-presets", JSON.stringify(presets().filter((item) => item.id !== deleteId)));
+    if (accountService.isSignedIn()) {
+      await accountService.deleteTrayDesign(deleteId);
+      await refreshCloudData();
+    } else {
+      localStorage.setItem("movement-tray-presets", JSON.stringify(localPresets().filter((item) => item.id !== deleteId)));
+    }
     renderPresets();
     showToast("Preset deleted");
   }
@@ -1031,7 +1210,7 @@ document.getElementById("openArmyProjects").addEventListener("click", () => {
   renderSavedArmies();
   document.getElementById("savedArmiesDialog").showModal();
 });
-document.getElementById("savedArmiesList").addEventListener("click", (event) => {
+document.getElementById("savedArmiesList").addEventListener("click", async (event) => {
   const card = event.target.closest("[data-army-project]");
   const action = event.target.dataset.projectAction;
   if (!card || !action) return;
@@ -1047,7 +1226,12 @@ document.getElementById("savedArmiesList").addEventListener("click", (event) => 
     showToast(`${project.name} loaded`);
   }
   if (action === "delete") {
-    localStorage.setItem("movement-tray-army-projects", JSON.stringify(saved.filter((item) => item.id !== card.dataset.armyProject)));
+    if (accountService.isSignedIn()) {
+      await accountService.deleteArmyList(card.dataset.armyProject);
+      await refreshCloudData();
+    } else {
+      localStorage.setItem("movement-tray-army-projects", JSON.stringify(localArmyProjects().filter((item) => item.id !== card.dataset.armyProject)));
+    }
     renderSavedArmies();
   }
 });
@@ -1055,14 +1239,32 @@ document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close());
 });
 document.getElementById("chooseAdExport").addEventListener("click", startAdGate);
+document.getElementById("chooseUnlockedExport").addEventListener("click", async () => {
+  try {
+    await exportStl(pendingExportConfig, pendingExportPrefix);
+    document.getElementById("exportDialog").close();
+  } catch (error) {
+    showToast(error.message);
+  }
+});
 document.getElementById("chooseUnlimitedExport").addEventListener("click", showUnlockExports);
 document.getElementById("choosePrintOrder").addEventListener("click", showPrintOrder);
 document.getElementById("stripeCheckoutButton").addEventListener("click", beginStripeCheckout);
 document.getElementById("unlockCheckoutButton").addEventListener("click", beginUnlockCheckout);
-document.getElementById("completeAdExport").addEventListener("click", () => {
-  localStorage.setItem(freeExportUsedKey, "true");
-  exportStl(pendingExportConfig, pendingExportPrefix);
-  document.getElementById("exportDialog").close();
+document.getElementById("completeAdExport").addEventListener("click", async () => {
+  try {
+    const response = await authorizedFetch("/api/account/use-free-export", {
+      method: "POST",
+      body: JSON.stringify({ config: pendingExportConfig, name: pendingExportPrefix })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.allowed) throw new Error(result.error || "The sponsored download could not be unlocked.");
+    accountExportState.freeExportUsed = true;
+    await exportStl(pendingExportConfig, pendingExportPrefix, result.downloadToken);
+    document.getElementById("exportDialog").close();
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 document.getElementById("armyResults").addEventListener("input", (event) => {
   const field = event.target.dataset.armyField;
@@ -1108,10 +1310,5 @@ document.getElementById("armyResults").addEventListener("click", (event) => {
 
 render();
 renderPresets();
-setAuthenticated(sessionStorage.getItem("movement-tray-authenticated") === "true");
-const checkoutParameters = new URLSearchParams(window.location.search);
-const checkoutResult = checkoutParameters.get("checkout");
-if (checkoutResult === "success") showToast("Checkout completed. Payment confirmation is pending.");
-if (checkoutResult === "cancelled") showToast("Stripe Checkout was cancelled.");
-if (checkoutResult === "unlock-success") verifyUnlockPurchase(checkoutParameters.get("session_id"));
-if (checkoutResult === "unlock-cancelled") showToast("Unlimited STL unlock was cancelled.");
+setAuthenticated(false);
+initializeAccount();
