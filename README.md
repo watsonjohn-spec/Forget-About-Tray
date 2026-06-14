@@ -14,9 +14,9 @@ A browser-based prototype for configuring and exporting printable miniature move
 - Save and reload complete army tray projects
 - Add catalogue or custom units as new visual tray tabs
 - Edit army trays in place using the full visual designer
-- Route exports through a sponsor-view download or future print-order checkout
+- Route exports through a sponsor-view download or Stripe print-order checkout
 - Prototype login gate using `user` / `password`
-- Stripe-ready print-order handoff awaiting a connected Stripe account
+- Server-side Stripe Checkout sessions with test-mode protection
 
 ## Run locally
 
@@ -29,6 +29,19 @@ npm start
 ```
 
 Then open `http://localhost:4173`.
+
+## Stripe Checkout
+
+1. Copy `.env.example` to `.env`.
+2. Add a Stripe test-mode secret key beginning with `sk_test_`.
+3. Adjust the pricing and shipping-country environment values.
+4. Run `npm start`.
+
+The server calculates the displayed quote and creates Stripe Checkout sessions. Secret keys are never sent to the browser. Live Stripe keys are rejected unless `ALLOW_LIVE_STRIPE=true`.
+
+GitHub Pages cannot securely run this checkout endpoint because it is static hosting. For the public site, deploy `server.mjs` to a Node host and set the `checkout-api-url` meta tag in `index.html` to that backend origin.
+
+Before fulfilling live orders, add a Stripe webhook that verifies `checkout.session.completed`. The return page is only a customer-facing status message and is not proof of payment.
 
 ## Verify
 

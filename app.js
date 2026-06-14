@@ -290,6 +290,65 @@ function showPrintOrder() {
     <div><dt>Base</dt><dd>${pendingExportConfig.baseSize} x ${pendingExportConfig.baseDepth} mm</dd></div>
     <div><dt>Outer size</dt><dd>${metrics.outerWidth.toFixed(1)} x ${metrics.outerDepth.toFixed(1)} mm</dd></div>
   `;
+  configureStripeCheckout();
+}
+
+function checkoutApiBase() {
+  return document.querySelector('meta[name="checkout-api-url"]').content.trim().replace(/\/$/, "");
+}
+
+function checkoutApiUrl(path) {
+  return `${checkoutApiBase()}${path}`;
+}
+
+function formatMoney(amount, currency) {
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: currency.toUpperCase() }).format(amount / 100);
+}
+
+async function configureStripeCheckout() {
+  const button = document.getElementById("stripeCheckoutButton");
+  const status = document.getElementById("stripeCheckoutStatus");
+  button.disabled = true;
+  status.textContent = "Checking Stripe configuration...";
+  try {
+    const [configResponse, quoteResponse] = await Promise.all([
+      fetch(checkoutApiUrl("/api/checkout/config")),
+      fetch(checkoutApiUrl("/api/checkout/quote"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: pendingExportConfig })
+      })
+    ]);
+    if (!configResponse.ok || !quoteResponse.ok) throw new Error("Stripe checkout backend is not available.");
+    const config = await configResponse.json();
+    const quote = await quoteResponse.json();
+    document.getElementById("printOrderSummary").insertAdjacentHTML("beforeend", `<div><dt>Estimated price</dt><dd>${formatMoney(quote.amount, quote.currency)}</dd></div>`);
+    if (!config.enabled) throw new Error(config.reason || "Stripe is not configured.");
+    button.disabled = false;
+    status.textContent = `${config.mode === "test" ? "Stripe test mode" : "Stripe live mode"} - final price confirmed at checkout.`;
+  } catch (error) {
+    status.textContent = `${error.message} Deploy a secure Node checkout backend and set checkout-api-url when using GitHub Pages.`;
+  }
+}
+
+async function beginStripeCheckout() {
+  const button = document.getElementById("stripeCheckoutButton");
+  const status = document.getElementById("stripeCheckoutStatus");
+  button.disabled = true;
+  status.textContent = "Creating secure Stripe Checkout...";
+  try {
+    const response = await fetch(checkoutApiUrl("/api/checkout/session"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: pendingExportConfig, name: pendingExportPrefix || "Printed movement tray" })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.url) throw new Error(result.error || "Stripe Checkout could not be created.");
+    window.location.assign(result.url);
+  } catch (error) {
+    status.textContent = error.message;
+    button.disabled = false;
+  }
 }
 
 function presets() {
@@ -899,6 +958,7 @@ document.querySelectorAll("[data-close-dialog]").forEach((button) => {
 });
 document.getElementById("chooseAdExport").addEventListener("click", startAdGate);
 document.getElementById("choosePrintOrder").addEventListener("click", showPrintOrder);
+document.getElementById("stripeCheckoutButton").addEventListener("click", beginStripeCheckout);
 document.getElementById("completeAdExport").addEventListener("click", () => {
   exportStl(pendingExportConfig, pendingExportPrefix);
   document.getElementById("exportDialog").close();
@@ -948,3 +1008,6 @@ document.getElementById("armyResults").addEventListener("click", (event) => {
 render();
 renderPresets();
 setAuthenticated(sessionStorage.getItem("movement-tray-authenticated") === "true");
+const checkoutResult = new URLSearchParams(window.location.search).get("checkout");
+if (checkoutResult === "success") showToast("Checkout completed. Payment confirmation is pending.");
+if (checkoutResult === "cancelled") showToast("Stripe Checkout was cancelled.");

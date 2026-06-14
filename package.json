@@ -4,8 +4,7 @@
   "private": true,
   "description": "Browser-based movement tray designer and STL exporter.",
   "scripts": {
-    "start": "node server.mjs",
+    "start": "node --env-file-if-exists=.env server.mjs",
     "check": "node --check app.js && node --check server.mjs"
   }
 }
-
