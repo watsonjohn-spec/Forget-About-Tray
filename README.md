@@ -33,7 +33,7 @@ Then open `http://localhost:4173`.
 ## Stripe Checkout
 
 1. Copy `.env.example` to `.env`.
-2. Add a Stripe test-mode secret key beginning with `sk_test_`.
+2. Add a Stripe test-mode restricted key beginning with `rk_test_` and grant it **Checkout Sessions: Write** access. A test secret key beginning with `sk_test_` also works.
 3. Adjust the pricing and shipping-country environment values.
 4. Run `npm start`.
 

@@ -83,9 +83,11 @@ function priceTray(input) {
 }
 
 function stripeReady() {
-  if (!stripeKey.startsWith("sk_test_") && !stripeKey.startsWith("sk_live_")) return { ready: false, reason: "Stripe secret key is not configured." };
-  if (stripeKey.startsWith("sk_live_") && !allowLiveStripe) return { ready: false, reason: "Live Stripe payments are disabled until ALLOW_LIVE_STRIPE=true." };
-  return { ready: true, mode: stripeKey.startsWith("sk_live_") ? "live" : "test" };
+  const testKey = stripeKey.startsWith("sk_test_") || stripeKey.startsWith("rk_test_");
+  const liveKey = stripeKey.startsWith("sk_live_") || stripeKey.startsWith("rk_live_");
+  if (!testKey && !liveKey) return { ready: false, reason: "Stripe server key is not configured." };
+  if (liveKey && !allowLiveStripe) return { ready: false, reason: "Live Stripe payments are disabled until ALLOW_LIVE_STRIPE=true." };
+  return { ready: true, mode: liveKey ? "live" : "test" };
 }
 
 async function createStripeCheckout(request, response) {
@@ -104,7 +106,6 @@ async function createStripeCheckout(request, response) {
       success_url: `${returnOrigin}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${returnOrigin}/?checkout=cancelled`,
       billing_address_collection: "required",
-      customer_creation: "always",
       "line_items[0][price_data][currency]": currency,
       "line_items[0][price_data][unit_amount]": String(priced.amount),
       "line_items[0][price_data][product_data][name]": prefix,
