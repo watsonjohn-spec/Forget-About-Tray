@@ -1,5 +1,4 @@
 node_modules/
 .deploy-git/
-Publish to GitHub.cmd
 .DS_Store
 *.log

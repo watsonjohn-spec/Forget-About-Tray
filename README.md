@@ -30,6 +30,6 @@ npm run check
 
 ## Deploy
 
-The app is fully static. A GitHub Pages deployment workflow is included and runs whenever `main` is pushed.
+The app is fully static. Run `Publish to GitHub.cmd`, then open **Settings → Pages** and select **Deploy from a branch**, `gh-pages`, and `/ (root)`.
 
-In the GitHub repository, open **Settings → Pages** and set **Source** to **GitHub Actions**. The app can also be deployed by copying `index.html`, `styles.css`, and `app.js` to any static host.
+The app can also be deployed by copying `index.html`, `styles.css`, and `app.js` to any static host.
