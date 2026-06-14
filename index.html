@@ -73,7 +73,7 @@
 
           <div class="control-section">
             <div class="section-label"><span>Model fit</span></div>
-            <label class="field-label" for="baseSize">Base size</label>
+            <label class="field-label" for="baseSize">Base width</label>
             <div class="choice-row" id="baseChoices">
               <button type="button" data-base="20">20</button>
               <button type="button" data-base="25" class="active">25</button>
@@ -86,9 +86,15 @@
             </div>
             <div class="two-fields">
               <label class="number-field">
+                <span>Base depth</span>
+                <span class="input-wrap"><input id="baseDepth" type="number" min="10" max="150" step="0.5" value="25" /><b>mm</b></span>
+              </label>
+              <label class="number-field">
                 <span>Gap between bases</span>
                 <span class="input-wrap"><input id="gap" type="number" min="0" max="10" step="0.1" value="1" /><b>mm</b></span>
               </label>
+            </div>
+            <div class="two-fields">
               <label class="number-field">
                 <span>Edge clearance</span>
                 <span class="input-wrap"><input id="clearance" type="number" min="0" max="10" step="0.1" value="1" /><b>mm</b></span>
@@ -171,6 +177,40 @@
         </section>
       </section>
 
+      <section class="army-section" id="armyAssistant">
+        <div class="army-heading">
+          <div>
+            <p class="eyebrow">Build the whole force</p>
+            <h2>Army list assistant</h2>
+            <p>Paste an export from Old World Builder, New Recruit, or a simple text list. Recognised ranked units become tray recommendations you can refine, save, or export.</p>
+          </div>
+          <span class="catalogue-pill">Local base catalogue</span>
+        </div>
+        <div class="army-workspace">
+          <div class="army-input-card">
+            <label for="armyList">Paste army list</label>
+            <textarea id="armyList" placeholder="20 Ungor Raiders&#10;20 Bestigor Herds&#10;6 Minotaurs"></textarea>
+            <div class="army-input-actions">
+              <button class="button button-ghost" id="sampleArmy" type="button">Use example</button>
+              <button class="button button-primary" id="analyzeArmy" type="button">Suggest trays</button>
+            </div>
+            <p class="army-note">The assistant ignores points, upgrades, characters, and headings. Always confirm base dimensions against your current rules before printing.</p>
+          </div>
+          <div class="army-results-wrap">
+            <div class="army-results-heading">
+              <div>
+                <span class="step">04</span>
+                <h3>Tray recommendations</h3>
+              </div>
+              <span id="armySummary">Waiting for a list</span>
+            </div>
+            <div id="armyResults" class="army-results">
+              <div class="empty-army">Paste a list to turn its ranked units into printable tray suggestions.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="presets-section">
         <div class="presets-heading">
           <div>
@@ -187,4 +227,3 @@
     <script src="app.js"></script>
   </body>
 </html>
-

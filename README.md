@@ -9,6 +9,8 @@ A browser-based prototype for configuring and exporting printable miniature move
 - Live isometric preview and exact dimensions
 - Save presets in browser storage
 - Export a printable ASCII STL without uploading data
+- Paste an army list to get editable per-unit tray recommendations
+- Match Beastmen units from the starter base catalogue and remember corrected base sizes locally
 
 ## Run locally
 
