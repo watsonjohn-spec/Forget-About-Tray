@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#171a17" />
+    <title>Movement Tray Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Movement Tray Studio home">
+        <span class="brand-mark" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </span>
+        <span>
+          <strong>Movement Tray</strong>
+          <small>Studio</small>
+        </span>
+      </a>
+      <div class="top-actions">
+        <span class="status-dot"><i></i> Ready to print</span>
+        <button class="button button-ghost" id="savePresetTop" type="button">Save preset</button>
+        <button class="button button-primary" id="exportTop" type="button">Export STL</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">Parametric tray builder</p>
+          <h1>Build the formation.<br /><em>Print the advantage.</em></h1>
+        </div>
+        <p class="intro-copy">Configure a movement tray around your unit, preview the footprint, and export a slicer-ready STL in seconds.</p>
+      </section>
+
+      <section class="workspace">
+        <aside class="panel controls-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="step">01</span>
+              <h2>Tray setup</h2>
+            </div>
+            <button class="text-button" id="resetButton" type="button">Reset</button>
+          </div>
+
+          <div class="control-section">
+            <div class="section-label">
+              <span>Formation</span>
+              <span id="unitCount">12 models</span>
+            </div>
+            <div class="axis-grid">
+              <div class="axis-control">
+                <label for="columns">Columns</label>
+                <div class="stepper">
+                  <button type="button" data-step="columns" data-direction="-1" aria-label="Decrease columns">−</button>
+                  <output id="columnsOutput">4</output>
+                  <button type="button" data-step="columns" data-direction="1" aria-label="Increase columns">+</button>
+                </div>
+                <input id="columns" type="range" min="1" max="12" value="4" />
+              </div>
+              <div class="axis-control">
+                <label for="rows">Rows</label>
+                <div class="stepper">
+                  <button type="button" data-step="rows" data-direction="-1" aria-label="Decrease rows">−</button>
+                  <output id="rowsOutput">3</output>
+                  <button type="button" data-step="rows" data-direction="1" aria-label="Increase rows">+</button>
+                </div>
+                <input id="rows" type="range" min="1" max="12" value="3" />
+              </div>
+            </div>
+          </div>
+
+          <div class="control-section">
+            <div class="section-label"><span>Model fit</span></div>
+            <label class="field-label" for="baseSize">Base size</label>
+            <div class="choice-row" id="baseChoices">
+              <button type="button" data-base="20">20</button>
+              <button type="button" data-base="25" class="active">25</button>
+              <button type="button" data-base="32">32</button>
+              <button type="button" data-base="40">40</button>
+              <div class="number-field compact">
+                <input id="baseSize" type="number" min="10" max="100" step="0.5" value="25" />
+                <span>mm</span>
+              </div>
+            </div>
+            <div class="two-fields">
+              <label class="number-field">
+                <span>Gap between bases</span>
+                <span class="input-wrap"><input id="gap" type="number" min="0" max="10" step="0.1" value="1" /><b>mm</b></span>
+              </label>
+              <label class="number-field">
+                <span>Edge clearance</span>
+                <span class="input-wrap"><input id="clearance" type="number" min="0" max="10" step="0.1" value="1" /><b>mm</b></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="control-section">
+            <div class="section-label"><span>Construction</span></div>
+            <div class="two-fields">
+              <label class="number-field">
+                <span>Plate thickness</span>
+                <span class="input-wrap"><input id="plateThickness" type="number" min="0.8" max="10" step="0.1" value="2" /><b>mm</b></span>
+              </label>
+              <label class="number-field">
+                <span>Lip height</span>
+                <span class="input-wrap"><input id="wallHeight" type="number" min="1" max="20" step="0.5" value="3" /><b>mm</b></span>
+              </label>
+            </div>
+            <label class="switch-row">
+              <span><strong>Perimeter lip</strong><small>Keeps the unit seated in the tray</small></span>
+              <input id="lipEnabled" type="checkbox" checked />
+              <i aria-hidden="true"></i>
+            </label>
+            <label class="switch-row">
+              <span><strong>Interval notches</strong><small>Marks each model along the tray wall</small></span>
+              <input id="notchesEnabled" type="checkbox" checked />
+              <i aria-hidden="true"></i>
+            </label>
+            <div class="two-fields conditional" id="lipFields">
+              <label class="number-field">
+                <span>Wall thickness</span>
+                <span class="input-wrap"><input id="wallThickness" type="number" min="0.8" max="5" step="0.1" value="1.6" /><b>mm</b></span>
+              </label>
+              <label class="number-field">
+                <span>Notch width</span>
+                <span class="input-wrap"><input id="notchWidth" type="number" min="0.5" max="8" step="0.1" value="2" /><b>mm</b></span>
+              </label>
+            </div>
+          </div>
+        </aside>
+
+        <section class="preview-column">
+          <div class="panel preview-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="step">02</span>
+                <h2>Print preview</h2>
+              </div>
+              <span class="live-pill"><i></i> Live geometry</span>
+            </div>
+            <div class="preview-stage">
+              <div class="dimension dimension-width" id="widthLabel">108.2 mm</div>
+              <div class="dimension dimension-depth" id="depthLabel">82.2 mm</div>
+              <svg id="trayPreview" role="img" aria-label="Isometric preview of configured movement tray" viewBox="0 0 760 450"></svg>
+              <div class="view-label">Isometric preview</div>
+            </div>
+            <div class="stats">
+              <div><span>Outer size</span><strong id="outerSize">108.2 × 82.2 mm</strong></div>
+              <div><span>Total height</span><strong id="totalHeight">5.0 mm</strong></div>
+              <div><span>Est. material</span><strong id="materialEstimate">19.4 cm³</strong></div>
+              <div><span>STL bodies</span><strong id="bodyCount">15</strong></div>
+            </div>
+          </div>
+
+          <div class="action-card">
+            <div>
+              <span class="step">03</span>
+              <h2>Make it physical</h2>
+              <p>The STL is generated entirely on this device. Import it into your slicer, choose your settings, and print.</p>
+            </div>
+            <div class="action-buttons">
+              <button class="button button-secondary" id="savePreset" type="button">Save preset</button>
+              <button class="button button-primary button-large" id="exportButton" type="button">
+                <span>Export STL</span>
+                <small id="exportFilename">movement-tray-4x3-25mm.stl</small>
+              </button>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="presets-section">
+        <div class="presets-heading">
+          <div>
+            <p class="eyebrow">Return to formation</p>
+            <h2>Saved presets</h2>
+          </div>
+          <p>Your configurations stay private in this browser.</p>
+        </div>
+        <div id="presets" class="presets-grid"></div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
+
