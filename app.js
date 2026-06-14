@@ -21,6 +21,7 @@ const checkboxKeys = ["lipEnabled", "notchesEnabled"];
 const inputs = Object.fromEntries([...numericKeys, ...checkboxKeys].map((key) => [key, document.getElementById(key)]));
 let state = { ...defaults };
 let armyRecommendations = [];
+let activeArmyRecommendationId = "";
 let armyParseReport = { lines: 0, candidates: 0 };
 let toastTimer;
 
@@ -146,9 +147,9 @@ function drawPreview(metrics) {
   const top = metrics.height;
   let markup = `
     <defs>
-      <linearGradient id="trayTop" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#d9ff96"/><stop offset="1" stop-color="#9fcb59"/></linearGradient>
-      <linearGradient id="traySide" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#789746"/><stop offset="1" stop-color="#50652f"/></linearGradient>
-      <linearGradient id="trayFront" x1="0" x2="1"><stop offset="0" stop-color="#607b38"/><stop offset="1" stop-color="#86a950"/></linearGradient>
+      <linearGradient id="trayTop" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#e8b86c"/><stop offset="1" stop-color="#b8663d"/></linearGradient>
+      <linearGradient id="traySide" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#8d4d32"/><stop offset="1" stop-color="#633322"/></linearGradient>
+      <linearGradient id="trayFront" x1="0" x2="1"><stop offset="0" stop-color="#70402b"/><stop offset="1" stop-color="#a75d38"/></linearGradient>
     </defs>
     <polygon points="${points([[0,d,0],[w,d,0],[w,d,base],[0,d,base]])}" fill="url(#trayFront)" stroke="#42552a" stroke-width="1.2"/>
     <polygon points="${points([[w,0,0],[w,d,0],[w,d,base],[w,0,base]])}" fill="url(#traySide)" stroke="#42552a" stroke-width="1.2"/>
@@ -160,11 +161,11 @@ function drawPreview(metrics) {
   const yStart = wall + state.clearance;
   for (let column = 1; column < state.columns; column += 1) {
     const x = xStart + column * state.baseSize + (column - 0.5) * state.gap;
-    markup += `<line x1="${project(x, wall, base)[0]}" y1="${project(x, wall, base)[1]}" x2="${project(x, d-wall, base)[0]}" y2="${project(x, d-wall, base)[1]}" stroke="#66823c" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
+    markup += `<line x1="${project(x, wall, base)[0]}" y1="${project(x, wall, base)[1]}" x2="${project(x, d-wall, base)[0]}" y2="${project(x, d-wall, base)[1]}" stroke="#7d452e" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
   }
   for (let row = 1; row < state.rows; row += 1) {
     const y = yStart + row * state.baseDepth + (row - 0.5) * state.gap;
-    markup += `<line x1="${project(wall, y, base)[0]}" y1="${project(wall, y, base)[1]}" x2="${project(w-wall, y, base)[0]}" y2="${project(w-wall, y, base)[1]}" stroke="#66823c" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
+    markup += `<line x1="${project(wall, y, base)[0]}" y1="${project(wall, y, base)[1]}" x2="${project(w-wall, y, base)[0]}" y2="${project(w-wall, y, base)[1]}" stroke="#7d452e" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
   }
 
   if (state.lipEnabled) {
@@ -175,9 +176,9 @@ function drawPreview(metrics) {
       const x2 = box.x + box.w;
       const y2 = box.y + box.d;
       markup += `
-        <polygon points="${points([[x1,y1,top],[x2,y1,top],[x2,y2,top],[x1,y2,top]])}" fill="#c6ef7e" stroke="#42552a" stroke-width="1"/>
-        <polygon points="${points([[x1,y2,base],[x2,y2,base],[x2,y2,top],[x1,y2,top]])}" fill="#7e9e4a" stroke="#42552a" stroke-width=".8"/>
-        <polygon points="${points([[x2,y1,base],[x2,y2,base],[x2,y2,top],[x2,y1,top]])}" fill="#6b883f" stroke="#42552a" stroke-width=".8"/>
+        <polygon points="${points([[x1,y1,top],[x2,y1,top],[x2,y2,top],[x1,y2,top]])}" fill="#d99757" stroke="#542d20" stroke-width="1"/>
+        <polygon points="${points([[x1,y2,base],[x2,y2,base],[x2,y2,top],[x1,y2,top]])}" fill="#9a5636" stroke="#542d20" stroke-width=".8"/>
+        <polygon points="${points([[x2,y1,base],[x2,y2,base],[x2,y2,top],[x2,y1,top]])}" fill="#7e452f" stroke="#542d20" stroke-width=".8"/>
       `;
     });
   }
@@ -474,19 +475,32 @@ function saveRecommendation(recommendation) {
 function renderArmyRecommendations() {
   const container = document.getElementById("armyResults");
   const summary = document.getElementById("armySummary");
+  const tabs = document.getElementById("armyTrayTabs");
   if (!armyRecommendations.length) {
+    tabs.hidden = true;
+    tabs.innerHTML = "";
     summary.textContent = `${armyParseReport.lines} lines checked - no ranked units found`;
     container.innerHTML = `<div class="empty-army">No unit quantities were recognised. Keep each unit and its model count on one line, such as "16 White Lions of Chrace [242 pts]".</div>`;
     return;
   }
+  if (!armyRecommendations.some((item) => item.id === activeArmyRecommendationId)) {
+    activeArmyRecommendationId = armyRecommendations[0].id;
+  }
   const recognised = armyRecommendations.filter((item) => item.matched).length;
   const unknown = armyRecommendations.length - recognised;
   summary.textContent = `${armyRecommendations.length} tray types - ${unknown} need base sizes`;
-  container.innerHTML = armyRecommendations.map((item) => {
-    const ready = item.baseSize > 0 && item.baseDepth > 0;
-    const capacity = item.columns * item.rows;
-    const copyText = item.copies > 1 ? `${item.copies} identical units - print ${item.copies}` : `${item.count} models`;
-    return `
+  tabs.hidden = false;
+  tabs.innerHTML = armyRecommendations.map((item) => `
+    <button type="button" class="${item.id === activeArmyRecommendationId ? "active" : ""}" data-army-tab="${escapeHtml(item.id)}">
+      <strong>${escapeHtml(item.name)}</strong>
+      <small>${item.columns} x ${item.rows}${item.copies > 1 ? ` - print ${item.copies}` : ""}</small>
+    </button>
+  `).join("");
+  const item = armyRecommendations.find((recommendation) => recommendation.id === activeArmyRecommendationId);
+  const ready = item.baseSize > 0 && item.baseDepth > 0;
+  const capacity = item.columns * item.rows;
+  const copyText = item.copies > 1 ? `${item.copies} identical units - print ${item.copies}` : `${item.count} models`;
+  container.innerHTML = `
       <article class="army-unit" data-recommendation="${escapeHtml(item.id)}">
         <div class="army-unit-name">
           <h4>${escapeHtml(item.name)}</h4>
@@ -500,13 +514,12 @@ function renderArmyRecommendations() {
           <label class="army-mini-field">Base D<input data-army-field="baseDepth" type="number" min="10" max="150" value="${item.baseDepth || ""}" placeholder="mm"></label>
         </div>
         <div class="army-unit-actions">
-          <button type="button" data-army-action="load" ${ready ? "" : "disabled"}>Load</button>
+          <button type="button" data-army-action="load" ${ready ? "" : "disabled"}>Edit tray</button>
           <button type="button" data-army-action="save" ${ready ? "" : "disabled"}>Save</button>
           <button type="button" data-army-action="export" ${ready ? "" : "disabled"}>Export STL</button>
         </div>
       </article>
     `;
-  }).join("");
 }
 
 function analyzeArmyList() {
@@ -521,6 +534,7 @@ function analyzeArmyList() {
     return;
   }
   armyRecommendations = parseArmyList(text);
+  activeArmyRecommendationId = armyRecommendations[0]?.id || "";
   renderArmyRecommendations();
   showToast(armyRecommendations.length ? `${armyRecommendations.length} tray suggestions ready` : "No units with quantities were recognised");
   document.querySelector(".army-results-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -534,7 +548,38 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove("visible"), 2400);
 }
 
+function switchMode(mode) {
+  const intro = mode === "army"
+    ? {
+        eyebrow: "Army tray generator",
+        title: "Parse the roster.<br><em>Print the formations.</em>",
+        copy: "Turn a pasted army list into a practical print queue, then refine each unit tray before it reaches the table."
+      }
+    : {
+        eyebrow: "Parametric tray builder",
+        title: "Build the formation.<br><em>Print the advantage.</em>",
+        copy: "Configure a movement tray around your unit, preview the footprint, and export a slicer-ready STL in seconds."
+      };
+  document.body.dataset.activeMode = mode;
+  document.getElementById("introEyebrow").textContent = intro.eyebrow;
+  document.getElementById("introTitle").innerHTML = intro.title;
+  document.getElementById("introCopy").textContent = intro.copy;
+  document.querySelectorAll("[data-mode]").forEach((button) => {
+    const active = button.dataset.mode === mode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active);
+  });
+  document.querySelectorAll("[data-mode-panel]").forEach((panel) => {
+    const active = panel.dataset.modePanel === mode;
+    panel.hidden = !active;
+    panel.classList.toggle("active", active);
+  });
+}
+
 Object.values(inputs).forEach((input) => input.addEventListener("input", render));
+document.querySelectorAll("[data-mode]").forEach((button) => {
+  button.addEventListener("click", () => switchMode(button.dataset.mode));
+});
 document.querySelectorAll("[data-step]").forEach((button) => {
   button.addEventListener("click", () => {
     const input = inputs[button.dataset.step];
@@ -591,6 +636,15 @@ document.getElementById("armyResults").addEventListener("input", (event) => {
   const ready = recommendation.baseSize > 0 && recommendation.baseDepth > 0;
   card.querySelectorAll("[data-army-action]").forEach((button) => { button.disabled = !ready; });
 });
+document.getElementById("armyResults").addEventListener("change", (event) => {
+  if (event.target.dataset.armyField) renderArmyRecommendations();
+});
+document.getElementById("armyTrayTabs").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-army-tab]");
+  if (!button) return;
+  activeArmyRecommendationId = button.dataset.armyTab;
+  renderArmyRecommendations();
+});
 document.getElementById("armyResults").addEventListener("click", (event) => {
   const action = event.target.dataset.armyAction;
   const card = event.target.closest("[data-recommendation]");
@@ -601,6 +655,7 @@ document.getElementById("armyResults").addEventListener("click", (event) => {
   const config = recommendationConfig(recommendation);
   if (action === "load") {
     writeState(config);
+    switchMode("single");
     document.querySelector(".workspace").scrollIntoView({ behavior: "smooth" });
     showToast(`${recommendation.name} loaded into the designer`);
   }

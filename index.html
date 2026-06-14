@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#171a17" />
+    <meta name="theme-color" content="#2c211b" />
     <title>Movement Tray Studio</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body data-active-mode="single">
     <header class="topbar">
       <a class="brand" href="#" aria-label="Movement Tray Studio home">
         <span class="brand-mark" aria-hidden="true">
@@ -26,14 +26,37 @@
     </header>
 
     <main>
+      <nav class="mode-tabs" aria-label="Tray builder mode">
+        <button class="mode-tab active" type="button" data-mode="single" aria-selected="true">
+          <span>01</span>
+          <strong>Single tray</strong>
+          <small>Design one formation</small>
+        </button>
+        <button class="mode-tab" type="button" data-mode="army" aria-selected="false">
+          <span>02</span>
+          <strong>Army list</strong>
+          <small>Generate trays by unit</small>
+        </button>
+      </nav>
+
       <section class="intro">
         <div>
-          <p class="eyebrow">Parametric tray builder</p>
-          <h1>Build the formation.<br /><em>Print the advantage.</em></h1>
+          <p class="eyebrow" id="introEyebrow">Parametric tray builder</p>
+          <h1 id="introTitle">Build the formation.<br /><em>Print the advantage.</em></h1>
         </div>
-        <p class="intro-copy">Configure a movement tray around your unit, preview the footprint, and export a slicer-ready STL in seconds.</p>
+        <p class="intro-copy" id="introCopy">Configure a movement tray around your unit, preview the footprint, and export a slicer-ready STL in seconds.</p>
       </section>
 
+      <aside class="ad-slot ad-slot-top" aria-label="Advertisement">
+        <span class="ad-label">Sponsored field note</span>
+        <div>
+          <strong>Leaderboard advertising space</strong>
+          <small>Ideal for miniatures, paints, terrain, and print services · 970 × 90</small>
+        </div>
+        <span class="ad-cta">Advertise here</span>
+      </aside>
+
+      <section class="mode-panel active" id="singleMode" data-mode-panel="single">
       <section class="workspace">
         <aside class="panel controls-panel">
           <div class="panel-heading">
@@ -176,13 +199,25 @@
           </div>
         </section>
       </section>
+      <section class="presets-section">
+        <div class="presets-heading">
+          <div>
+            <p class="eyebrow">Return to formation</p>
+            <h2>Saved presets</h2>
+          </div>
+          <p>Your configurations stay private in this browser.</p>
+        </div>
+        <div id="presets" class="presets-grid"></div>
+      </section>
+      </section>
 
+      <section class="mode-panel" id="armyMode" data-mode-panel="army" hidden>
       <section class="army-section" id="armyAssistant">
         <div class="army-heading">
           <div>
-            <p class="eyebrow">Build the whole force</p>
-            <h2>Army list assistant</h2>
-            <p>Paste an export from Old World Builder, New Recruit, or a simple text list. Recognised ranked units become tray recommendations you can refine, save, or export.</p>
+            <p class="eyebrow">Quartermaster's bench</p>
+            <h2>Build trays for the whole force</h2>
+            <p>Paste an export from Old World Builder, New Recruit, or a simple text list. Each recognised tray type gets its own working tab.</p>
           </div>
           <span class="catalogue-pill">Local base catalogue</span>
         </div>
@@ -204,23 +239,23 @@
               </div>
               <span id="armySummary">Waiting for a list</span>
             </div>
+            <div id="armyTrayTabs" class="army-tray-tabs" hidden aria-label="Generated tray types"></div>
             <div id="armyResults" class="army-results">
               <div class="empty-army">Paste a list to turn its ranked units into printable tray suggestions.</div>
             </div>
           </div>
         </div>
       </section>
-
-      <section class="presets-section">
-        <div class="presets-heading">
-          <div>
-            <p class="eyebrow">Return to formation</p>
-            <h2>Saved presets</h2>
-          </div>
-          <p>Your configurations stay private in this browser.</p>
-        </div>
-        <div id="presets" class="presets-grid"></div>
       </section>
+
+      <aside class="ad-slot ad-slot-bottom" aria-label="Advertisement">
+        <span class="ad-label">Supply drop</span>
+        <div>
+          <strong>Campaign banner advertising space</strong>
+          <small>Reserved for a second sponsor · responsive 970 × 90 placement</small>
+        </div>
+        <span class="ad-cta">Partner slot</span>
+      </aside>
     </main>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
