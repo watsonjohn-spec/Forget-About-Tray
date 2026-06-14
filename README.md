@@ -15,6 +15,8 @@ A browser-based prototype for configuring and exporting printable miniature move
 - Add catalogue or custom units as new visual tray tabs
 - Edit army trays in place using the full visual designer
 - Route exports through a sponsor-view download or future print-order checkout
+- Prototype login gate using `user` / `password`
+- Stripe-ready print-order handoff awaiting a connected Stripe account
 
 ## Run locally
 

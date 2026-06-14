@@ -756,21 +756,7 @@ function showToast(message) {
 
 function switchMode(mode) {
   if (mode === "single" && armyEditingId) exitArmyEdit(false, true);
-  const intro = mode === "army"
-    ? {
-        eyebrow: "Army tray generator",
-        title: "Parse the roster.<br><em>Print the formations.</em>",
-        copy: "Turn a pasted army list into a practical print queue, then refine each unit tray before it reaches the table."
-      }
-    : {
-        eyebrow: "Parametric tray builder",
-        title: "Build the formation.<br><em>Print the advantage.</em>",
-        copy: "Configure a movement tray around your unit, preview the footprint, and export a slicer-ready STL in seconds."
-      };
   document.body.dataset.activeMode = mode;
-  document.getElementById("introEyebrow").textContent = intro.eyebrow;
-  document.getElementById("introTitle").innerHTML = intro.title;
-  document.getElementById("introCopy").textContent = intro.copy;
   document.querySelectorAll("[data-mode]").forEach((button) => {
     const active = button.dataset.mode === mode;
     button.classList.toggle("active", active);
@@ -783,10 +769,33 @@ function switchMode(mode) {
   });
 }
 
+function setAuthenticated(authenticated) {
+  sessionStorage.setItem("movement-tray-authenticated", authenticated ? "true" : "false");
+  document.getElementById("authGate").classList.toggle("hidden", authenticated);
+  document.body.classList.toggle("authenticated", authenticated);
+  if (!authenticated) {
+    document.getElementById("loginForm").reset();
+    document.getElementById("loginError").textContent = "";
+    setTimeout(() => document.getElementById("loginUsername").focus(), 50);
+  }
+}
+
 Object.values(inputs).forEach((input) => input.addEventListener("input", render));
 document.querySelectorAll("[data-mode]").forEach((button) => {
   button.addEventListener("click", () => switchMode(button.dataset.mode));
 });
+document.getElementById("loginForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const username = document.getElementById("loginUsername").value;
+  const password = document.getElementById("loginPassword").value;
+  if (username === "user" && password === "password") {
+    setAuthenticated(true);
+    showToast("Welcome to the workshop");
+  } else {
+    document.getElementById("loginError").textContent = "Incorrect username or password.";
+  }
+});
+document.getElementById("logoutButton").addEventListener("click", () => setAuthenticated(false));
 document.querySelectorAll("[data-step]").forEach((button) => {
   button.addEventListener("click", () => {
     const input = inputs[button.dataset.step];
@@ -938,3 +947,4 @@ document.getElementById("armyResults").addEventListener("click", (event) => {
 
 render();
 renderPresets();
+setAuthenticated(sessionStorage.getItem("movement-tray-authenticated") === "true");

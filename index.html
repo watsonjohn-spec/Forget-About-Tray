@@ -8,6 +8,18 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body data-active-mode="single">
+    <div class="auth-gate" id="authGate">
+      <form class="login-card" id="loginForm">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+        <div><p class="eyebrow">Prototype access</p><h1>Enter the workshop</h1></div>
+        <p>Sign in to access your saved trays and army projects on this device.</p>
+        <label>Username<input id="loginUsername" autocomplete="username" required type="text"></label>
+        <label>Password<input id="loginPassword" autocomplete="current-password" required type="password"></label>
+        <p class="login-error" id="loginError" role="alert"></p>
+        <button class="button button-primary" type="submit">Sign in</button>
+        <small>Prototype credentials: user / password</small>
+      </form>
+    </div>
     <header class="topbar">
       <a class="brand" href="#" aria-label="Movement Tray Studio home">
         <span class="brand-mark" aria-hidden="true">
@@ -18,10 +30,12 @@
           <small>Studio</small>
         </span>
       </a>
+      <p class="top-tagline"><strong>Build the formation.</strong><em>Print the advantage.</em></p>
       <div class="top-actions">
         <span class="status-dot"><i></i> Ready to print</span>
         <button class="button button-ghost" id="savePresetTop" type="button">Save preset</button>
         <button class="button button-primary" id="exportTop" type="button">Export STL</button>
+        <button class="button button-ghost" id="logoutButton" type="button">Log out</button>
       </div>
     </header>
 
@@ -38,14 +52,6 @@
           <small>Generate trays by unit</small>
         </button>
       </nav>
-
-      <section class="intro">
-        <div>
-          <p class="eyebrow" id="introEyebrow">Parametric tray builder</p>
-          <h1 id="introTitle">Build the formation.<br /><em>Print the advantage.</em></h1>
-        </div>
-        <p class="intro-copy" id="introCopy">Configure a movement tray around your unit, preview the footprint, and export a slicer-ready STL in seconds.</p>
-      </section>
 
       <aside class="ad-slot ad-slot-top" aria-label="Advertisement">
         <span class="ad-label">Sponsored field note</span>
@@ -322,10 +328,10 @@
       <section class="print-order" id="printOrder" hidden>
         <div class="print-order-mark">3D</div>
         <h3>Printed tray checkout</h3>
-        <p>The selected tray configuration is ready to send to a Shopify or Wix product/checkout connector.</p>
+        <p>The selected tray configuration is ready to send to a Stripe Checkout integration.</p>
         <dl id="printOrderSummary"></dl>
         <button class="button button-primary" type="button" disabled>Continue to checkout</button>
-        <small>Commerce connector pending store account and API credentials.</small>
+        <small>Stripe connector pending account, pricing, fulfilment, and API credentials.</small>
       </section>
     </dialog>
 
