@@ -318,7 +318,8 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .dialog-empty { padding: 30px; color: var(--muted); text-align: center; font-size: 11px; }
 
 .export-dialog { width: min(680px, calc(100% - 28px)); }
-.export-choices { padding: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.export-choices { padding: 18px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.export-choices:has(#chooseAdExport[hidden]) { grid-template-columns: repeat(2, 1fr); }
 .export-choice { min-height: 210px; padding: 22px; display: grid; place-items: center; align-content: center; gap: 10px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: white; text-align: center; }
 .export-choice:hover { border-color: #78936a; background: #edf2e5; }
 .export-choice strong { font-family: Georgia, serif; font-size: 19px; }

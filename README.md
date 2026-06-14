@@ -15,6 +15,7 @@ A browser-based prototype for configuring and exporting printable miniature move
 - Add catalogue or custom units as new visual tray tabs
 - Edit army trays in place using the full visual designer
 - Route exports through a sponsor-view download or Stripe print-order checkout
+- Offer one sponsored STL download per browser, then a one-off £5 unlimited-download unlock
 - Prototype login gate using `user` / `password`
 - Server-side Stripe Checkout sessions with test-mode protection
 
@@ -38,6 +39,10 @@ Then open `http://localhost:4173`.
 4. Run `npm start`.
 
 The server calculates the displayed quote and creates Stripe Checkout sessions. Secret keys are never sent to the browser. Live Stripe keys are rejected unless `ALLOW_LIVE_STRIPE=true`.
+
+Paid unlimited-download access is verified against the completed Stripe Checkout Session and stored as a signed entitlement in that browser. Set `DOWNLOAD_ENTITLEMENT_SECRET` to a long random value before production; changing it invalidates existing browser entitlements.
+
+The single sponsored download is currently enforced per browser because the prototype login does not identify individual customers. Enforcing one sponsored download per person requires real user accounts and server-side storage.
 
 GitHub Pages cannot securely run this checkout endpoint because it is static hosting. For the public site, deploy `server.mjs` to a Node host and set the `checkout-api-url` meta tag in `index.html` to that backend origin.
 

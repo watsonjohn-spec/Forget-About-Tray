@@ -1,5 +1,6 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { extname, join, normalize } from "node:path";
 
 const port = Number(process.env.PORT || 4173);
@@ -9,9 +10,11 @@ const allowLiveStripe = process.env.ALLOW_LIVE_STRIPE === "true";
 const currency = (process.env.STRIPE_CURRENCY || "gbp").toLowerCase();
 const basePrice = Number(process.env.PRINT_BASE_PRICE_PENCE || 800);
 const pricePerCm3 = Number(process.env.PRINT_PRICE_PER_CM3_PENCE || 25);
+const unlimitedExportsPrice = Number(process.env.UNLIMITED_EXPORTS_PRICE_PENCE || 500);
 const stripeApiBase = process.env.STRIPE_API_BASE || "https://api.stripe.com";
 const allowedCountries = (process.env.STRIPE_ALLOWED_COUNTRIES || "GB,US").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean);
 const allowedOrigin = process.env.CHECKOUT_ALLOWED_ORIGIN || "";
+const entitlementSecret = process.env.DOWNLOAD_ENTITLEMENT_SECRET || stripeKey;
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -85,9 +88,35 @@ function priceTray(input) {
 function stripeReady() {
   const testKey = stripeKey.startsWith("sk_test_") || stripeKey.startsWith("rk_test_");
   const liveKey = stripeKey.startsWith("sk_live_") || stripeKey.startsWith("rk_live_");
-  if (!testKey && !liveKey) return { ready: false, reason: "Stripe server key is not configured." };
+  if ((!testKey && !liveKey) || stripeKey.includes("replace_me")) return { ready: false, reason: "Stripe server key is not configured." };
   if (liveKey && !allowLiveStripe) return { ready: false, reason: "Live Stripe payments are disabled until ALLOW_LIVE_STRIPE=true." };
   return { ready: true, mode: liveKey ? "live" : "test" };
+}
+
+function checkoutReturnOrigin(request, origin) {
+  return process.env.CHECKOUT_RETURN_ORIGIN || origin || `http://${request.headers.host}`;
+}
+
+function createDownloadEntitlement(sessionId) {
+  const payload = Buffer.from(JSON.stringify({ scope: "unlimited-stl", sessionId, version: 1 })).toString("base64url");
+  const signature = createHmac("sha256", entitlementSecret).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function downloadEntitlementValid(token) {
+  if (!entitlementSecret || typeof token !== "string") return false;
+  const [payload, signature, extra] = token.split(".");
+  if (!payload || !signature || extra) return false;
+  const expected = createHmac("sha256", entitlementSecret).update(payload).digest();
+  let received;
+  try {
+    received = Buffer.from(signature, "base64url");
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (parsed.scope !== "unlimited-stl" || !parsed.sessionId) return false;
+  } catch {
+    return false;
+  }
+  return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
 async function createStripeCheckout(request, response) {
@@ -100,7 +129,7 @@ async function createStripeCheckout(request, response) {
     const body = await readJson(request);
     const priced = priceTray(body.config || {});
     const prefix = String(body.name || "Printed movement tray").slice(0, 80);
-    const returnOrigin = process.env.CHECKOUT_RETURN_ORIGIN || origin || `http://${request.headers.host}`;
+    const returnOrigin = checkoutReturnOrigin(request, origin);
     const parameters = new URLSearchParams({
       mode: "payment",
       success_url: `${returnOrigin}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
@@ -131,7 +160,80 @@ async function createStripeCheckout(request, response) {
     if (!stripeResponse.ok || !session.url) throw new Error(session.error?.message || "Stripe Checkout could not be created.");
     sendJson(response, 200, { url: session.url, amount: priced.amount, currency, mode: readiness.mode }, origin);
   } catch (error) {
-    sendJson(response, 400, { error: error.message || "Checkout request failed." }, origin);
+    const rawMessage = error.cause?.message || error.message || "Checkout request failed.";
+    const message = rawMessage.includes("Invalid API Key")
+      ? "Stripe rejected the server key. Restart the Movement Tray server after changing .env, or replace the key in Stripe."
+      : rawMessage;
+    sendJson(response, 400, { error: message }, origin);
+  }
+}
+
+async function createUnlockCheckout(request, response) {
+  const origin = checkoutOrigin(request);
+  if (!checkoutOriginAllowed(request)) return sendJson(response, 403, { error: "Origin is not allowed." });
+  const readiness = stripeReady();
+  if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
+
+  try {
+    const returnOrigin = checkoutReturnOrigin(request, origin);
+    const parameters = new URLSearchParams({
+      mode: "payment",
+      success_url: `${returnOrigin}/?checkout=unlock-success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${returnOrigin}/?checkout=unlock-cancelled`,
+      "line_items[0][price_data][currency]": currency,
+      "line_items[0][price_data][unit_amount]": String(unlimitedExportsPrice),
+      "line_items[0][price_data][product_data][name]": "Unlimited STL exports",
+      "line_items[0][price_data][product_data][description]": "One-off purchase for unlimited movement tray STL downloads",
+      "line_items[0][quantity]": "1",
+      "metadata[purchase_type]": "unlimited_stl"
+    });
+    const stripeResponse = await fetch(`${stripeApiBase}/v1/checkout/sessions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: parameters
+    });
+    const session = await stripeResponse.json();
+    if (!stripeResponse.ok || !session.url) throw new Error(session.error?.message || "Stripe Checkout could not be created.");
+    sendJson(response, 200, { url: session.url, amount: unlimitedExportsPrice, currency, mode: readiness.mode }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.cause?.message || error.message || "Checkout request failed." }, origin);
+  }
+}
+
+async function verifyUnlockCheckout(request, response) {
+  const origin = checkoutOrigin(request);
+  if (!checkoutOriginAllowed(request)) return sendJson(response, 403, { error: "Origin is not allowed." });
+  const readiness = stripeReady();
+  if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
+
+  try {
+    const body = await readJson(request);
+    const sessionId = String(body.sessionId || "");
+    if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) throw new Error("Invalid Stripe Checkout session.");
+    const stripeResponse = await fetch(`${stripeApiBase}/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
+      headers: { Authorization: `Bearer ${stripeKey}` }
+    });
+    const session = await stripeResponse.json();
+    if (!stripeResponse.ok) throw new Error(session.error?.message || "Stripe Checkout could not be verified.");
+    if (session.payment_status !== "paid" || session.metadata?.purchase_type !== "unlimited_stl") {
+      return sendJson(response, 402, { error: "The unlimited STL purchase is not paid." }, origin);
+    }
+    sendJson(response, 200, { unlocked: true, entitlement: createDownloadEntitlement(session.id) }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.cause?.message || error.message || "Checkout verification failed." }, origin);
+  }
+}
+
+async function checkUnlockStatus(request, response) {
+  const origin = checkoutOrigin(request);
+  try {
+    const body = await readJson(request);
+    sendJson(response, 200, { unlocked: downloadEntitlementValid(body.entitlement) }, origin);
+  } catch {
+    sendJson(response, 200, { unlocked: false }, origin);
   }
 }
 
@@ -167,7 +269,8 @@ createServer(async (request, response) => {
       reason: readiness.reason || "",
       currency,
       basePrice,
-      pricePerCm3
+      pricePerCm3,
+      unlimitedExportsPrice
     }, origin);
     return;
   }
@@ -177,6 +280,18 @@ createServer(async (request, response) => {
   }
   if (request.method === "POST" && pathname === "/api/checkout/quote") {
     await quoteStripeCheckout(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/checkout/unlock/session") {
+    await createUnlockCheckout(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/checkout/unlock/verify") {
+    await verifyUnlockCheckout(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/checkout/unlock/status") {
+    await checkUnlockStatus(request, response);
     return;
   }
 

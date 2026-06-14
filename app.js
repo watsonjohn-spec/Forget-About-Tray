@@ -29,6 +29,9 @@ let pendingExportConfig = null;
 let pendingExportPrefix = "";
 let adCountdownTimer = null;
 let toastTimer;
+let unlimitedExportsVerified = false;
+const freeExportUsedKey = "movement-tray-free-export-used";
+const downloadEntitlementKey = "movement-tray-download-entitlement";
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -251,13 +254,43 @@ function exportStl(config = state, prefix = "movement-tray") {
   showToast(`${link.download} exported`);
 }
 
-function requestExport(config = state, prefix = "movement-tray") {
+function freeExportUsed() {
+  return localStorage.getItem(freeExportUsedKey) === "true";
+}
+
+async function hasUnlimitedExports() {
+  if (unlimitedExportsVerified) return true;
+  const entitlement = localStorage.getItem(downloadEntitlementKey);
+  if (!entitlement) return false;
+  try {
+    const response = await fetch(checkoutApiUrl("/api/checkout/unlock/status"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entitlement })
+    });
+    if (!response.ok) return false;
+    const result = await response.json();
+    unlimitedExportsVerified = Boolean(result.unlocked);
+    if (!unlimitedExportsVerified) localStorage.removeItem(downloadEntitlementKey);
+    return unlimitedExportsVerified;
+  } catch {
+    return false;
+  }
+}
+
+async function requestExport(config = state, prefix = "movement-tray") {
   pendingExportConfig = { ...config };
   pendingExportPrefix = prefix;
+  if (await hasUnlimitedExports()) {
+    exportStl(pendingExportConfig, pendingExportPrefix);
+    return;
+  }
   clearInterval(adCountdownTimer);
   document.getElementById("exportDialogTitle").textContent = fileName(config, prefix);
   document.getElementById("exportChoices").hidden = false;
+  document.getElementById("chooseAdExport").hidden = freeExportUsed();
   document.getElementById("adGate").hidden = true;
+  document.getElementById("unlockExports").hidden = true;
   document.getElementById("printOrder").hidden = true;
   document.getElementById("exportDialog").showModal();
 }
@@ -284,6 +317,7 @@ function startAdGate() {
 function showPrintOrder() {
   const metrics = trayMetrics(pendingExportConfig);
   document.getElementById("exportChoices").hidden = true;
+  document.getElementById("unlockExports").hidden = true;
   document.getElementById("printOrder").hidden = false;
   document.getElementById("printOrderSummary").innerHTML = `
     <div><dt>Tray</dt><dd>${pendingExportConfig.columns} x ${pendingExportConfig.rows}</dd></div>
@@ -291,6 +325,13 @@ function showPrintOrder() {
     <div><dt>Outer size</dt><dd>${metrics.outerWidth.toFixed(1)} x ${metrics.outerDepth.toFixed(1)} mm</dd></div>
   `;
   configureStripeCheckout();
+}
+
+function showUnlockExports() {
+  document.getElementById("exportChoices").hidden = true;
+  document.getElementById("printOrder").hidden = true;
+  document.getElementById("unlockExports").hidden = false;
+  configureUnlockCheckout();
 }
 
 function checkoutApiBase() {
@@ -348,6 +389,63 @@ async function beginStripeCheckout() {
   } catch (error) {
     status.textContent = error.message;
     button.disabled = false;
+  }
+}
+
+async function configureUnlockCheckout() {
+  const button = document.getElementById("unlockCheckoutButton");
+  const status = document.getElementById("unlockCheckoutStatus");
+  button.disabled = true;
+  status.textContent = "Checking Stripe configuration...";
+  try {
+    const response = await fetch(checkoutApiUrl("/api/checkout/config"));
+    if (!response.ok) throw new Error("Stripe checkout backend is not available.");
+    const config = await response.json();
+    document.getElementById("unlockExportsPrice").textContent = formatMoney(config.unlimitedExportsPrice, config.currency);
+    if (!config.enabled) throw new Error(config.reason || "Stripe is not configured.");
+    button.disabled = false;
+    status.textContent = `${config.mode === "test" ? "Stripe test mode" : "Stripe live mode"} - one payment unlocks this browser.`;
+  } catch (error) {
+    status.textContent = `${error.message} Open the checkout-enabled version of the site to purchase.`;
+  }
+}
+
+async function beginUnlockCheckout() {
+  const button = document.getElementById("unlockCheckoutButton");
+  const status = document.getElementById("unlockCheckoutStatus");
+  button.disabled = true;
+  status.textContent = "Creating secure Stripe Checkout...";
+  try {
+    const response = await fetch(checkoutApiUrl("/api/checkout/unlock/session"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}"
+    });
+    const result = await response.json();
+    if (!response.ok || !result.url) throw new Error(result.error || "Stripe Checkout could not be created.");
+    window.location.assign(result.url);
+  } catch (error) {
+    status.textContent = error.message;
+    button.disabled = false;
+  }
+}
+
+async function verifyUnlockPurchase(sessionId) {
+  try {
+    const response = await fetch(checkoutApiUrl("/api/checkout/unlock/verify"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.unlocked || !result.entitlement) throw new Error(result.error || "Stripe could not confirm the purchase.");
+    localStorage.setItem(downloadEntitlementKey, result.entitlement);
+    unlimitedExportsVerified = true;
+    showToast("Unlimited STL exports unlocked in this browser.");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    history.replaceState({}, "", window.location.pathname);
   }
 }
 
@@ -957,9 +1055,12 @@ document.querySelectorAll("[data-close-dialog]").forEach((button) => {
   button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close());
 });
 document.getElementById("chooseAdExport").addEventListener("click", startAdGate);
+document.getElementById("chooseUnlimitedExport").addEventListener("click", showUnlockExports);
 document.getElementById("choosePrintOrder").addEventListener("click", showPrintOrder);
 document.getElementById("stripeCheckoutButton").addEventListener("click", beginStripeCheckout);
+document.getElementById("unlockCheckoutButton").addEventListener("click", beginUnlockCheckout);
 document.getElementById("completeAdExport").addEventListener("click", () => {
+  localStorage.setItem(freeExportUsedKey, "true");
   exportStl(pendingExportConfig, pendingExportPrefix);
   document.getElementById("exportDialog").close();
 });
@@ -1008,6 +1109,9 @@ document.getElementById("armyResults").addEventListener("click", (event) => {
 render();
 renderPresets();
 setAuthenticated(sessionStorage.getItem("movement-tray-authenticated") === "true");
-const checkoutResult = new URLSearchParams(window.location.search).get("checkout");
+const checkoutParameters = new URLSearchParams(window.location.search);
+const checkoutResult = checkoutParameters.get("checkout");
 if (checkoutResult === "success") showToast("Checkout completed. Payment confirmation is pending.");
 if (checkoutResult === "cancelled") showToast("Stripe Checkout was cancelled.");
+if (checkoutResult === "unlock-success") verifyUnlockPurchase(checkoutParameters.get("session_id"));
+if (checkoutResult === "unlock-cancelled") showToast("Unlimited STL unlock was cancelled.");

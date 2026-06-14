@@ -310,7 +310,11 @@
       <div id="exportChoices" class="export-choices">
         <button class="export-choice" id="chooseAdExport" type="button">
           <span class="choice-icon">STL</span><strong>Watch sponsor message</strong>
-          <small>View a 30-second sponsor placement, then download the STL.</small>
+          <small>Your first STL download is free after one 30-second sponsor placement.</small>
+        </button>
+        <button class="export-choice" id="chooseUnlimitedExport" type="button">
+          <span class="choice-icon">£5</span><strong>Unlock unlimited STLs</strong>
+          <small>Make one £5 payment, then download as many tray STLs as you need.</small>
         </button>
         <button class="export-choice" id="choosePrintOrder" type="button">
           <span class="choice-icon">3D</span><strong>Have it printed</strong>
@@ -325,6 +329,17 @@
         </div>
         <p id="adCountdown">Download unlocks in 30 seconds</p>
         <button class="button button-primary" id="completeAdExport" type="button" disabled>Download STL</button>
+      </section>
+      <section class="print-order" id="unlockExports" hidden>
+        <div class="print-order-mark">STL</div>
+        <h3>Unlock unlimited STL exports</h3>
+        <p>Make one £5 payment through secure Stripe Checkout. Once Stripe confirms payment, unlimited STL downloads unlock in this browser.</p>
+        <dl>
+          <div><dt>Access</dt><dd>Unlimited STL exports</dd></div>
+          <div><dt>One-off price</dt><dd id="unlockExportsPrice">£5.00</dd></div>
+        </dl>
+        <button class="button button-primary" id="unlockCheckoutButton" type="button" disabled>Continue to Stripe Checkout</button>
+        <small id="unlockCheckoutStatus">Checking Stripe configuration...</small>
       </section>
       <section class="print-order" id="printOrder" hidden>
         <div class="print-order-mark">3D</div>
