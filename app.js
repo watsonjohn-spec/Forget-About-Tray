@@ -22,7 +22,12 @@ const inputs = Object.fromEntries([...numericKeys, ...checkboxKeys].map((key) =>
 let state = { ...defaults };
 let armyRecommendations = [];
 let activeArmyRecommendationId = "";
+let armyEditingId = "";
+let armyEditOriginalState = null;
 let armyParseReport = { lines: 0, candidates: 0 };
+let pendingExportConfig = null;
+let pendingExportPrefix = "";
+let adCountdownTimer = null;
 let toastTimer;
 
 function clamp(value, minimum, maximum) {
@@ -147,9 +152,9 @@ function drawPreview(metrics) {
   const top = metrics.height;
   let markup = `
     <defs>
-      <linearGradient id="trayTop" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#e8b86c"/><stop offset="1" stop-color="#b8663d"/></linearGradient>
-      <linearGradient id="traySide" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#8d4d32"/><stop offset="1" stop-color="#633322"/></linearGradient>
-      <linearGradient id="trayFront" x1="0" x2="1"><stop offset="0" stop-color="#70402b"/><stop offset="1" stop-color="#a75d38"/></linearGradient>
+      <linearGradient id="trayTop" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#b9d27e"/><stop offset="1" stop-color="#668b55"/></linearGradient>
+      <linearGradient id="traySide" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#507348"/><stop offset="1" stop-color="#345037"/></linearGradient>
+      <linearGradient id="trayFront" x1="0" x2="1"><stop offset="0" stop-color="#3f6042"/><stop offset="1" stop-color="#71945b"/></linearGradient>
     </defs>
     <polygon points="${points([[0,d,0],[w,d,0],[w,d,base],[0,d,base]])}" fill="url(#trayFront)" stroke="#42552a" stroke-width="1.2"/>
     <polygon points="${points([[w,0,0],[w,d,0],[w,d,base],[w,0,base]])}" fill="url(#traySide)" stroke="#42552a" stroke-width="1.2"/>
@@ -161,11 +166,11 @@ function drawPreview(metrics) {
   const yStart = wall + state.clearance;
   for (let column = 1; column < state.columns; column += 1) {
     const x = xStart + column * state.baseSize + (column - 0.5) * state.gap;
-    markup += `<line x1="${project(x, wall, base)[0]}" y1="${project(x, wall, base)[1]}" x2="${project(x, d-wall, base)[0]}" y2="${project(x, d-wall, base)[1]}" stroke="#7d452e" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
+    markup += `<line x1="${project(x, wall, base)[0]}" y1="${project(x, wall, base)[1]}" x2="${project(x, d-wall, base)[0]}" y2="${project(x, d-wall, base)[1]}" stroke="#456846" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
   }
   for (let row = 1; row < state.rows; row += 1) {
     const y = yStart + row * state.baseDepth + (row - 0.5) * state.gap;
-    markup += `<line x1="${project(wall, y, base)[0]}" y1="${project(wall, y, base)[1]}" x2="${project(w-wall, y, base)[0]}" y2="${project(w-wall, y, base)[1]}" stroke="#7d452e" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
+    markup += `<line x1="${project(wall, y, base)[0]}" y1="${project(wall, y, base)[1]}" x2="${project(w-wall, y, base)[0]}" y2="${project(w-wall, y, base)[1]}" stroke="#456846" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
   }
 
   if (state.lipEnabled) {
@@ -176,9 +181,9 @@ function drawPreview(metrics) {
       const x2 = box.x + box.w;
       const y2 = box.y + box.d;
       markup += `
-        <polygon points="${points([[x1,y1,top],[x2,y1,top],[x2,y2,top],[x1,y2,top]])}" fill="#d99757" stroke="#542d20" stroke-width="1"/>
-        <polygon points="${points([[x1,y2,base],[x2,y2,base],[x2,y2,top],[x1,y2,top]])}" fill="#9a5636" stroke="#542d20" stroke-width=".8"/>
-        <polygon points="${points([[x2,y1,base],[x2,y2,base],[x2,y2,top],[x2,y1,top]])}" fill="#7e452f" stroke="#542d20" stroke-width=".8"/>
+        <polygon points="${points([[x1,y1,top],[x2,y1,top],[x2,y2,top],[x1,y2,top]])}" fill="#89aa65" stroke="#2d4932" stroke-width="1"/>
+        <polygon points="${points([[x1,y2,base],[x2,y2,base],[x2,y2,top],[x1,y2,top]])}" fill="#5c7e50" stroke="#2d4932" stroke-width=".8"/>
+        <polygon points="${points([[x2,y1,base],[x2,y2,base],[x2,y2,top],[x2,y1,top]])}" fill="#496b48" stroke="#2d4932" stroke-width=".8"/>
       `;
     });
   }
@@ -246,6 +251,47 @@ function exportStl(config = state, prefix = "movement-tray") {
   showToast(`${link.download} exported`);
 }
 
+function requestExport(config = state, prefix = "movement-tray") {
+  pendingExportConfig = { ...config };
+  pendingExportPrefix = prefix;
+  clearInterval(adCountdownTimer);
+  document.getElementById("exportDialogTitle").textContent = fileName(config, prefix);
+  document.getElementById("exportChoices").hidden = false;
+  document.getElementById("adGate").hidden = true;
+  document.getElementById("printOrder").hidden = true;
+  document.getElementById("exportDialog").showModal();
+}
+
+function startAdGate() {
+  let seconds = 30;
+  const countdown = document.getElementById("adCountdown");
+  const download = document.getElementById("completeAdExport");
+  document.getElementById("exportChoices").hidden = true;
+  document.getElementById("adGate").hidden = false;
+  download.disabled = true;
+  countdown.textContent = `Download unlocks in ${seconds} seconds`;
+  clearInterval(adCountdownTimer);
+  adCountdownTimer = setInterval(() => {
+    seconds -= 1;
+    countdown.textContent = seconds > 0 ? `Download unlocks in ${seconds} seconds` : "Your STL is ready";
+    if (seconds <= 0) {
+      clearInterval(adCountdownTimer);
+      download.disabled = false;
+    }
+  }, 1000);
+}
+
+function showPrintOrder() {
+  const metrics = trayMetrics(pendingExportConfig);
+  document.getElementById("exportChoices").hidden = true;
+  document.getElementById("printOrder").hidden = false;
+  document.getElementById("printOrderSummary").innerHTML = `
+    <div><dt>Tray</dt><dd>${pendingExportConfig.columns} x ${pendingExportConfig.rows}</dd></div>
+    <div><dt>Base</dt><dd>${pendingExportConfig.baseSize} x ${pendingExportConfig.baseDepth} mm</dd></div>
+    <div><dt>Outer size</dt><dd>${metrics.outerWidth.toFixed(1)} x ${metrics.outerDepth.toFixed(1)} mm</dd></div>
+  `;
+}
+
 function presets() {
   try {
     return JSON.parse(localStorage.getItem("movement-tray-presets")) || [];
@@ -303,6 +349,98 @@ const baseCatalogue = [
   { id: "lion-guard", name: "Lion Guard", width: 25, depth: 25, aliases: ["lion guard"] },
   { id: "lion-chariot-of-chrace", name: "Lion Chariot of Chrace", width: 50, depth: 100, aliases: ["lion chariot of chrace", "lion chariots of chrace"] }
 ];
+
+function customCatalogue() {
+  try {
+    return JSON.parse(localStorage.getItem("movement-tray-custom-catalogue")) || [];
+  } catch {
+    return [];
+  }
+}
+
+function allCatalogueEntries() {
+  const learned = Object.entries(learnedBases()).map(([key, entry]) => ({
+    id: `learned-${key}`,
+    name: entry.name,
+    width: entry.width,
+    depth: entry.depth,
+    aliases: [key]
+  }));
+  const entries = [...baseCatalogue, ...customCatalogue(), ...learned];
+  return entries.filter((entry, index) => entries.findIndex((candidate) => normalizeText(candidate.name) === normalizeText(entry.name)) === index);
+}
+
+function armyProjects() {
+  try {
+    return JSON.parse(localStorage.getItem("movement-tray-army-projects")) || [];
+  } catch {
+    return [];
+  }
+}
+
+function addCatalogueRecommendation(entry, count) {
+  const formation = recommendFormation(count);
+  const id = `manual-${entry.id}-${Date.now()}`;
+  armyRecommendations.push({
+    id,
+    name: entry.name,
+    count,
+    copies: 1,
+    columns: formation.columns,
+    rows: formation.rows,
+    baseSize: entry.width,
+    baseDepth: entry.depth,
+    matched: true
+  });
+  activeArmyRecommendationId = id;
+  armyEditingId = "";
+  renderArmyRecommendations();
+  showToast(`${entry.name} added to this army`);
+}
+
+function renderCatalogue(filter = "") {
+  const query = normalizeText(filter);
+  const entries = allCatalogueEntries().filter((entry) => normalizeText(entry.name).includes(query));
+  document.getElementById("catalogueList").innerHTML = entries.map((entry) => `
+    <article class="catalogue-entry" data-catalogue-id="${escapeHtml(entry.id)}">
+      <div><strong>${escapeHtml(entry.name)}</strong><small>${entry.width} x ${entry.depth} mm</small></div>
+      <input type="number" min="2" max="500" value="10" aria-label="Model count for ${escapeHtml(entry.name)}">
+      <button type="button">Add</button>
+    </article>
+  `).join("") || `<div class="dialog-empty">No matching catalogue entries.</div>`;
+}
+
+function saveArmyProject() {
+  if (!armyRecommendations.length) {
+    showToast("Add or parse some trays before saving");
+    return;
+  }
+  const saved = armyProjects();
+  const name = document.getElementById("armyProjectName").value.trim() || `Army project ${saved.length + 1}`;
+  const existing = saved.findIndex((project) => project.name.toLowerCase() === name.toLowerCase());
+  const project = {
+    id: existing >= 0 ? saved[existing].id : `${Date.now()}`,
+    name,
+    listText: document.getElementById("armyList").value,
+    recommendations: structuredClone(armyRecommendations)
+  };
+  if (existing >= 0) saved.splice(existing, 1);
+  saved.unshift(project);
+  localStorage.setItem("movement-tray-army-projects", JSON.stringify(saved.slice(0, 20)));
+  document.getElementById("armyProjectName").value = name;
+  showToast(`${name} saved`);
+}
+
+function renderSavedArmies() {
+  const saved = armyProjects();
+  document.getElementById("savedArmiesList").innerHTML = saved.length ? saved.map((project) => `
+    <article data-army-project="${project.id}">
+      <div><strong>${escapeHtml(project.name)}</strong><small>${project.recommendations.length} tray types</small></div>
+      <button type="button" data-project-action="load">Load</button>
+      <button type="button" data-project-action="delete">Delete</button>
+    </article>
+  `).join("") : `<div class="dialog-empty">No saved army projects yet.</div>`;
+}
 
 function normalizeText(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -414,7 +552,7 @@ function parseArmyList(text) {
     if (/^[-•]\s+/.test(line)) return;
     lines += 1;
     const normalized = normalizeText(line);
-    const matches = baseCatalogue
+    const matches = allCatalogueEntries()
       .flatMap((entry) => entry.aliases.map((alias) => ({ entry, alias })))
       .filter(({ alias }) => normalized.includes(alias))
       .sort((a, b) => b.alias.length - a.alias.length);
@@ -452,6 +590,7 @@ function parseArmyList(text) {
 function recommendationConfig(recommendation) {
   return {
     ...defaults,
+    ...(recommendation.config || {}),
     columns: recommendation.columns,
     rows: recommendation.rows,
     baseSize: recommendation.baseSize,
@@ -472,10 +611,61 @@ function saveRecommendation(recommendation) {
   showToast(`${recommendation.name} preset saved`);
 }
 
+function trayThumbnailSvg(config) {
+  const columns = clamp(config.columns, 1, 12);
+  const rows = clamp(config.rows, 1, 12);
+  const width = 104;
+  const depth = Math.max(34, Math.min(66, width * (rows * config.baseDepth) / (columns * config.baseSize)));
+  const verticals = Array.from({ length: columns - 1 }, (_, index) => {
+    const x = ((index + 1) / columns) * width;
+    return `<line x1="${x}" y1="0" x2="${x}" y2="${depth}"/>`;
+  }).join("");
+  const horizontals = Array.from({ length: rows - 1 }, (_, index) => {
+    const y = ((index + 1) / rows) * depth;
+    return `<line x1="0" y1="${y}" x2="${width}" y2="${y}"/>`;
+  }).join("");
+  return `<svg class="tray-thumb" viewBox="0 0 150 88" aria-hidden="true"><g transform="translate(28 4) skewY(14) scale(1 .82)"><rect width="${width}" height="${depth}" rx="3"/><g>${verticals}${horizontals}</g></g></svg>`;
+}
+
+function restoreWorkspaceHome() {
+  const workspace = document.querySelector(".workspace");
+  const singleMode = document.getElementById("singleMode");
+  const presetsSection = singleMode.querySelector(".presets-section");
+  if (workspace.parentElement !== singleMode) singleMode.insertBefore(workspace, presetsSection);
+}
+
+function startArmyEdit(recommendation) {
+  armyEditOriginalState = { ...state };
+  armyEditingId = recommendation.id;
+  writeState(recommendationConfig(recommendation));
+  renderArmyRecommendations();
+}
+
+function exitArmyEdit(save, silent = false) {
+  const recommendation = armyRecommendations.find((item) => item.id === armyEditingId);
+  if (save && recommendation) {
+    readState();
+    recommendation.columns = state.columns;
+    recommendation.rows = state.rows;
+    recommendation.baseSize = state.baseSize;
+    recommendation.baseDepth = state.baseDepth;
+    recommendation.config = { ...state };
+    rememberUnitBase(recommendation);
+  } else if (armyEditOriginalState) {
+    writeState(armyEditOriginalState);
+  }
+  armyEditingId = "";
+  armyEditOriginalState = null;
+  restoreWorkspaceHome();
+  renderArmyRecommendations();
+  if (!silent) showToast(save ? "Tray changes saved to this army" : "Returned without changing the tray");
+}
+
 function renderArmyRecommendations() {
   const container = document.getElementById("armyResults");
   const summary = document.getElementById("armySummary");
   const tabs = document.getElementById("armyTrayTabs");
+  if (!armyEditingId) restoreWorkspaceHome();
   if (!armyRecommendations.length) {
     tabs.hidden = true;
     tabs.innerHTML = "";
@@ -492,16 +682,32 @@ function renderArmyRecommendations() {
   tabs.hidden = false;
   tabs.innerHTML = armyRecommendations.map((item) => `
     <button type="button" class="${item.id === activeArmyRecommendationId ? "active" : ""}" data-army-tab="${escapeHtml(item.id)}">
-      <strong>${escapeHtml(item.name)}</strong>
-      <small>${item.columns} x ${item.rows}${item.copies > 1 ? ` - print ${item.copies}` : ""}</small>
+      ${trayThumbnailSvg(recommendationConfig(item))}
+      <span><strong>${escapeHtml(item.name)}</strong>
+      <small>${item.columns} x ${item.rows}${item.copies > 1 ? ` - print ${item.copies}` : ""}</small></span>
     </button>
   `).join("");
   const item = armyRecommendations.find((recommendation) => recommendation.id === activeArmyRecommendationId);
+  if (armyEditingId === item.id) {
+    container.innerHTML = `
+      <section class="army-edit-shell">
+        <div class="army-edit-bar">
+          <div><strong>Editing ${escapeHtml(item.name)}</strong><small>Changes stay inside this army project.</small></div>
+          <button type="button" data-army-edit="back">Back</button>
+          <button type="button" data-army-edit="save">Save tray</button>
+        </div>
+        <div id="armyEditMount"></div>
+      </section>
+    `;
+    document.getElementById("armyEditMount").append(document.querySelector(".workspace"));
+    return;
+  }
   const ready = item.baseSize > 0 && item.baseDepth > 0;
   const capacity = item.columns * item.rows;
   const copyText = item.copies > 1 ? `${item.copies} identical units - print ${item.copies}` : `${item.count} models`;
   container.innerHTML = `
       <article class="army-unit" data-recommendation="${escapeHtml(item.id)}">
+        <div class="army-unit-preview">${trayThumbnailSvg(recommendationConfig(item))}</div>
         <div class="army-unit-name">
           <h4>${escapeHtml(item.name)}</h4>
           <p>${copyText} - ${capacity} tray spaces${capacity > item.count ? ` (${capacity - item.count} spare)` : ""}</p>
@@ -549,6 +755,7 @@ function showToast(message) {
 }
 
 function switchMode(mode) {
+  if (mode === "single" && armyEditingId) exitArmyEdit(false, true);
   const intro = mode === "army"
     ? {
         eyebrow: "Army tray generator",
@@ -594,7 +801,7 @@ document.querySelectorAll("[data-base]").forEach((button) => {
     render();
   });
 });
-["exportButton", "exportTop"].forEach((id) => document.getElementById(id).addEventListener("click", () => exportStl()));
+["exportButton", "exportTop"].forEach((id) => document.getElementById(id).addEventListener("click", () => requestExport()));
 ["savePreset", "savePresetTop"].forEach((id) => document.getElementById(id).addEventListener("click", savePreset));
 document.getElementById("resetButton").addEventListener("click", () => {
   writeState(defaults);
@@ -626,6 +833,67 @@ Special
   analyzeArmyList();
 });
 document.getElementById("analyzeArmy").addEventListener("click", analyzeArmyList);
+document.getElementById("openCatalogue").addEventListener("click", () => {
+  renderCatalogue();
+  document.getElementById("catalogueDialog").showModal();
+});
+document.getElementById("catalogueSearch").addEventListener("input", (event) => renderCatalogue(event.target.value));
+document.getElementById("catalogueList").addEventListener("click", (event) => {
+  const card = event.target.closest("[data-catalogue-id]");
+  if (!card || event.target.tagName !== "BUTTON") return;
+  const entry = allCatalogueEntries().find((item) => item.id === card.dataset.catalogueId);
+  if (entry) addCatalogueRecommendation(entry, Number(card.querySelector("input").value) || 10);
+});
+document.getElementById("customUnitForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const entry = {
+    id: `custom-${Date.now()}`,
+    name: document.getElementById("customUnitName").value.trim(),
+    width: Number(document.getElementById("customUnitWidth").value),
+    depth: Number(document.getElementById("customUnitDepth").value),
+    aliases: [normalizeText(document.getElementById("customUnitName").value)]
+  };
+  const custom = customCatalogue();
+  custom.push(entry);
+  localStorage.setItem("movement-tray-custom-catalogue", JSON.stringify(custom));
+  addCatalogueRecommendation(entry, Number(document.getElementById("customUnitCount").value));
+  event.target.reset();
+  renderCatalogue();
+});
+document.getElementById("saveArmyProject").addEventListener("click", saveArmyProject);
+document.getElementById("openArmyProjects").addEventListener("click", () => {
+  renderSavedArmies();
+  document.getElementById("savedArmiesDialog").showModal();
+});
+document.getElementById("savedArmiesList").addEventListener("click", (event) => {
+  const card = event.target.closest("[data-army-project]");
+  const action = event.target.dataset.projectAction;
+  if (!card || !action) return;
+  const saved = armyProjects();
+  const project = saved.find((item) => item.id === card.dataset.armyProject);
+  if (action === "load" && project) {
+    armyRecommendations = structuredClone(project.recommendations);
+    activeArmyRecommendationId = armyRecommendations[0]?.id || "";
+    document.getElementById("armyList").value = project.listText || "";
+    document.getElementById("armyProjectName").value = project.name;
+    renderArmyRecommendations();
+    document.getElementById("savedArmiesDialog").close();
+    showToast(`${project.name} loaded`);
+  }
+  if (action === "delete") {
+    localStorage.setItem("movement-tray-army-projects", JSON.stringify(saved.filter((item) => item.id !== card.dataset.armyProject)));
+    renderSavedArmies();
+  }
+});
+document.querySelectorAll("[data-close-dialog]").forEach((button) => {
+  button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close());
+});
+document.getElementById("chooseAdExport").addEventListener("click", startAdGate);
+document.getElementById("choosePrintOrder").addEventListener("click", showPrintOrder);
+document.getElementById("completeAdExport").addEventListener("click", () => {
+  exportStl(pendingExportConfig, pendingExportPrefix);
+  document.getElementById("exportDialog").close();
+});
 document.getElementById("armyResults").addEventListener("input", (event) => {
   const field = event.target.dataset.armyField;
   const card = event.target.closest("[data-recommendation]");
@@ -642,10 +910,17 @@ document.getElementById("armyResults").addEventListener("change", (event) => {
 document.getElementById("armyTrayTabs").addEventListener("click", (event) => {
   const button = event.target.closest("[data-army-tab]");
   if (!button) return;
+  if (armyEditingId) {
+    showToast("Save or go back before changing tray tabs");
+    return;
+  }
   activeArmyRecommendationId = button.dataset.armyTab;
   renderArmyRecommendations();
 });
 document.getElementById("armyResults").addEventListener("click", (event) => {
+  const editAction = event.target.dataset.armyEdit;
+  if (editAction === "back") return exitArmyEdit(false);
+  if (editAction === "save") return exitArmyEdit(true);
   const action = event.target.dataset.armyAction;
   const card = event.target.closest("[data-recommendation]");
   if (!action || !card) return;
@@ -654,13 +929,11 @@ document.getElementById("armyResults").addEventListener("click", (event) => {
   rememberUnitBase(recommendation);
   const config = recommendationConfig(recommendation);
   if (action === "load") {
-    writeState(config);
-    switchMode("single");
-    document.querySelector(".workspace").scrollIntoView({ behavior: "smooth" });
-    showToast(`${recommendation.name} loaded into the designer`);
+    startArmyEdit(recommendation);
+    document.querySelector(".army-results-wrap").scrollIntoView({ behavior: "smooth" });
   }
   if (action === "save") saveRecommendation(recommendation);
-  if (action === "export") exportStl(config, recommendation.name);
+  if (action === "export") requestExport(config, recommendation.name);
 });
 
 render();

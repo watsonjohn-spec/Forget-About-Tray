@@ -11,6 +11,10 @@ A browser-based prototype for configuring and exporting printable miniature move
 - Export a printable ASCII STL without uploading data
 - Paste an army list to get editable per-unit tray recommendations
 - Match Beastmen units from the starter base catalogue and remember corrected base sizes locally
+- Save and reload complete army tray projects
+- Add catalogue or custom units as new visual tray tabs
+- Edit army trays in place using the full visual designer
+- Route exports through a sponsor-view download or future print-order checkout
 
 ## Run locally
 

@@ -219,10 +219,15 @@
             <h2>Build trays for the whole force</h2>
             <p>Paste an export from Old World Builder, New Recruit, or a simple text list. Each recognised tray type gets its own working tab.</p>
           </div>
-          <span class="catalogue-pill">Local base catalogue</span>
+          <button class="catalogue-pill" id="openCatalogue" type="button">Open base catalogue</button>
         </div>
         <div class="army-workspace">
           <div class="army-input-card">
+            <div class="army-project-bar">
+              <input id="armyProjectName" type="text" placeholder="Army project name" aria-label="Army project name" />
+              <button type="button" id="saveArmyProject">Save army</button>
+              <button type="button" id="openArmyProjects">Load army</button>
+            </div>
             <label for="armyList">Paste army list</label>
             <textarea id="armyList" placeholder="20 Ungor Raiders&#10;20 Bestigor Herds&#10;6 Minotaurs"></textarea>
             <div class="army-input-actions">
@@ -257,6 +262,72 @@
         <span class="ad-cta">Partner slot</span>
       </aside>
     </main>
+
+    <dialog class="app-dialog catalogue-dialog" id="catalogueDialog">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Reinforcement ledger</p><h2>Base catalogue</h2></div>
+        <button class="dialog-close" type="button" data-close-dialog="catalogueDialog" aria-label="Close">×</button>
+      </div>
+      <div class="catalogue-layout">
+        <section>
+          <label class="dialog-label" for="catalogueSearch">Add an existing unit</label>
+          <input class="dialog-input" id="catalogueSearch" type="search" placeholder="Search units..." />
+          <div class="catalogue-list" id="catalogueList"></div>
+        </section>
+        <form class="custom-unit-form" id="customUnitForm">
+          <h3>Add a custom unit</h3>
+          <label>Name<input id="customUnitName" required type="text" placeholder="e.g. Spearmen"></label>
+          <div class="dialog-field-grid">
+            <label>Models<input id="customUnitCount" required type="number" min="2" max="500" value="10"></label>
+            <label>Base width<input id="customUnitWidth" required type="number" min="10" max="150" value="25"></label>
+            <label>Base depth<input id="customUnitDepth" required type="number" min="10" max="150" value="25"></label>
+          </div>
+          <button class="button button-primary" type="submit">Add tray tab</button>
+        </form>
+      </div>
+    </dialog>
+
+    <dialog class="app-dialog saved-armies-dialog" id="savedArmiesDialog">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Campaign records</p><h2>Saved armies</h2></div>
+        <button class="dialog-close" type="button" data-close-dialog="savedArmiesDialog" aria-label="Close">×</button>
+      </div>
+      <div id="savedArmiesList" class="saved-armies-list"></div>
+    </dialog>
+
+    <dialog class="app-dialog export-dialog" id="exportDialog">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">Choose fulfilment</p><h2 id="exportDialogTitle">Get this tray</h2></div>
+        <button class="dialog-close" type="button" data-close-dialog="exportDialog" aria-label="Close">×</button>
+      </div>
+      <div id="exportChoices" class="export-choices">
+        <button class="export-choice" id="chooseAdExport" type="button">
+          <span class="choice-icon">STL</span><strong>Watch sponsor message</strong>
+          <small>View a 30-second sponsor placement, then download the STL.</small>
+        </button>
+        <button class="export-choice" id="choosePrintOrder" type="button">
+          <span class="choice-icon">3D</span><strong>Have it printed</strong>
+          <small>Send the tray configuration to a future print-store checkout.</small>
+        </button>
+      </div>
+      <section class="ad-gate" id="adGate" hidden>
+        <span class="ad-label">Sponsored message</span>
+        <div class="ad-gate-creative">
+          <strong>Your future advertising creative lives here.</strong>
+          <p>This full-attention placement supports free STL exports.</p>
+        </div>
+        <p id="adCountdown">Download unlocks in 30 seconds</p>
+        <button class="button button-primary" id="completeAdExport" type="button" disabled>Download STL</button>
+      </section>
+      <section class="print-order" id="printOrder" hidden>
+        <div class="print-order-mark">3D</div>
+        <h3>Printed tray checkout</h3>
+        <p>The selected tray configuration is ready to send to a Shopify or Wix product/checkout connector.</p>
+        <dl id="printOrderSummary"></dl>
+        <button class="button button-primary" type="button" disabled>Continue to checkout</button>
+        <small>Commerce connector pending store account and API credentials.</small>
+      </section>
+    </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="app.js"></script>
