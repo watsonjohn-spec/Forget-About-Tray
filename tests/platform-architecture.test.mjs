@@ -71,6 +71,7 @@ test("factory portal keeps completion and payout release outside printer control
   assert.match(serverSource, /status: "pending_review", accepting_jobs: false/);
   assert.match(serverSource, /\/v2\/core\/accounts/);
   assert.match(serverSource, /\/v1\/transfers/);
+  assert.doesNotMatch(serverSource, /requirements_collector: "stripe"/);
   assert.match(serverSource, /print-job-transfer-\$\{job\.id\}/);
   assert.match(serverSource, /assertPrintJobTransition\(job\.status, "complete"\)/);
   assert.match(renderBlueprint, /healthCheckPath: \/api\/health/);

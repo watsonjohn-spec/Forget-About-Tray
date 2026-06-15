@@ -286,8 +286,7 @@ async function startFactoryConnect(request, response) {
             locales: ["en-GB"],
             responsibilities: {
               fees_collector: "application",
-              losses_collector: "application",
-              requirements_collector: "stripe"
+              losses_collector: "application"
             }
           },
           include: ["configuration.recipient", "requirements", "identity", "defaults"]
