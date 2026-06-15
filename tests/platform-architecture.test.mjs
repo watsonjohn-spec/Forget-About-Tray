@@ -62,6 +62,35 @@ test("generator contract validates parameters and renders an STL", () => {
   assert.match(generator.renderStl(parameters), /^solid movement_tray/);
 });
 
+test("movement tray generator renders Really Useful Box storage inserts", () => {
+  const { generator } = resolvePlatformContext({ brandKey: "tray" });
+  const source = {
+    mode: "storage_insert",
+    boxKey: "rub-64l",
+    boxName: "64 litre Really Useful Box",
+    boxInternalLength: 605,
+    boxInternalWidth: 370,
+    boxInternalDepth: 280,
+    insertUnits: [
+      { id: "ungor", name: "Ungor Raiders", count: 20, copies: 1, baseSize: 25, baseDepth: 25 },
+      { id: "bestigor", name: "Bestigor Herds", count: 20, copies: 1, baseSize: 30, baseDepth: 30 }
+    ],
+    insertMagnetHoles: true,
+    includeBases: true,
+    baseMagnetHoles: true,
+    magnetHoleDiameter: 2
+  };
+  const geometry = generator.buildGeometry(source);
+  assert.equal(geometry.config.mode, "storage_insert");
+  assert.equal(geometry.slots.length, 40);
+  assert.equal(geometry.split, true);
+  assert.equal(geometry.regions.length, 4);
+  assert.ok(geometry.boxes.length > geometry.slots.length);
+  assert.match(generator.safeFileName(source, "Beasts box"), /beasts-box-rub-64l-insert-4-plates\.stl/);
+  assert.match(generator.describe(source), /64 litre Really Useful Box insert for 40 models/);
+  assert.match(generator.renderStl(source), /^solid movement_tray/);
+});
+
 test("marketplace payouts remain held until completion", async () => {
   const schema = await readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8");
   assert.equal(marketplacePolicy.stripeChargeType, "separate_charges_and_transfers");

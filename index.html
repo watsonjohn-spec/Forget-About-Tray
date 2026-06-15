@@ -78,6 +78,11 @@
           <strong>Army list</strong>
           <small>Generate trays by unit</small>
         </button>
+        <button class="mode-tab" type="button" data-mode="storage" aria-selected="false">
+          <span>03</span>
+          <strong>Box inserts</strong>
+          <small>Pack a whole force</small>
+        </button>
       </nav>
 
       <section class="mode-panel active" id="singleMode" data-mode-panel="single">
@@ -301,6 +306,81 @@
             <div id="armyTrayTabs" class="army-tray-tabs" hidden aria-label="Generated tray types"></div>
             <div id="armyResults" class="army-results">
               <div class="empty-army">Paste a list to turn its ranked units into printable tray suggestions.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+      </section>
+
+      <section class="mode-panel" id="storageMode" data-mode-panel="storage" hidden>
+      <section class="army-section storage-section" id="storageAssistant">
+        <div class="army-heading">
+          <div>
+            <p class="eyebrow">Quartermaster's crate</p>
+            <h2>Build inserts for a Really Useful Box</h2>
+            <p>Paste the same army-list exports, choose a box footprint, and generate an insert with unit-by-unit base slots. Use custom dimensions for other boxes.</p>
+          </div>
+          <button class="catalogue-pill" id="openStorageCatalogue" type="button">Add unit from catalogue</button>
+        </div>
+        <div class="storage-workspace">
+          <div class="army-input-card storage-input-card">
+            <label for="storageArmyList">Paste army list or units</label>
+            <textarea id="storageArmyList" placeholder="20 Ungor Raiders&#10;20 Bestigor Herds&#10;1 Dragon"></textarea>
+            <div class="army-input-actions">
+              <button class="button button-ghost" id="sampleStorageArmy" type="button">Use example</button>
+              <button class="button button-primary" id="analyzeStorageArmy" type="button">Suggest insert</button>
+            </div>
+            <p class="army-note">The insert uses internal box dimensions. Really Useful Products list these as approximate, so measure your box before a final print.</p>
+
+            <div class="storage-box-controls">
+              <label>Really Useful Box
+                <select id="storageBoxSelect"></select>
+              </label>
+              <div class="dialog-field-grid" id="storageCustomBoxFields" hidden>
+                <label>Internal length<input id="storageBoxLength" type="number" min="80" max="900" value="348"></label>
+                <label>Internal width<input id="storageBoxWidth" type="number" min="80" max="700" value="220"></label>
+                <label>Internal depth<input id="storageBoxDepth" type="number" min="20" max="500" value="68"></label>
+              </div>
+            </div>
+
+            <div class="storage-options">
+              <div class="radio-panel">
+                <strong>2mm magnet holes in insert</strong>
+                <label><input type="radio" name="storageInsertMagnets" value="yes"> Yes</label>
+                <label><input type="radio" name="storageInsertMagnets" value="no" checked> No</label>
+              </div>
+              <label class="switch-row storage-switch">
+                <span><strong>Include printable bases</strong><small>Place matching bases beside the insert in the STL.</small></span>
+                <input id="storageIncludeBases" type="checkbox" />
+                <i aria-hidden="true"></i>
+              </label>
+              <div class="radio-panel">
+                <strong>2mm magnet holes in printed bases</strong>
+                <label><input type="radio" name="storageBaseMagnets" value="yes"> Yes</label>
+                <label><input type="radio" name="storageBaseMagnets" value="no" checked> No</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="army-results-wrap storage-results-wrap">
+            <div class="army-results-heading">
+              <div>
+                <span class="step">05</span>
+                <h3>Insert plan</h3>
+              </div>
+              <span id="storageSummary">Waiting for a list</span>
+            </div>
+            <div class="storage-preview-panel">
+              <svg id="storagePreview" viewBox="0 0 760 420" role="img" aria-label="Storage insert preview"></svg>
+              <div class="storage-stats">
+                <div><span>Box insert</span><strong id="storageOuterSize">-</strong></div>
+                <div><span>Slots placed</span><strong id="storageSlotCount">0</strong></div>
+                <div><span>Print plates</span><strong id="storagePlateCount">1</strong></div>
+                <div><span>Est. material</span><strong id="storageMaterialEstimate">-</strong></div>
+              </div>
+            </div>
+            <div id="storageResults" class="army-results storage-results">
+              <div class="empty-army">Paste a list to turn its units into storage slots.</div>
             </div>
           </div>
         </div>

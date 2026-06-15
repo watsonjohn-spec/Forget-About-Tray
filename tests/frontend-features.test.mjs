@@ -78,6 +78,10 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(html, /class="button top-action-button account-menu-button" id="accountButton"/);
   assert.match(html, /id="filamentColour"/);
   assert.match(html, /id="includeBases"/);
+  assert.match(html, /data-mode="storage"/);
+  assert.match(html, /id="storageBoxSelect"/);
+  assert.match(html, /name="storageInsertMagnets"/);
+  assert.match(html, /id="storageIncludeBases"/);
   assert.match(html, /id="chooseEmailExport"/);
   assert.match(html, /meta name="checkout-api-url" content="https:\/\/forget-about-tray\.onrender\.com"/);
   assert.match(html, /data-account-page="profile"/);
@@ -110,6 +114,10 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(trayHtml, /data-preview-turn="-1"/);
   assert.match(trayApp, /filamentColours\.filter\(\(colour\) => colour\.material === "pla"\)/);
   assert.match(trayApp, /data-army-field="includeBases"/);
+  assert.match(trayApp, /const storageInsertMode = "storage_insert"/);
+  assert.match(trayApp, /64 litre Really Useful Box/);
+  assert.match(trayApp, /openStorageCatalogue/);
+  assert.match(trayApp, /baseMagnetHoles/);
   assert.match(trayApp, /checkout\/print\/verify/);
   assert.match(factoryHtml, /id="capabilityGramsPerHour"/);
   assert.match(factoryHtml, /id="capabilityPostage"/);

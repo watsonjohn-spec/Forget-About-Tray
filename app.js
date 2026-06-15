@@ -25,6 +25,18 @@ const numericKeys = [
 ];
 const checkboxKeys = ["lipEnabled", "notchesEnabled", "includeBases"];
 const rectangleBaseLengths = [50, 60, 75, 100, 150];
+const storageInsertMode = "storage_insert";
+const reallyUsefulBoxes = [
+  { key: "rub-4l", name: "4 litre Really Useful Box", internalLength: 348, internalWidth: 220, internalDepth: 68 },
+  { key: "rub-9l", name: "9 litre Really Useful Box", internalLength: 335, internalWidth: 210, internalDepth: 140 },
+  { key: "rub-11l", name: "11 litre Really Useful Box", internalLength: 375, internalWidth: 310, internalDepth: 91 },
+  { key: "rub-18l", name: "18 litre Really Useful Box", internalLength: 395, internalWidth: 335, internalDepth: 170 },
+  { key: "rub-19l", name: "19 litre Really Useful Box", internalLength: 315, internalWidth: 205, internalDepth: 270 },
+  { key: "rub-35l", name: "35 litre Really Useful Box", internalLength: 370, internalWidth: 310, internalDepth: 280 },
+  { key: "rub-64l", name: "64 litre Really Useful Box", internalLength: 605, internalWidth: 370, internalDepth: 280 },
+  { key: "rub-84l", name: "84 litre Really Useful Box", internalLength: 605, internalWidth: 370, internalDepth: 355 },
+  { key: "custom", name: "Custom box", internalLength: 348, internalWidth: 220, internalDepth: 68 }
+];
 const filamentColours = [
   ["pla", "Jade White", "#EBEEE9"], ["pla", "Beige", "#E8D5B5"], ["pla", "Yellow", "#F4D03F"],
   ["pla", "Orange", "#F07C24"], ["pla", "Red", "#C73A3A"], ["pla", "Magenta", "#C04473"],
@@ -44,6 +56,25 @@ let activeArmyRecommendationId = "";
 let armyEditingId = "";
 let armyEditOriginalState = null;
 let armyParseReport = { lines: 0, candidates: 0 };
+let storageRecommendations = [];
+let storageParseReport = { lines: 0, candidates: 0 };
+let storageState = {
+  boxKey: "rub-4l",
+  boxName: "4 litre Really Useful Box",
+  boxInternalLength: 348,
+  boxInternalWidth: 220,
+  boxInternalDepth: 68,
+  insertMagnetHoles: false,
+  includeBases: false,
+  baseMagnetHoles: false,
+  magnetHoleDiameter: 2,
+  splitThreshold: 250,
+  gap: 3,
+  clearance: 1,
+  plateThickness: 2,
+  wallHeight: 4,
+  wallThickness: 1.4
+};
 let pendingExportConfig = null;
 let pendingExportPrefix = "";
 let adCountdownTimer = null;
@@ -103,6 +134,7 @@ function writeState(nextState) {
 }
 
 function trayMetrics(config = state) {
+  if (config.mode === storageInsertMode) return storageInsertMetrics(config);
   config = { ...defaults, ...config };
   const innerWidth = config.columns * config.baseSize + (config.columns - 1) * config.gap + config.clearance * 2;
   const innerDepth = config.rows * config.baseDepth + (config.rows - 1) * config.gap + config.clearance * 2;
@@ -114,6 +146,168 @@ function trayMetrics(config = state) {
   const baseVolume = config.includeBases ? config.columns * config.rows * config.baseSize * config.baseDepth * config.plateThickness : 0;
   const volume = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) + baseVolume;
   return { innerWidth, innerDepth, outerWidth, outerDepth, height, boxes, volume };
+}
+
+function readStorageState() {
+  const selected = reallyUsefulBoxes.find((box) => box.key === document.getElementById("storageBoxSelect").value) || reallyUsefulBoxes[0];
+  const custom = selected.key === "custom";
+  storageState.boxKey = selected.key;
+  storageState.boxName = selected.name;
+  storageState.boxInternalLength = custom ? Number(document.getElementById("storageBoxLength").value || selected.internalLength) : selected.internalLength;
+  storageState.boxInternalWidth = custom ? Number(document.getElementById("storageBoxWidth").value || selected.internalWidth) : selected.internalWidth;
+  storageState.boxInternalDepth = custom ? Number(document.getElementById("storageBoxDepth").value || selected.internalDepth) : selected.internalDepth;
+  storageState.insertMagnetHoles = document.querySelector('input[name="storageInsertMagnets"]:checked')?.value === "yes";
+  storageState.includeBases = document.getElementById("storageIncludeBases").checked;
+  storageState.baseMagnetHoles = document.querySelector('input[name="storageBaseMagnets"]:checked')?.value === "yes";
+  const filament = filamentColours.find((colour) => colour.key === filamentColourInput.value) || filamentColours[0];
+  storageState.filamentKey = filament.key;
+  storageState.filamentMaterial = filament.material;
+  storageState.filamentName = filament.name;
+  storageState.filamentHex = filament.hex;
+  document.getElementById("storageCustomBoxFields").hidden = !custom;
+}
+
+function storageInsertUnits() {
+  return storageRecommendations
+    .filter((item) => item.count > 0 && item.baseSize > 0 && item.baseDepth > 0)
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      count: item.count,
+      copies: item.copies || 1,
+      baseSize: item.baseSize,
+      baseDepth: item.baseDepth,
+      columns: item.columns,
+      rows: item.rows
+    }));
+}
+
+function storageInsertConfig() {
+  readStorageState();
+  return {
+    mode: storageInsertMode,
+    boxKey: storageState.boxKey,
+    boxName: storageState.boxName,
+    boxInternalLength: storageState.boxInternalLength,
+    boxInternalWidth: storageState.boxInternalWidth,
+    boxInternalDepth: storageState.boxInternalDepth,
+    insertUnits: storageInsertUnits(),
+    gap: storageState.gap,
+    clearance: storageState.clearance,
+    plateThickness: storageState.plateThickness,
+    wallHeight: storageState.wallHeight,
+    wallThickness: storageState.wallThickness,
+    includeBases: storageState.includeBases,
+    insertMagnetHoles: storageState.insertMagnetHoles,
+    baseMagnetHoles: storageState.baseMagnetHoles,
+    magnetHoleDiameter: storageState.magnetHoleDiameter,
+    splitThreshold: storageState.splitThreshold,
+    filamentKey: storageState.filamentKey || state.filamentKey,
+    filamentMaterial: storageState.filamentMaterial || state.filamentMaterial,
+    filamentName: storageState.filamentName || state.filamentName,
+    filamentHex: storageState.filamentHex || state.filamentHex
+  };
+}
+
+function populateStorageBoxes() {
+  const select = document.getElementById("storageBoxSelect");
+  select.innerHTML = reallyUsefulBoxes.map((box) => `<option value="${box.key}">${box.name} - ${box.internalLength} x ${box.internalWidth} x ${box.internalDepth}mm internal</option>`).join("");
+  select.value = storageState.boxKey;
+  document.getElementById("storageBoxLength").value = storageState.boxInternalLength;
+  document.getElementById("storageBoxWidth").value = storageState.boxInternalWidth;
+  document.getElementById("storageBoxDepth").value = storageState.boxInternalDepth;
+}
+
+function loadStorageConfig(config) {
+  storageState = {
+    ...storageState,
+    boxKey: config.boxKey || "custom",
+    boxName: config.boxName || "Custom box",
+    boxInternalLength: config.boxInternalLength || 348,
+    boxInternalWidth: config.boxInternalWidth || 220,
+    boxInternalDepth: config.boxInternalDepth || 68,
+    insertMagnetHoles: Boolean(config.insertMagnetHoles),
+    includeBases: Boolean(config.includeBases),
+    baseMagnetHoles: Boolean(config.baseMagnetHoles)
+  };
+  storageRecommendations = (config.insertUnits || []).map((unit, index) => ({
+    id: unit.id || `stored-${index}`,
+    name: unit.name || `Unit ${index + 1}`,
+    count: unit.count || 1,
+    copies: unit.copies || 1,
+    columns: unit.columns || 1,
+    rows: unit.rows || unit.count || 1,
+    baseSize: unit.baseSize,
+    baseDepth: unit.baseDepth,
+    matched: true
+  }));
+  if (!reallyUsefulBoxes.some((box) => box.key === storageState.boxKey)) storageState.boxKey = "custom";
+  document.getElementById("storageBoxSelect").value = storageState.boxKey;
+  document.getElementById("storageBoxLength").value = storageState.boxInternalLength;
+  document.getElementById("storageBoxWidth").value = storageState.boxInternalWidth;
+  document.getElementById("storageBoxDepth").value = storageState.boxInternalDepth;
+  document.querySelector(`input[name="storageInsertMagnets"][value="${storageState.insertMagnetHoles ? "yes" : "no"}"]`).checked = true;
+  document.getElementById("storageIncludeBases").checked = storageState.includeBases;
+  document.querySelector(`input[name="storageBaseMagnets"][value="${storageState.baseMagnetHoles ? "yes" : "no"}"]`).checked = true;
+  switchMode("storage");
+  renderStorageRecommendations();
+}
+
+function storageSlots(config = storageInsertConfig()) {
+  const slots = [];
+  const start = config.wallThickness + config.clearance;
+  const maxX = config.boxInternalLength - config.wallThickness - config.clearance;
+  const maxY = config.boxInternalWidth - config.wallThickness - config.clearance;
+  let x = start;
+  let y = start;
+  let rowDepth = 0;
+  let unplaced = 0;
+  config.insertUnits.forEach((unit, unitIndex) => {
+    const total = unit.count * (unit.copies || 1);
+    for (let index = 0; index < total; index += 1) {
+      const slotWidth = unit.baseSize + config.clearance * 2;
+      const slotDepth = unit.baseDepth + config.clearance * 2;
+      if (x > start && x + slotWidth > maxX) {
+        x = start;
+        y += rowDepth + config.gap;
+        rowDepth = 0;
+      }
+      if (y + slotDepth > maxY) {
+        unplaced += 1;
+        continue;
+      }
+      slots.push({ x, y, w: slotWidth, d: slotDepth, unitIndex, name: unit.name, baseSize: unit.baseSize, baseDepth: unit.baseDepth });
+      x += slotWidth + config.gap;
+      rowDepth = Math.max(rowDepth, slotDepth);
+    }
+    if (x > start) x += config.gap;
+  });
+  return { slots, unplaced };
+}
+
+function storageInsertMetrics(config = storageInsertConfig()) {
+  const { slots, unplaced } = storageSlots(config);
+  const split = config.boxInternalLength > config.splitThreshold || config.boxInternalWidth > config.splitThreshold;
+  const baseVolume = config.boxInternalLength * config.boxInternalWidth * config.plateThickness;
+  const wallVolume = slots.reduce((sum, slot) => {
+    const t = config.wallThickness;
+    return sum + ((slot.w + t * 2) * t * 2 + slot.d * t * 2) * config.wallHeight;
+  }, 0);
+  const basesVolume = config.includeBases ? slots.reduce((sum, slot) => sum + slot.baseSize * slot.baseDepth * config.plateThickness, 0) : 0;
+  return {
+    innerWidth: config.boxInternalLength,
+    innerDepth: config.boxInternalWidth,
+    outerWidth: config.boxInternalLength,
+    outerDepth: config.boxInternalWidth,
+    assembledWidth: config.boxInternalLength,
+    assembledDepth: config.boxInternalWidth,
+    height: config.plateThickness + config.wallHeight,
+    slots,
+    unplaced,
+    split,
+    plateCount: split ? 4 : 1,
+    volume: baseVolume + wallVolume + basesVolume
+  };
 }
 
 function buildBoxes(config = state) {
@@ -284,6 +478,10 @@ function drawPreview(metrics) {
 }
 
 function fileName(config = state, prefix = "movement-tray") {
+  if (config.mode === storageInsertMode) {
+    const suffix = config.boxInternalLength > (config.splitThreshold || 250) || config.boxInternalWidth > (config.splitThreshold || 250) ? "-4-plates" : "";
+    return `${slugify(prefix || config.boxName || "box-insert")}-${config.boxKey || "custom"}-insert${suffix}.stl`;
+  }
   const base = config.baseSize === config.baseDepth
     ? `${formatNumber(config.baseSize)}mm`
     : `${formatNumber(config.baseSize)}x${formatNumber(config.baseDepth)}mm`;
@@ -308,7 +506,8 @@ async function fetchStlFile(config = state, prefix = "movement-tray", downloadTo
     throw new Error(result.error || "The STL could not be downloaded.");
   }
   const blob = await response.blob();
-  return { blob, filename: fileName(config, prefix) };
+  const headerName = response.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1];
+  return { blob, filename: headerName || fileName(config, prefix) };
 }
 
 function downloadBlob(blob, filename) {
@@ -416,7 +615,12 @@ async function showPrintOrder() {
   document.getElementById("exportChoices").hidden = true;
   document.getElementById("unlockExports").hidden = true;
   document.getElementById("printOrder").hidden = false;
-  document.getElementById("printOrderSummary").innerHTML = `
+  document.getElementById("printOrderSummary").innerHTML = pendingExportConfig.mode === storageInsertMode ? `
+    <div><dt>Insert</dt><dd>${escapeHtml(pendingExportConfig.boxName)}</dd></div>
+    <div><dt>Slots</dt><dd>${metrics.slots.length}${metrics.unplaced ? ` placed, ${metrics.unplaced} overflow` : ""}</dd></div>
+    <div><dt>Footprint</dt><dd>${metrics.assembledWidth.toFixed(1)} x ${metrics.assembledDepth.toFixed(1)} mm</dd></div>
+    <div><dt>Print plates</dt><dd>${metrics.plateCount}</dd></div>
+  ` : `
     <div><dt>Tray</dt><dd>${pendingExportConfig.columns} x ${pendingExportConfig.rows}</dd></div>
     <div><dt>Base</dt><dd>${pendingExportConfig.baseSize} x ${pendingExportConfig.baseDepth} mm</dd></div>
     <div><dt>Outer size</dt><dd>${metrics.outerWidth.toFixed(1)} x ${metrics.outerDepth.toFixed(1)} mm</dd></div>
@@ -704,6 +908,10 @@ function armyProjects() {
 }
 
 function addCatalogueRecommendation(entry, count) {
+  if (catalogueContext === "storage") {
+    addStorageRecommendation(entry, count);
+    return;
+  }
   const formation = recommendFormation(count);
   const id = `manual-${entry.id}-${Date.now()}`;
   armyRecommendations.push({
@@ -724,6 +932,25 @@ function addCatalogueRecommendation(entry, count) {
   showToast(`${entry.name} added to this army`);
 }
 
+function addStorageRecommendation(entry, count) {
+  const formation = recommendFormation(count);
+  const id = `storage-${entry.id}-${Date.now()}`;
+  storageRecommendations.push({
+    id,
+    name: entry.name,
+    count,
+    copies: 1,
+    columns: formation.columns,
+    rows: formation.rows,
+    baseSize: entry.width,
+    baseDepth: entry.depth,
+    baseShape: entry.width === entry.depth ? "square" : "rectangle",
+    matched: true
+  });
+  renderStorageRecommendations();
+  showToast(`${entry.name} added to this box insert`);
+}
+
 function catalogueArmies() {
   return [...new Set(allCatalogueEntries().map((entry) => entry.army || "Other"))].sort();
 }
@@ -735,7 +962,7 @@ function prepareCatalogue(context) {
   filter.innerHTML = `<option value="">All armies</option>${catalogueArmies().map((army) => `<option value="${escapeHtml(army)}">${escapeHtml(army)}</option>`).join("")}`;
   filter.value = current;
   document.getElementById("customUnitCountField").hidden = context === "single";
-  document.getElementById("customUnitSubmit").textContent = context === "single" ? "Use this base" : "Add tray tab";
+  document.getElementById("customUnitSubmit").textContent = context === "single" ? "Use this base" : context === "storage" ? "Add to insert" : "Add tray tab";
   renderCatalogue();
   document.getElementById("catalogueDialog").showModal();
 }
@@ -750,6 +977,10 @@ function applyCatalogueEntry(entry, count = 10) {
     });
     document.getElementById("catalogueDialog").close();
     showToast(`${entry.name} base applied`);
+    return;
+  }
+  if (catalogueContext === "storage") {
+    addStorageRecommendation(entry, count);
     return;
   }
   addCatalogueRecommendation(entry, count);
@@ -1008,6 +1239,89 @@ function trayThumbnailSvg(config) {
   return `<svg class="tray-thumb" viewBox="0 0 150 88" aria-hidden="true"><g transform="translate(28 4) skewY(14) scale(1 .82)"><rect width="${width}" height="${depth}" rx="3"/><g>${verticals}${horizontals}</g></g></svg>`;
 }
 
+function storagePalette(index) {
+  const colours = ["#5f7d4b", "#8a6846", "#4f7b6f", "#946a43", "#6f7f45", "#3f6652", "#7c7546", "#5c7446"];
+  return colours[index % colours.length];
+}
+
+function drawStoragePreview(metrics, config) {
+  const svg = document.getElementById("storagePreview");
+  const pad = 24;
+  const scale = Math.min((760 - pad * 2) / config.boxInternalLength, (420 - pad * 2) / config.boxInternalWidth);
+  const x0 = (760 - config.boxInternalLength * scale) / 2;
+  const y0 = (420 - config.boxInternalWidth * scale) / 2;
+  const magnet = config.insertMagnetHoles ? config.magnetHoleDiameter : 0;
+  const slotMarkup = metrics.slots.map((slot) => `
+    <g>
+      <rect x="${x0 + slot.x * scale}" y="${y0 + slot.y * scale}" width="${slot.w * scale}" height="${slot.d * scale}" rx="3" fill="${storagePalette(slot.unitIndex)}" opacity=".25" stroke="${storagePalette(slot.unitIndex)}" stroke-width="1.4"/>
+      ${magnet ? `<circle cx="${x0 + (slot.x + slot.w / 2) * scale}" cy="${y0 + (slot.y + slot.d / 2) * scale}" r="${Math.max(1.5, magnet * scale / 2)}" fill="#223426" opacity=".75"/>` : ""}
+    </g>
+  `).join("");
+  const seamMarkup = metrics.split ? `
+    <line x1="${x0 + config.boxInternalLength * scale / 2}" y1="${y0}" x2="${x0 + config.boxInternalLength * scale / 2}" y2="${y0 + config.boxInternalWidth * scale}" stroke="#2d4532" stroke-width="2" stroke-dasharray="8 6"/>
+    <line x1="${x0}" y1="${y0 + config.boxInternalWidth * scale / 2}" x2="${x0 + config.boxInternalLength * scale}" y2="${y0 + config.boxInternalWidth * scale / 2}" stroke="#2d4532" stroke-width="2" stroke-dasharray="8 6"/>
+  ` : "";
+  svg.innerHTML = `
+    <rect x="${x0}" y="${y0}" width="${config.boxInternalLength * scale}" height="${config.boxInternalWidth * scale}" rx="10" fill="#f8fbef" stroke="#5f7d4b" stroke-width="2"/>
+    ${slotMarkup}
+    ${seamMarkup}
+    <text x="${x0 + 12}" y="${y0 + 22}" fill="#2d4532" font-size="13" font-weight="800">${escapeHtml(config.boxName)}</text>
+    ${metrics.unplaced ? `<text x="${x0 + 12}" y="${y0 + 42}" fill="#8a3b2d" font-size="12" font-weight="800">${metrics.unplaced} slots overflow this box</text>` : ""}
+  `;
+}
+
+function renderStorageRecommendations() {
+  readStorageState();
+  const config = storageInsertConfig();
+  const metrics = storageInsertMetrics(config);
+  const summary = document.getElementById("storageSummary");
+  const container = document.getElementById("storageResults");
+  const materialDensity = config.filamentMaterial === "petg" ? 1.27 : 1.24;
+  document.getElementById("storageOuterSize").textContent = `${config.boxInternalLength.toFixed(0)} x ${config.boxInternalWidth.toFixed(0)} mm`;
+  document.getElementById("storageSlotCount").textContent = `${metrics.slots.length}${metrics.unplaced ? ` / ${metrics.slots.length + metrics.unplaced}` : ""}`;
+  document.getElementById("storagePlateCount").textContent = String(metrics.plateCount);
+  document.getElementById("storageMaterialEstimate").textContent = `${(metrics.volume / 1000 * materialDensity).toFixed(1)} g`;
+  drawStoragePreview(metrics, config);
+  if (!storageRecommendations.length) {
+    summary.textContent = `${storageParseReport.lines} lines checked - no units yet`;
+    container.innerHTML = `<div class="empty-army">Paste a list or add a unit from the catalogue to begin the insert.</div>`;
+    return;
+  }
+  const unknown = storageRecommendations.filter((item) => !item.matched).length;
+  summary.textContent = `${metrics.slots.length} slots placed${metrics.unplaced ? ` - ${metrics.unplaced} overflow` : ""}${unknown ? ` - ${unknown} need bases` : ""}`;
+  container.innerHTML = storageRecommendations.map((item) => {
+    const ready = item.baseSize > 0 && item.baseDepth > 0;
+    return `
+      <article class="storage-unit ${ready ? "" : "needs-base"}" data-storage-unit="${escapeHtml(item.id)}">
+        <div><strong>${escapeHtml(item.name)}</strong><small>${item.count} models${item.copies > 1 ? ` x ${item.copies}` : ""} ${ready ? `- ${item.baseSize} x ${item.baseDepth} mm` : "- set base size"}</small></div>
+        <label>Models<input data-storage-field="count" type="number" min="1" max="500" value="${item.count}"></label>
+        <label>Copies<input data-storage-field="copies" type="number" min="1" max="40" value="${item.copies || 1}"></label>
+        <label>Base W<input data-storage-field="baseSize" type="number" min="10" max="180" value="${item.baseSize || ""}"></label>
+        <label>Base D<input data-storage-field="baseDepth" type="number" min="10" max="180" value="${item.baseDepth || ""}"></label>
+        <button type="button" data-storage-remove="${escapeHtml(item.id)}">Remove</button>
+      </article>
+    `;
+  }).join("");
+}
+
+function analyzeStorageList() {
+  const textarea = document.getElementById("storageArmyList");
+  const text = textarea.value.trim();
+  if (!text) {
+    storageRecommendations = [];
+    storageParseReport = { lines: 0, candidates: 0 };
+    renderStorageRecommendations();
+    showToast("Paste an army list first");
+    textarea.focus();
+    return;
+  }
+  storageRecommendations = parseArmyList(text).map((item) => ({ ...item, copies: item.copies || 1 }));
+  storageParseReport = { ...armyParseReport };
+  renderStorageRecommendations();
+  showToast(storageRecommendations.length ? `${storageRecommendations.length} unit types ready for the insert` : "No units with quantities were recognised");
+  document.querySelector(".storage-results-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function restoreWorkspaceHome() {
   const workspace = document.querySelector(".workspace");
   const singleMode = document.getElementById("singleMode");
@@ -1150,6 +1464,7 @@ function switchMode(mode) {
     panel.hidden = !active;
     panel.classList.toggle("active", active);
   });
+  if (mode === "storage") renderStorageRecommendations();
 }
 
 function activeArmyRecommendation() {
@@ -1157,6 +1472,16 @@ function activeArmyRecommendation() {
 }
 
 async function saveFromHeader() {
+  if (document.body.dataset.activeMode === "storage") {
+    const config = storageInsertConfig();
+    if (!config.insertUnits.length) return showToast("Add units to the insert before saving");
+    const suggested = `${config.boxName} insert`;
+    const name = window.prompt("Name this saved insert", suggested)?.trim();
+    if (!name) return;
+    await persistPreset(name, config);
+    renderPresets();
+    return showToast(`${name} saved`);
+  }
   if (document.body.dataset.activeMode !== "army") return savePreset();
   const recommendation = activeArmyRecommendation();
   if (!recommendation || recommendation.baseSize <= 0 || recommendation.baseDepth <= 0) return showToast("Select a tray with a confirmed base size first");
@@ -1173,6 +1498,11 @@ async function saveFromHeader() {
 }
 
 function exportFromHeader() {
+  if (document.body.dataset.activeMode === "storage") {
+    const config = storageInsertConfig();
+    if (!config.insertUnits.length) return showToast("Add units to the insert before exporting");
+    return requestExport(config, `${config.boxName} insert`);
+  }
   if (document.body.dataset.activeMode !== "army") return requestExport();
   const recommendation = activeArmyRecommendation();
   if (!recommendation || recommendation.baseSize <= 0 || recommendation.baseDepth <= 0) return showToast("Select a tray with a confirmed base size first");
@@ -1343,7 +1673,10 @@ async function initializeAccount() {
 }
 
 Object.values(inputs).forEach((input) => input.addEventListener("input", render));
-filamentColourInput.addEventListener("change", render);
+filamentColourInput.addEventListener("change", () => {
+  render();
+  if (document.body.dataset.activeMode === "storage") renderStorageRecommendations();
+});
 document.querySelectorAll("[data-preview-turn]").forEach((button) => button.addEventListener("click", () => {
   previewYaw += Number(button.dataset.previewTurn) * Math.PI / 8;
   render();
@@ -1584,7 +1917,8 @@ document.getElementById("presets").addEventListener("click", async (event) => {
   const deleteId = event.target.dataset.delete;
   if (loadId) {
     const preset = presets().find((item) => item.id === loadId);
-    if (preset) writeState(preset.state);
+    if (preset?.state?.mode === storageInsertMode) loadStorageConfig(preset.state);
+    else if (preset) writeState(preset.state);
   }
   if (deleteId) {
     if (accountService.isSignedIn()) {
@@ -1612,6 +1946,22 @@ Special
 document.getElementById("analyzeArmy").addEventListener("click", analyzeArmyList);
 document.getElementById("openCatalogue").addEventListener("click", () => prepareCatalogue("army"));
 document.getElementById("openSingleCatalogue").addEventListener("click", () => prepareCatalogue("single"));
+document.getElementById("openStorageCatalogue").addEventListener("click", () => prepareCatalogue("storage"));
+document.getElementById("sampleStorageArmy").addEventListener("click", () => {
+  document.getElementById("storageArmyList").value = `High Elf Realms - storage test
+16 White Lions of Chrace
+16 Chracian Woodsmen
+4 War Lions
+1 Lion Chariot of Chrace`;
+  analyzeStorageList();
+});
+document.getElementById("analyzeStorageArmy").addEventListener("click", analyzeStorageList);
+document.getElementById("storageBoxSelect").addEventListener("change", renderStorageRecommendations);
+["storageBoxLength", "storageBoxWidth", "storageBoxDepth", "storageIncludeBases"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", renderStorageRecommendations);
+  document.getElementById(id).addEventListener("change", renderStorageRecommendations);
+});
+document.querySelectorAll('input[name="storageInsertMagnets"], input[name="storageBaseMagnets"]').forEach((input) => input.addEventListener("change", renderStorageRecommendations));
 document.getElementById("catalogueSearch").addEventListener("input", renderCatalogue);
 document.getElementById("catalogueArmyFilter").addEventListener("change", renderCatalogue);
 document.getElementById("catalogueList").addEventListener("click", (event) => {
@@ -1765,8 +2115,30 @@ document.getElementById("armyResults").addEventListener("click", (event) => {
   if (action === "save") saveRecommendation(recommendation);
   if (action === "export") requestExport(config, recommendation.name);
 });
+document.getElementById("storageResults").addEventListener("input", (event) => {
+  const field = event.target.dataset.storageField;
+  const card = event.target.closest("[data-storage-unit]");
+  if (!field || !card) return;
+  const unit = storageRecommendations.find((item) => item.id === card.dataset.storageUnit);
+  if (!unit) return;
+  unit[field] = Number(event.target.value) || 0;
+  if (field === "count") {
+    const formation = recommendFormation(unit.count || 1);
+    unit.columns = formation.columns;
+    unit.rows = formation.rows;
+  }
+  renderStorageRecommendations();
+});
+document.getElementById("storageResults").addEventListener("click", (event) => {
+  const removeId = event.target.dataset.storageRemove;
+  if (!removeId) return;
+  storageRecommendations = storageRecommendations.filter((item) => item.id !== removeId);
+  renderStorageRecommendations();
+});
 
+populateStorageBoxes();
 render();
 renderPresets();
+renderStorageRecommendations();
 setAuthenticated(false);
 initializeAccount();
