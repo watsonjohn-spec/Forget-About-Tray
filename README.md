@@ -47,6 +47,8 @@ Before running the account-enabled app for the first time, open the Supabase SQL
 
 To enable Google and Apple sign-in, open **Supabase Dashboard → Authentication → Providers**, configure Google and Apple, then add the deployed app URL to **Authentication → URL Configuration → Redirect URLs**. Email and password sign-in remains available.
 
+`npm run public-config` generates `public-config.js` using only `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. These values are designed to be public and allow account login to work on GitHub Pages. The Supabase secret key is never included. `Publish to GitHub.cmd` runs this automatically before publishing.
+
 The bundled catalogue covers ranked units across the main and legacy Old World armies. Base dimensions can change with rules updates, so confirm unusual models against the current army publication before printing.
 
 GitHub Pages cannot securely run this checkout endpoint because it is static hosting. For the public site, deploy `server.mjs` to a Node host and set the `checkout-api-url` meta tag in `index.html` to that backend origin.

@@ -1056,9 +1056,26 @@ async function processCheckoutResult() {
   if (checkoutResult && checkoutResult !== "unlock-success") history.replaceState({}, "", window.location.pathname);
 }
 
+async function configureProviderButtons() {
+  const providers = await accountService.providerAvailability();
+  document.querySelectorAll("[data-oauth-provider]").forEach((button) => {
+    const configured = providers[button.dataset.oauthProvider];
+    button.disabled = configured === false;
+    button.title = configured === false ? `${button.textContent.trim()} sign-in is not configured in Supabase yet.` : "";
+  });
+  const configured = Object.entries(providers).filter(([, enabled]) => enabled === true).map(([provider]) => provider);
+  const unknown = Object.values(providers).some((enabled) => enabled === null);
+  document.getElementById("oauthStatus").textContent = unknown
+    ? "Social sign-in status could not be checked. Email sign-in remains available."
+    : configured.length
+      ? `${configured.map((provider) => provider[0].toUpperCase() + provider.slice(1)).join(" and ")} sign-in ready.`
+      : "Google and Apple require provider credentials in Supabase. Email sign-in remains available.";
+}
+
 async function initializeAccount() {
   try {
     const session = await accountService.init();
+    await configureProviderButtons();
     setAuthenticated(Boolean(session));
     if (!session) {
       document.getElementById("loginError").textContent = accountService.authError();

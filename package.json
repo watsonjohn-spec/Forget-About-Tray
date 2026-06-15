@@ -5,6 +5,7 @@
   "description": "Browser-based movement tray designer and STL exporter.",
   "scripts": {
     "start": "node --env-file-if-exists=.env server.mjs",
-    "check": "node --check account.js && node --check catalogue.js && node --check app.js && node --check server.mjs && node --test tests/*.test.mjs"
+    "public-config": "node scripts/generate-public-config.mjs",
+    "check": "node --check account.js && node --check catalogue.js && node --check app.js && node --check server.mjs && node --check scripts/generate-public-config.mjs && node --test tests/*.test.mjs"
   }
 }

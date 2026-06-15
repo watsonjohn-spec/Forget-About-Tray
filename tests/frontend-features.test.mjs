@@ -38,10 +38,11 @@ test("base shape controls and shared catalogue are present", async () => {
 });
 
 test("account dropdown and Supabase OAuth controls are wired", async () => {
-  const [html, app, account] = await Promise.all([
+  const [html, app, account, publicConfigSource] = await Promise.all([
     readFile(new URL("index.html", root), "utf8"),
     readFile(new URL("app.js", root), "utf8"),
-    readFile(new URL("account.js", root), "utf8")
+    readFile(new URL("account.js", root), "utf8"),
+    readFile(new URL("public-config.js", root), "utf8")
   ]);
 
   assert.match(html, /id="accountMenu"/);
@@ -50,8 +51,16 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.match(html, /data-account-view="orders"/);
   assert.match(html, /data-oauth-provider="google"/);
   assert.match(html, /data-oauth-provider="apple"/);
+  assert.match(html, /id="oauthStatus"/);
   assert.match(app, /accountService\.updatePassword\(password\)/);
   assert.match(app, /accountService\.signInWithProvider\(button\.dataset\.oauthProvider\)/);
+  assert.match(app, /accountService\.providerAvailability\(\)/);
   assert.match(account, /async function signInWithProvider\(provider\)/);
+  assert.match(account, /window\.MOVEMENT_TRAY_PUBLIC_CONFIG/);
   assert.match(account, /\/auth\/v1\/authorize/);
+
+  const context = { window: {} };
+  vm.runInNewContext(publicConfigSource, context);
+  assert.deepEqual(Object.keys(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG).sort(), ["supabasePublishableKey", "supabaseUrl"]);
+  assert.doesNotMatch(publicConfigSource, /sb_secret_|sk_(?:test|live)_|rk_(?:test|live)_|whsec_/);
 });

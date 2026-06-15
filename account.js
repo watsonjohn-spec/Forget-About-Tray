@@ -10,6 +10,10 @@
     return document.querySelector('meta[name="checkout-api-url"]').content.trim().replace(/\/$/, "");
   }
 
+  function appUrl() {
+    return `${window.location.origin}${window.location.pathname}`;
+  }
+
   async function responseJson(response) {
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.msg || body.message || body.error_description || body.error || "Account request failed.");
@@ -18,10 +22,31 @@
 
   async function loadConfig() {
     if (config) return config;
-    const response = await fetch(`${apiBase()}/api/app-config`);
-    config = await responseJson(response);
+    const publicConfig = window.MOVEMENT_TRAY_PUBLIC_CONFIG || {};
+    if (publicConfig.supabaseUrl && publicConfig.supabasePublishableKey) {
+      config = publicConfig;
+    } else {
+      const response = await fetch(`${apiBase()}/api/app-config`);
+      config = await responseJson(response);
+    }
     if (!config.supabaseUrl || !config.supabasePublishableKey) throw new Error("Supabase is not configured on this server.");
     return config;
+  }
+
+  async function providerAvailability() {
+    await loadConfig();
+    try {
+      const response = await fetch(`${config.supabaseUrl}/auth/v1/settings`, {
+        headers: { apikey: config.supabasePublishableKey }
+      });
+      const settings = await responseJson(response);
+      return {
+        google: Boolean(settings.external?.google),
+        apple: Boolean(settings.external?.apple)
+      };
+    } catch {
+      return { google: null, apple: null };
+    }
   }
 
   function storeSession(nextSession) {
@@ -113,17 +138,16 @@
 
   async function signInWithProvider(provider) {
     await loadConfig();
-    const redirectTo = `${window.location.origin}${window.location.pathname}`;
     const url = new URL(`${config.supabaseUrl}/auth/v1/authorize`);
     url.searchParams.set("provider", provider);
-    url.searchParams.set("redirect_to", redirectTo);
+    url.searchParams.set("redirect_to", appUrl());
     window.location.assign(url.toString());
   }
 
   async function resetPassword(email) {
     return authRequest("/recover", {
       method: "POST",
-      body: JSON.stringify({ email, redirect_to: window.location.origin })
+      body: JSON.stringify({ email, redirect_to: appUrl() })
     });
   }
 
@@ -232,6 +256,7 @@
     init,
     signIn,
     signInWithProvider,
+    providerAvailability,
     signUp,
     signOut,
     resetPassword,

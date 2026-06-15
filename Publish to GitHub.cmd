@@ -1,6 +1,13 @@
 @echo off
 cd /d "%~dp0"
 echo Publishing Movement Tray Studio to GitHub...
+npm.cmd run public-config
+if errorlevel 1 (
+  echo.
+  echo Public Supabase configuration could not be generated.
+  pause
+  exit /b 1
+)
 git --git-dir=.deploy-git --work-tree=. add -A
 git --git-dir=.deploy-git --work-tree=. diff --cached --quiet
 if errorlevel 1 git --git-dir=.deploy-git --work-tree=. commit -m "Update Movement Tray Studio"

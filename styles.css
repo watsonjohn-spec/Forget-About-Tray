@@ -50,6 +50,7 @@ button { cursor: pointer; }
 .oauth-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .oauth-button { display: flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--line); background: white; }
 .oauth-button b { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--forest); font-size: 10px; }
+.oauth-button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 
 .topbar {
   height: 76px;

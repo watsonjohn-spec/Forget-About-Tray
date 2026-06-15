@@ -23,6 +23,7 @@
           <button class="button oauth-button" data-oauth-provider="google" type="button"><b>G</b> Google</button>
           <button class="button oauth-button" data-oauth-provider="apple" type="button"><b>A</b> Apple</button>
         </div>
+        <small id="oauthStatus">Checking social sign-in providers...</small>
         <div class="login-secondary-actions">
           <button class="button button-ghost" id="createAccountButton" type="button">Create account</button>
           <button class="button button-ghost" id="forgotPasswordButton" type="button">Forgot password</button>
@@ -434,6 +435,7 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="public-config.js"></script>
     <script src="account.js"></script>
     <script src="catalogue.js"></script>
     <script src="app.js"></script>
