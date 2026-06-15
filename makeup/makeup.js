@@ -51,7 +51,7 @@ function money(pence, currency = "gbp") {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: currency.toUpperCase() }).format(Number(pence || 0) / 100);
 }
 
-function splitPegboardBoxes(boxes, sheetWidth, sheetDepth, hookDepth, baseThickness) {
+function splitPegboardBoxes(boxes, sheetWidth, sheetDepth, hookDepth, baseThickness, baseZ = 0) {
   const chunkSize = 250;
   const chunkCols = Math.ceil(sheetWidth / chunkSize);
   const chunkRows = Math.ceil(sheetDepth / chunkSize);
@@ -68,9 +68,9 @@ function splitPegboardBoxes(boxes, sheetWidth, sheetDepth, hookDepth, baseThickn
     for (let column = 0; column < chunkCols; column += 1) {
       const outputX = column * (chunkWidth + spacing);
       const outputY = row * (chunkDepth + hookDepth + spacing) + hookDepth;
-      output.push({ x: outputX, y: outputY, z: 0, w: chunkWidth, d: chunkDepth, h: baseThickness, kind: "base" });
-      if (column < chunkCols - 1) output.push({ x: outputX + chunkWidth - tabDepth / 2, y: outputY + chunkDepth / 2 - tab / 2, z: 0, w: tabDepth, d: tab, h: baseThickness, kind: "jigsaw" });
-      if (row < chunkRows - 1) output.push({ x: outputX + chunkWidth / 2 - tab / 2, y: outputY + chunkDepth - tabDepth / 2, z: 0, w: tab, d: tabDepth, h: baseThickness, kind: "jigsaw" });
+      output.push({ x: outputX, y: outputY, z: baseZ, w: chunkWidth, d: chunkDepth, h: baseThickness, kind: "base" });
+      if (column < chunkCols - 1) output.push({ x: outputX + chunkWidth - tabDepth / 2, y: outputY + chunkDepth / 2 - tab / 2, z: baseZ, w: tabDepth, d: tab, h: baseThickness, kind: "jigsaw" });
+      if (row < chunkRows - 1) output.push({ x: outputX + chunkWidth / 2 - tab / 2, y: outputY + chunkDepth - tabDepth / 2, z: baseZ, w: tab, d: tabDepth, h: baseThickness, kind: "jigsaw" });
     }
   }
 
@@ -171,10 +171,14 @@ function geometry() {
     const rowDepthsForBoard = Array.from({ length: rows }, (_, row) => Math.max(24, ...cells.filter((cell) => cell.row === row).map((cell) => cell.cellDepth)));
     const columnOffsets = columnWidths.map((_, column) => columnWidths.slice(0, column).reduce((sum, width) => sum + width, 0));
     const rowOffsets = rowDepthsForBoard.map((_, row) => rowDepthsForBoard.slice(0, row).reduce((sum, depth) => sum + depth, 0));
-    const hookDepth = Math.max(10, t * 5);
+    const hookDepth = Math.max(12, t * 6);
     const hookPitch = Math.max(30, Math.min(60, Number(state.pegboardHookSpacing || 40)));
-    const hookWidth = Math.max(10, t * 5);
-    const hookHeight = Math.max(18, t * 9);
+    const hookWidth = 4.2;
+    const hookBladeDepth = 12;
+    const hookDrop = Math.max(7, t * 3.5);
+    const hookCatchDepth = 4;
+    const hookCatchHeight = 2;
+    const baseZ = hookDrop;
     const sheetWidth = columnWidths.reduce((sum, width) => sum + width, 0);
     const sheetDepth = rowDepthsForBoard.reduce((sum, depth) => sum + depth, 0);
     outerWidth = sheetWidth;
@@ -185,25 +189,27 @@ function geometry() {
       y: hookDepth + rowOffsets[cell.row] + t,
       z: 0
     }));
-    const pegboardBoxes = [{ x: 0, y: hookDepth, z: 0, w: sheetWidth, d: sheetDepth, h: state.baseThickness, kind: "base" }];
+    const pegboardBoxes = [{ x: 0, y: hookDepth, z: baseZ, w: sheetWidth, d: sheetDepth, h: state.baseThickness, kind: "base" }];
     positions.forEach((item) => {
       const h = Math.max(8, item.height * 2 / 3);
+      const z = baseZ + state.baseThickness;
       pegboardBoxes.push(
-        { x: item.x - t, y: item.y - t, z: state.baseThickness, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
-        { x: item.x - t, y: item.y + item.slotDepth, z: state.baseThickness, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
-        { x: item.x - t, y: item.y, z: state.baseThickness, w: t, d: item.slotDepth, h, kind: "wall" },
-        { x: item.x + item.slotWidth, y: item.y, z: state.baseThickness, w: t, d: item.slotDepth, h, kind: "wall" }
+        { x: item.x - t, y: item.y - t, z, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
+        { x: item.x - t, y: item.y + item.slotDepth, z, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
+        { x: item.x - t, y: item.y, z, w: t, d: item.slotDepth, h, kind: "wall" },
+        { x: item.x + item.slotWidth, y: item.y, z, w: t, d: item.slotDepth, h, kind: "wall" }
       );
     });
     const hookCount = Math.max(2, Math.min(10, Math.floor(sheetWidth / hookPitch) + 1));
     for (let hook = 0; hook < hookCount; hook += 1) {
       const hookX = hookCount === 1 ? sheetWidth / 2 - hookWidth / 2 : (hook * (sheetWidth - hookWidth)) / (hookCount - 1);
+      const hookY = (hookDepth - hookBladeDepth) / 2;
       pegboardBoxes.push(
-        { x: hookX, y: 0, z: state.baseThickness, w: hookWidth, d: hookDepth, h: hookHeight, kind: "hook" },
-        { x: hookX, y: 0, z: state.baseThickness + hookHeight, w: hookWidth, d: hookDepth + t * 2, h: Math.max(3, t), kind: "hook" }
+        { x: hookX, y: hookY, z: 0, w: hookWidth, d: hookBladeDepth, h: hookDrop, kind: "hook" },
+        { x: hookX, y: hookY + hookBladeDepth - hookCatchDepth, z: 0, w: hookWidth, d: hookCatchDepth, h: hookDrop + hookCatchHeight, kind: "hook" }
       );
     }
-    const split = splitPegboardBoxes(pegboardBoxes, sheetWidth, sheetDepth, hookDepth, state.baseThickness);
+    const split = splitPegboardBoxes(pegboardBoxes, sheetWidth, sheetDepth, hookDepth, state.baseThickness, baseZ);
     const materialCm3 = split.boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
     const height = Math.max(...split.boxes.map((box) => box.z + box.h));
     return { positions, boxes: split.boxes, outerWidth: split.outerWidth, outerDepth: split.outerDepth, height, materialCm3, assembledWidth: sheetWidth, assembledDepth: sheetDepth + hookDepth, chunkCount: split.chunkCount };

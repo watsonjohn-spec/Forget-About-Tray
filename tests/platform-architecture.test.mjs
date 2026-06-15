@@ -57,7 +57,11 @@ test("makeup caddies are a separate enabled generator under the makeup brand", (
   });
   assert.equal(pegboard.config.layoutMode, "pegboard");
   assert.equal(pegboard.positions.length, 12);
-  assert.ok(pegboard.boxes.some((box) => box.kind === "hook"));
+  const pegboardHooks = pegboard.boxes.filter((box) => box.kind === "hook");
+  const pegboardBases = pegboard.boxes.filter((box) => box.kind === "base");
+  assert.ok(pegboardHooks.length > 0);
+  assert.ok(pegboardHooks.every((box) => box.w <= 4.5));
+  assert.ok(Math.max(...pegboardHooks.map((box) => box.z + box.h)) <= Math.min(...pegboardBases.map((box) => box.z)) + 2.1);
   assert.ok(pegboard.chunkCount > 1);
   assert.match(generator.safeFileName({ ...parameters, layoutMode: "pegboard" }, "Skadis makeup"), /pegboard\.stl$/);
   assert.match(generator.describe({ ...parameters, layoutMode: "pegboard" }), /pegboard makeup sheet/);
