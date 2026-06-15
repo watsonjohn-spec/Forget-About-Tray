@@ -17,7 +17,10 @@ const stripeApiBase = process.env.STRIPE_API_BASE || "https://api.stripe.com";
 const stripeApiVersion = process.env.STRIPE_API_VERSION || "2026-05-27.dahlia";
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 const allowedCountries = (process.env.STRIPE_ALLOWED_COUNTRIES || "GB,US").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean);
-const allowedOrigin = process.env.CHECKOUT_ALLOWED_ORIGIN || "";
+const allowedOrigins = (process.env.CHECKOUT_ALLOWED_ORIGIN || "https://watsonjohn-spec.github.io")
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
 const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || "";
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || "";
@@ -54,11 +57,11 @@ function sendJson(response, status, body, origin = "") {
 }
 
 function checkoutOriginAllowed(request) {
-  const requestOrigin = request.headers.origin || "";
+  const requestOrigin = String(request.headers.origin || "").replace(/\/$/, "");
   if (!requestOrigin) return true;
   const protocol = request.headers["x-forwarded-proto"] || "http";
-  const expectedOrigin = allowedOrigin || `${protocol}://${request.headers.host}`;
-  return requestOrigin === expectedOrigin;
+  const serviceOrigin = `${protocol}://${request.headers.host}`.replace(/\/$/, "");
+  return requestOrigin === serviceOrigin || allowedOrigins.includes(requestOrigin);
 }
 
 function checkoutOrigin(request) {

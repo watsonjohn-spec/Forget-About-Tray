@@ -85,6 +85,8 @@ The account, order, and payment features require the Node server. Deploy the rep
 
 `render.yaml` defines a Render Node web service. Connect the GitHub repository to Render as a Blueprint, then provide the private Stripe and Supabase values requested by Render. The service health check is `/api/health`. The Render-hosted URL serves both the customer app and `/factory/`.
 
+The static GitHub Pages frontend is configured to call `https://forget-about-tray.onrender.com`. The backend accepts calls from the Render service itself and `https://watsonjohn-spec.github.io`.
+
 Start the Render deployment from:
 
 `https://render.com/deploy?repo=https://github.com/watsonjohn-spec/Forget-About-Tray`

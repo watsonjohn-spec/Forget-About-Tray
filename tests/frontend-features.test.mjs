@@ -79,6 +79,7 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(html, /id="filamentColour"/);
   assert.match(html, /id="includeBases"/);
   assert.match(html, /id="chooseEmailExport"/);
+  assert.match(html, /meta name="checkout-api-url" content="https:\/\/forget-about-tray\.onrender\.com"/);
   assert.match(html, /data-account-page="profile"/);
   assert.match(html, /data-account-page="password"/);
   assert.match(html, /data-account-page="orders"/);

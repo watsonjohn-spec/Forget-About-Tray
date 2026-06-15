@@ -23,6 +23,8 @@ services:
         value: "500"
       - key: STRIPE_ALLOWED_COUNTRIES
         value: GB
+      - key: CHECKOUT_ALLOWED_ORIGIN
+        value: https://watsonjohn-spec.github.io
       - key: ACCOUNT_DEVICE_LIMIT
         value: "3"
       - key: ENFORCE_ACCOUNT_DEVICE_LIMIT

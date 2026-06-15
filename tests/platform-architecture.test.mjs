@@ -76,4 +76,5 @@ test("factory portal keeps completion and payout release outside printer control
   assert.match(renderBlueprint, /healthCheckPath: \/api\/health/);
   assert.match(renderBlueprint, /SUPABASE_SECRET_KEY/);
   assert.match(renderBlueprint, /STRIPE_SECRET_KEY/);
+  assert.match(renderBlueprint, /CHECKOUT_ALLOWED_ORIGIN/);
 });
