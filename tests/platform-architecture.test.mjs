@@ -98,6 +98,8 @@ test("factory portal keeps completion and payout release outside printer control
   assert.match(serverSource, /Printers can only mark jobs as producing or posted/);
   assert.match(serverSource, /status: "pending_review", accepting_jobs: false/);
   assert.match(serverSource, /\/v2\/core\/accounts/);
+  assert.match(serverSource, /include\[0\]=configuration\.recipient&include\[1\]=requirements/);
+  assert.doesNotMatch(serverSource, /include\[\]=/);
   assert.match(serverSource, /\/v1\/transfers/);
   assert.doesNotMatch(serverSource, /requirements_collector: "stripe"/);
   assert.match(serverSource, /print-job-transfer-\$\{job\.id\}/);

@@ -330,7 +330,7 @@ async function syncPrinterPaymentAccount(profile) {
   const rows = await supabaseAdmin(`printer_payment_accounts?select=*&printer_profile_id=eq.${encodeURIComponent(profile.id)}&limit=1`);
   const paymentAccount = rows?.[0];
   if (!paymentAccount) return null;
-  const account = await stripeJson(`/v2/core/accounts/${encodeURIComponent(paymentAccount.stripe_connected_account_id)}?include[]=configuration.recipient&include[]=requirements`);
+  const account = await stripeJson(`/v2/core/accounts/${encodeURIComponent(paymentAccount.stripe_connected_account_id)}?include[0]=configuration.recipient&include[1]=requirements`);
   const ready = recipientAccountReady(account);
   const saved = await supabaseAdmin(`printer_payment_accounts?printer_profile_id=eq.${encodeURIComponent(profile.id)}`, {
     method: "PATCH",
