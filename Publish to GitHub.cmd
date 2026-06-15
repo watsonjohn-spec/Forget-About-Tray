@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 echo Publishing Movement Tray Studio to GitHub...
-npm.cmd run public-config
+call npm.cmd run public-config
 if errorlevel 1 (
   echo.
   echo Public Supabase configuration could not be generated.
