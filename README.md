@@ -45,6 +45,8 @@ The server calculates the displayed quote and creates Stripe Checkout sessions. 
 Paid unlimited-download access and the single sponsored download are recorded against the signed-in Supabase account.
 Set `DOWNLOAD_TOKEN_SECRET` to a long random value before deployment so sponsored-download permits cannot be forged.
 
+For Print Factory onboarding and payouts, the Stripe key must also be allowed to create and read connected accounts, create Express login links, and create transfers. Keep the integration in test mode until the complete marketplace flow has been exercised.
+
 Before running the account-enabled app for the first time, open the Supabase SQL Editor and run `supabase/schema.sql`. This creates profiles, saved designs, army lists, entitlements, immutable order snapshots, VAT-ready order fields, and Row Level Security policies.
 
 Re-run `supabase/schema.sql` after pulling the multi-brand platform update. It migrates existing tray designs and army lists into the generic design/project model and adds the print marketplace foundation without deleting the legacy records.
