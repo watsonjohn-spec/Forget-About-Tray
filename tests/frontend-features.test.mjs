@@ -115,9 +115,12 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(trayApp, /filamentColours\.filter\(\(colour\) => colour\.material === "pla"\)/);
   assert.match(trayApp, /data-army-field="includeBases"/);
   assert.match(trayApp, /const storageInsertMode = "storage_insert"/);
+  assert.match(trayApp, /const storageBaseShapes = \["square", "rectangle", "circle", "oval"\]/);
   assert.match(trayApp, /64 litre Really Useful Box/);
   assert.match(trayApp, /openStorageCatalogue/);
   assert.match(trayApp, /baseMagnetHoles/);
+  assert.match(trayApp, /data-storage-field="baseShape"/);
+  assert.match(trayApp, /<ellipse cx="\$\{cx\}" cy="\$\{cy\}"/);
   assert.match(trayApp, /checkout\/print\/verify/);
   assert.match(factoryHtml, /id="capabilityGramsPerHour"/);
   assert.match(factoryHtml, /id="capabilityPostage"/);

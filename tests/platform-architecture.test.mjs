@@ -110,6 +110,24 @@ test("movement tray generator renders Really Useful Box storage inserts", () => 
   assert.match(generator.safeFileName(source, "Beasts box"), /beasts-box-rub-64l-insert-4-plates\.stl/);
   assert.match(generator.describe(source), /64 litre Really Useful Box insert for 40 models/);
   assert.match(generator.renderStl(source), /^solid movement_tray/);
+  const shaped = generator.buildGeometry({
+    ...source,
+    boxKey: "custom",
+    boxName: "Round base case",
+    boxInternalLength: 180,
+    boxInternalWidth: 140,
+    insertUnits: [
+      { id: "marine", name: "Intercessors", count: 1, copies: 1, baseShape: "circle", baseSize: 32, baseDepth: 99 },
+      { id: "cavalry", name: "Cavalry", count: 1, copies: 1, baseShape: "oval", baseSize: 60, baseDepth: 35 }
+    ],
+    includeBases: true,
+    insertMagnetHoles: false,
+    baseMagnetHoles: true
+  });
+  assert.deepEqual(shaped.config.insertUnits.map((unit) => unit.baseShape), ["circle", "oval"]);
+  assert.equal(shaped.config.insertUnits[0].baseDepth, 32);
+  assert.deepEqual([...new Set(shaped.slots.map((slot) => slot.baseShape))].sort(), ["circle", "oval"]);
+  assert.ok(shaped.boxes.length > 80);
 });
 
 test("marketplace payouts remain held until completion", async () => {

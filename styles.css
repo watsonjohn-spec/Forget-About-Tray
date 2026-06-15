@@ -326,7 +326,7 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .storage-input-card { display: grid; gap: 14px; }
 .storage-box-controls { padding-top: 14px; display: grid; gap: 10px; border-top: 1px solid var(--line); }
 .storage-box-controls label, .storage-options label, .storage-unit label { display: grid; gap: 5px; color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.storage-box-controls select, .storage-box-controls input, .storage-unit input { min-width: 0; width: 100%; height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: #fbfbf7; font-size: 10px; font-weight: 750; }
+.storage-box-controls select, .storage-box-controls input, .storage-unit input, .storage-unit select { min-width: 0; width: 100%; height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: #fbfbf7; font-size: 10px; font-weight: 750; }
 .storage-options { display: grid; gap: 10px; }
 .radio-panel { padding: 11px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fbfbf7; }
 .radio-panel strong { flex: 1 0 100%; color: var(--ink); font-size: 11px; }
@@ -341,7 +341,7 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .storage-stats span { color: var(--muted); font-size: 8px; font-weight: 850; text-transform: uppercase; }
 .storage-stats strong { margin-top: 4px; font-size: 11px; }
 .storage-results { min-height: 220px; }
-.storage-unit { padding: 12px; display: grid; grid-template-columns: minmax(180px, 1fr) repeat(4, 74px) auto; align-items: end; gap: 8px; border: 1px solid var(--line); border-radius: 9px; background: white; }
+.storage-unit { padding: 12px; display: grid; grid-template-columns: minmax(180px, 1fr) repeat(5, 74px) auto; align-items: end; gap: 8px; border: 1px solid var(--line); border-radius: 9px; background: white; }
 .storage-unit.needs-base { border-color: #b67a47; }
 .storage-unit strong, .storage-unit small { display: block; }
 .storage-unit small { margin-top: 4px; color: var(--muted); font-size: 9px; }

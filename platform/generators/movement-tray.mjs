@@ -1,6 +1,7 @@
 const generatorType = "movement_tray";
 const version = 1;
 const storageMode = "storage_insert";
+const insertBaseShapes = ["square", "rectangle", "circle", "oval"];
 
 function numberInRange(value, minimum, maximum) {
   const number = Number(value);
@@ -10,6 +11,19 @@ function numberInRange(value, minimum, maximum) {
 
 function integerInRange(value, minimum, maximum) {
   return Math.round(numberInRange(value, minimum, maximum));
+}
+
+function isRoundBaseShape(shape) {
+  return shape === "circle" || shape === "oval";
+}
+
+function insertShapeLocksDepth(shape) {
+  return shape === "square" || shape === "circle";
+}
+
+function normalizeInsertBaseShape(shape, width, depth) {
+  if (insertBaseShapes.includes(shape)) return shape;
+  return Number(width) === Number(depth) ? "square" : "rectangle";
 }
 
 function filamentParameters(input = {}) {
@@ -24,14 +38,16 @@ function filamentParameters(input = {}) {
 function cleanInsertUnit(unit = {}, index) {
   const width = numberInRange(unit.baseSize ?? unit.width, 10, 180);
   const depth = numberInRange(unit.baseDepth ?? unit.depth ?? unit.baseSize ?? unit.width, 10, 180);
+  const baseShape = normalizeInsertBaseShape(unit.baseShape ?? unit.shape, width, depth);
   const count = integerInRange(unit.count ?? (Number(unit.columns || 1) * Number(unit.rows || 1)), 1, 500);
   return {
     id: String(unit.id || `unit-${index + 1}`).slice(0, 80),
     name: String(unit.name || `Unit ${index + 1}`).slice(0, 120),
     count,
     copies: integerInRange(unit.copies ?? 1, 1, 40),
+    baseShape,
     baseSize: width,
-    baseDepth: depth,
+    baseDepth: insertShapeLocksDepth(baseShape) ? width : depth,
     columns: integerInRange(unit.columns ?? Math.ceil(Math.sqrt(count)), 1, 40),
     rows: integerInRange(unit.rows ?? Math.ceil(count / Math.max(1, Number(unit.columns || Math.ceil(Math.sqrt(count))))), 1, 40)
   };
@@ -178,6 +194,62 @@ function rectWithVoids({ x = 0, y = 0, z = 0, w, d, h, voids = [] }) {
   return boxes;
 }
 
+function ellipseHorizontalHalfWidth(radiusX, radiusY, yRelative) {
+  if (radiusY <= 0 || Math.abs(yRelative) > radiusY) return 0;
+  return radiusX * Math.sqrt(Math.max(0, 1 - (yRelative * yRelative) / (radiusY * radiusY)));
+}
+
+function ellipsePlateBoxes({ x, y, z, w, d, h, holeDiameter = 0, segments = 32 }) {
+  const boxes = [];
+  const stripDepth = d / segments;
+  const radiusX = w / 2;
+  const radiusY = d / 2;
+  const centerX = x + radiusX;
+  const centerY = y + radiusY;
+  const hole = holeDiameter ? Math.min(holeDiameter, w - 1, d - 1) : 0;
+  for (let index = 0; index < segments; index += 1) {
+    const stripY = y + index * stripDepth;
+    const yRelative = stripY + stripDepth / 2 - centerY;
+    const halfWidth = ellipseHorizontalHalfWidth(radiusX, radiusY, yRelative);
+    if (halfWidth <= 0.05) continue;
+    const stripX = centerX - halfWidth;
+    const stripWidth = halfWidth * 2;
+    const voids = hole ? [{ x: centerX - hole / 2 - stripX, y: centerY - hole / 2 - stripY, w: hole, d: hole }] : [];
+    boxes.push(...rectWithVoids({ x: stripX, y: stripY, z, w: stripWidth, d: stripDepth, h, voids }));
+  }
+  return boxes;
+}
+
+function ellipseRingBoxes({ x, y, w, d, t, z, h, segments = 36 }) {
+  const boxes = [];
+  const outerW = w + t * 2;
+  const outerD = d + t * 2;
+  const stripDepth = outerD / segments;
+  const centerX = x + w / 2;
+  const centerY = y + d / 2;
+  const outerRx = outerW / 2;
+  const outerRy = outerD / 2;
+  const innerRx = w / 2;
+  const innerRy = d / 2;
+  for (let index = 0; index < segments; index += 1) {
+    const stripY = centerY - outerRy + index * stripDepth;
+    const yRelative = stripY + stripDepth / 2 - centerY;
+    const outerHalf = ellipseHorizontalHalfWidth(outerRx, outerRy, yRelative);
+    if (outerHalf <= 0.05) continue;
+    const innerHalf = ellipseHorizontalHalfWidth(innerRx, innerRy, yRelative);
+    if (innerHalf <= 0.05) {
+      boxes.push({ x: centerX - outerHalf, y: stripY, z, w: outerHalf * 2, d: stripDepth, h });
+      continue;
+    }
+    const sideWidth = outerHalf - innerHalf;
+    if (sideWidth > 0.05) {
+      boxes.push({ x: centerX - outerHalf, y: stripY, z, w: sideWidth, d: stripDepth, h });
+      boxes.push({ x: centerX + innerHalf, y: stripY, z, w: sideWidth, d: stripDepth, h });
+    }
+  }
+  return boxes;
+}
+
 function storageSlots(config) {
   const start = config.wallThickness + config.clearance;
   const maxX = config.boxInternalLength - config.wallThickness - config.clearance;
@@ -189,9 +261,11 @@ function storageSlots(config) {
   const slots = [];
   config.insertUnits.forEach((unit, unitIndex) => {
     const total = unit.count * unit.copies;
+    const baseShape = normalizeInsertBaseShape(unit.baseShape, unit.baseSize, unit.baseDepth);
+    const baseDepth = insertShapeLocksDepth(baseShape) ? unit.baseSize : unit.baseDepth;
     for (let index = 0; index < total; index += 1) {
       const slotWidth = unit.baseSize + config.clearance * 2;
-      const slotDepth = unit.baseDepth + config.clearance * 2;
+      const slotDepth = baseDepth + config.clearance * 2;
       if (x > start && x + slotWidth > maxX) {
         x = start;
         y += rowDepth + config.gap;
@@ -208,8 +282,9 @@ function storageSlots(config) {
         d: slotDepth,
         unitIndex,
         unitName: unit.name,
+        baseShape,
         baseSize: unit.baseSize,
-        baseDepth: unit.baseDepth
+        baseDepth
       });
       x += slotWidth + config.gap;
       rowDepth = Math.max(rowDepth, slotDepth);
@@ -219,7 +294,8 @@ function storageSlots(config) {
   return { slots, unplaced };
 }
 
-function baseBoxesWithOptionalHole({ x, y, z, w, d, h, holeDiameter = 0 }) {
+function baseBoxesWithOptionalHole({ x, y, z, w, d, h, shape = "rectangle", holeDiameter = 0 }) {
+  if (isRoundBaseShape(shape)) return ellipsePlateBoxes({ x, y, z, w, d, h, holeDiameter });
   if (!holeDiameter) return [{ x, y, z, w, d, h }];
   const hole = Math.min(holeDiameter, w - 1, d - 1);
   return rectWithVoids({
@@ -237,6 +313,9 @@ function slotWallBoxes(slot, config, offsetX = 0, offsetY = 0) {
   const t = config.wallThickness;
   const z = config.plateThickness;
   const h = config.wallHeight;
+  if (isRoundBaseShape(slot.baseShape)) {
+    return ellipseRingBoxes({ x: offsetX + slot.x, y: offsetY + slot.y, w: slot.w, d: slot.d, t, z, h });
+  }
   return [
     { x: offsetX + slot.x - t, y: offsetY + slot.y - t, z, w: slot.w + t * 2, d: t, h },
     { x: offsetX + slot.x - t, y: offsetY + slot.y + slot.d, z, w: slot.w + t * 2, d: t, h },
@@ -333,6 +412,7 @@ function buildStorageInsertGeometry(config) {
         w: slot.baseSize,
         d: slot.baseDepth,
         h: config.plateThickness,
+        shape: slot.baseShape,
         holeDiameter: config.baseMagnetHoles ? config.magnetHoleDiameter : 0
       }));
       x += slot.baseSize + baseGap;

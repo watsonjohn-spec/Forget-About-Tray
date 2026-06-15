@@ -26,6 +26,7 @@ const numericKeys = [
 const checkboxKeys = ["lipEnabled", "notchesEnabled", "includeBases"];
 const rectangleBaseLengths = [50, 60, 75, 100, 150];
 const storageInsertMode = "storage_insert";
+const storageBaseShapes = ["square", "rectangle", "circle", "oval"];
 const reallyUsefulBoxes = [
   { key: "rub-4l", name: "4 litre Really Useful Box", internalLength: 348, internalWidth: 220, internalDepth: 68 },
   { key: "rub-9l", name: "9 litre Really Useful Box", internalLength: 335, internalWidth: 210, internalDepth: 140 },
@@ -75,6 +76,37 @@ let storageState = {
   wallHeight: 4,
   wallThickness: 1.4
 };
+
+function isRoundBaseShape(shape) {
+  return shape === "circle" || shape === "oval";
+}
+
+function normalizeStorageBaseShape(shape, width, depth) {
+  if (storageBaseShapes.includes(shape)) return shape;
+  return Number(width) === Number(depth) ? "square" : "rectangle";
+}
+
+function shapeLocksDepth(shape) {
+  return shape === "square" || shape === "circle";
+}
+
+function storageShapeLabel(shape) {
+  return ({ square: "Square", rectangle: "Rectangle", circle: "Circle", oval: "Oval" })[shape] || "Rectangle";
+}
+
+function storageBaseArea(width, depth, shape) {
+  return isRoundBaseShape(shape) ? Math.PI * (width / 2) * (depth / 2) : width * depth;
+}
+
+function storageSlotWallVolume(slot, config) {
+  const t = config.wallThickness;
+  if (isRoundBaseShape(slot.baseShape)) {
+    const outerArea = Math.PI * ((slot.w + t * 2) / 2) * ((slot.d + t * 2) / 2);
+    const innerArea = Math.PI * (slot.w / 2) * (slot.d / 2);
+    return (outerArea - innerArea) * config.wallHeight;
+  }
+  return ((slot.w + t * 2) * t * 2 + slot.d * t * 2) * config.wallHeight;
+}
 let pendingExportConfig = null;
 let pendingExportPrefix = "";
 let adCountdownTimer = null;
@@ -169,17 +201,18 @@ function readStorageState() {
 
 function storageInsertUnits() {
   return storageRecommendations
-    .filter((item) => item.count > 0 && item.baseSize > 0 && item.baseDepth > 0)
     .map((item) => ({
       id: item.id,
       name: item.name,
       count: item.count,
       copies: item.copies || 1,
+      baseShape: normalizeStorageBaseShape(item.baseShape, item.baseSize, item.baseDepth),
       baseSize: item.baseSize,
-      baseDepth: item.baseDepth,
+      baseDepth: shapeLocksDepth(normalizeStorageBaseShape(item.baseShape, item.baseSize, item.baseDepth)) ? item.baseSize : item.baseDepth,
       columns: item.columns,
       rows: item.rows
-    }));
+    }))
+    .filter((item) => item.count > 0 && item.baseSize > 0 && item.baseDepth > 0);
 }
 
 function storageInsertConfig() {
@@ -238,7 +271,8 @@ function loadStorageConfig(config) {
     columns: unit.columns || 1,
     rows: unit.rows || unit.count || 1,
     baseSize: unit.baseSize,
-    baseDepth: unit.baseDepth,
+    baseDepth: shapeLocksDepth(normalizeStorageBaseShape(unit.baseShape, unit.baseSize, unit.baseDepth)) ? unit.baseSize : unit.baseDepth,
+    baseShape: normalizeStorageBaseShape(unit.baseShape, unit.baseSize, unit.baseDepth),
     matched: true
   }));
   if (!reallyUsefulBoxes.some((box) => box.key === storageState.boxKey)) storageState.boxKey = "custom";
@@ -264,9 +298,11 @@ function storageSlots(config = storageInsertConfig()) {
   let unplaced = 0;
   config.insertUnits.forEach((unit, unitIndex) => {
     const total = unit.count * (unit.copies || 1);
+    const baseShape = normalizeStorageBaseShape(unit.baseShape, unit.baseSize, unit.baseDepth);
+    const baseDepth = shapeLocksDepth(baseShape) ? unit.baseSize : unit.baseDepth;
     for (let index = 0; index < total; index += 1) {
       const slotWidth = unit.baseSize + config.clearance * 2;
-      const slotDepth = unit.baseDepth + config.clearance * 2;
+      const slotDepth = baseDepth + config.clearance * 2;
       if (x > start && x + slotWidth > maxX) {
         x = start;
         y += rowDepth + config.gap;
@@ -276,7 +312,7 @@ function storageSlots(config = storageInsertConfig()) {
         unplaced += 1;
         continue;
       }
-      slots.push({ x, y, w: slotWidth, d: slotDepth, unitIndex, name: unit.name, baseSize: unit.baseSize, baseDepth: unit.baseDepth });
+      slots.push({ x, y, w: slotWidth, d: slotDepth, unitIndex, name: unit.name, baseSize: unit.baseSize, baseDepth, baseShape });
       x += slotWidth + config.gap;
       rowDepth = Math.max(rowDepth, slotDepth);
     }
@@ -289,11 +325,8 @@ function storageInsertMetrics(config = storageInsertConfig()) {
   const { slots, unplaced } = storageSlots(config);
   const split = config.boxInternalLength > config.splitThreshold || config.boxInternalWidth > config.splitThreshold;
   const baseVolume = config.boxInternalLength * config.boxInternalWidth * config.plateThickness;
-  const wallVolume = slots.reduce((sum, slot) => {
-    const t = config.wallThickness;
-    return sum + ((slot.w + t * 2) * t * 2 + slot.d * t * 2) * config.wallHeight;
-  }, 0);
-  const basesVolume = config.includeBases ? slots.reduce((sum, slot) => sum + slot.baseSize * slot.baseDepth * config.plateThickness, 0) : 0;
+  const wallVolume = slots.reduce((sum, slot) => sum + storageSlotWallVolume(slot, config), 0);
+  const basesVolume = config.includeBases ? slots.reduce((sum, slot) => sum + storageBaseArea(slot.baseSize, slot.baseDepth, slot.baseShape) * config.plateThickness, 0) : 0;
   return {
     innerWidth: config.boxInternalLength,
     innerDepth: config.boxInternalWidth,
@@ -886,6 +919,7 @@ function allCatalogueEntries() {
     name: entry.name,
     width: entry.width,
     depth: entry.depth,
+    baseShape: normalizeStorageBaseShape(entry.baseShape, entry.width, entry.depth),
     aliases: [key]
   }));
   const entries = [...baseCatalogue, ...customCatalogue(), ...learned];
@@ -914,6 +948,7 @@ function addCatalogueRecommendation(entry, count) {
   }
   const formation = recommendFormation(count);
   const id = `manual-${entry.id}-${Date.now()}`;
+  const baseShape = normalizeStorageBaseShape(entry.baseShape, entry.width, entry.depth);
   armyRecommendations.push({
     id,
     name: entry.name,
@@ -922,8 +957,8 @@ function addCatalogueRecommendation(entry, count) {
     columns: formation.columns,
     rows: formation.rows,
     baseSize: entry.width,
-    baseDepth: entry.depth,
-    baseShape: entry.width === entry.depth ? "square" : "rectangle",
+    baseDepth: shapeLocksDepth(baseShape) ? entry.width : entry.depth,
+    baseShape,
     matched: true
   });
   activeArmyRecommendationId = id;
@@ -935,6 +970,7 @@ function addCatalogueRecommendation(entry, count) {
 function addStorageRecommendation(entry, count) {
   const formation = recommendFormation(count);
   const id = `storage-${entry.id}-${Date.now()}`;
+  const baseShape = normalizeStorageBaseShape(entry.baseShape, entry.width, entry.depth);
   storageRecommendations.push({
     id,
     name: entry.name,
@@ -943,8 +979,8 @@ function addStorageRecommendation(entry, count) {
     columns: formation.columns,
     rows: formation.rows,
     baseSize: entry.width,
-    baseDepth: entry.depth,
-    baseShape: entry.width === entry.depth ? "square" : "rectangle",
+    baseDepth: shapeLocksDepth(baseShape) ? entry.width : entry.depth,
+    baseShape,
     matched: true
   });
   renderStorageRecommendations();
@@ -1143,7 +1179,8 @@ function rememberUnitBase(recommendation) {
   learned[normalizeText(recommendation.name)] = {
     name: recommendation.name,
     width: recommendation.baseSize,
-    depth: recommendation.baseDepth
+    depth: recommendation.baseDepth,
+    baseShape: normalizeStorageBaseShape(recommendation.baseShape, recommendation.baseSize, recommendation.baseDepth)
   };
   localStorage.setItem("movement-tray-unit-bases", JSON.stringify(learned));
 }
@@ -1179,6 +1216,9 @@ function parseArmyList(text) {
       return;
     }
     const formation = recommendFormation(count);
+    const baseWidth = catalogueMatch?.entry.width || learnedMatch?.width || 0;
+    const baseDepth = catalogueMatch?.entry.depth || learnedMatch?.depth || 0;
+    const baseShape = normalizeStorageBaseShape(catalogueMatch?.entry.baseShape || learnedMatch?.baseShape, baseWidth, baseDepth);
     found.set(key, {
       id: key,
       name,
@@ -1186,9 +1226,9 @@ function parseArmyList(text) {
       copies: 1,
       columns: formation.columns,
       rows: formation.rows,
-      baseSize: catalogueMatch?.entry.width || learnedMatch?.width || 0,
-      baseDepth: catalogueMatch?.entry.depth || learnedMatch?.depth || 0,
-      baseShape: (catalogueMatch?.entry.width || learnedMatch?.width) === (catalogueMatch?.entry.depth || learnedMatch?.depth) ? "square" : "rectangle",
+      baseSize: baseWidth,
+      baseDepth: shapeLocksDepth(baseShape) ? baseWidth : baseDepth,
+      baseShape,
       matched: Boolean(catalogueMatch || learnedMatch)
     });
   });
@@ -1251,12 +1291,20 @@ function drawStoragePreview(metrics, config) {
   const x0 = (760 - config.boxInternalLength * scale) / 2;
   const y0 = (420 - config.boxInternalWidth * scale) / 2;
   const magnet = config.insertMagnetHoles ? config.magnetHoleDiameter : 0;
-  const slotMarkup = metrics.slots.map((slot) => `
-    <g>
-      <rect x="${x0 + slot.x * scale}" y="${y0 + slot.y * scale}" width="${slot.w * scale}" height="${slot.d * scale}" rx="3" fill="${storagePalette(slot.unitIndex)}" opacity=".25" stroke="${storagePalette(slot.unitIndex)}" stroke-width="1.4"/>
-      ${magnet ? `<circle cx="${x0 + (slot.x + slot.w / 2) * scale}" cy="${y0 + (slot.y + slot.d / 2) * scale}" r="${Math.max(1.5, magnet * scale / 2)}" fill="#223426" opacity=".75"/>` : ""}
-    </g>
-  `).join("");
+  const slotMarkup = metrics.slots.map((slot) => {
+    const colour = storagePalette(slot.unitIndex);
+    const cx = x0 + (slot.x + slot.w / 2) * scale;
+    const cy = y0 + (slot.y + slot.d / 2) * scale;
+    const shape = isRoundBaseShape(slot.baseShape)
+      ? `<ellipse cx="${cx}" cy="${cy}" rx="${slot.w * scale / 2}" ry="${slot.d * scale / 2}" fill="${colour}" opacity=".25" stroke="${colour}" stroke-width="1.4"/>`
+      : `<rect x="${x0 + slot.x * scale}" y="${y0 + slot.y * scale}" width="${slot.w * scale}" height="${slot.d * scale}" rx="3" fill="${colour}" opacity=".25" stroke="${colour}" stroke-width="1.4"/>`;
+    return `
+      <g>
+        ${shape}
+        ${magnet ? `<circle cx="${cx}" cy="${cy}" r="${Math.max(1.5, magnet * scale / 2)}" fill="#223426" opacity=".75"/>` : ""}
+      </g>
+    `;
+  }).join("");
   const seamMarkup = metrics.split ? `
     <line x1="${x0 + config.boxInternalLength * scale / 2}" y1="${y0}" x2="${x0 + config.boxInternalLength * scale / 2}" y2="${y0 + config.boxInternalWidth * scale}" stroke="#2d4532" stroke-width="2" stroke-dasharray="8 6"/>
     <line x1="${x0}" y1="${y0 + config.boxInternalWidth * scale / 2}" x2="${x0 + config.boxInternalLength * scale}" y2="${y0 + config.boxInternalWidth * scale / 2}" stroke="#2d4532" stroke-width="2" stroke-dasharray="8 6"/>
@@ -1290,14 +1338,19 @@ function renderStorageRecommendations() {
   const unknown = storageRecommendations.filter((item) => !item.matched).length;
   summary.textContent = `${metrics.slots.length} slots placed${metrics.unplaced ? ` - ${metrics.unplaced} overflow` : ""}${unknown ? ` - ${unknown} need bases` : ""}`;
   container.innerHTML = storageRecommendations.map((item) => {
+    item.baseShape = normalizeStorageBaseShape(item.baseShape, item.baseSize, item.baseDepth);
+    if (shapeLocksDepth(item.baseShape)) item.baseDepth = item.baseSize;
     const ready = item.baseSize > 0 && item.baseDepth > 0;
+    const shapeOptions = storageBaseShapes.map((shape) => `<option value="${shape}" ${shape === item.baseShape ? "selected" : ""}>${storageShapeLabel(shape)}</option>`).join("");
+    const depthLocked = shapeLocksDepth(item.baseShape);
     return `
       <article class="storage-unit ${ready ? "" : "needs-base"}" data-storage-unit="${escapeHtml(item.id)}">
-        <div><strong>${escapeHtml(item.name)}</strong><small>${item.count} models${item.copies > 1 ? ` x ${item.copies}` : ""} ${ready ? `- ${item.baseSize} x ${item.baseDepth} mm` : "- set base size"}</small></div>
+        <div><strong>${escapeHtml(item.name)}</strong><small>${item.count} models${item.copies > 1 ? ` x ${item.copies}` : ""} ${ready ? `- ${storageShapeLabel(item.baseShape)} ${item.baseSize} x ${item.baseDepth} mm` : "- set base size"}</small></div>
         <label>Models<input data-storage-field="count" type="number" min="1" max="500" value="${item.count}"></label>
         <label>Copies<input data-storage-field="copies" type="number" min="1" max="40" value="${item.copies || 1}"></label>
-        <label>Base W<input data-storage-field="baseSize" type="number" min="10" max="180" value="${item.baseSize || ""}"></label>
-        <label>Base D<input data-storage-field="baseDepth" type="number" min="10" max="180" value="${item.baseDepth || ""}"></label>
+        <label>Shape<select data-storage-field="baseShape">${shapeOptions}</select></label>
+        <label>${item.baseShape === "circle" ? "Diameter" : "Base W"}<input data-storage-field="baseSize" type="number" min="10" max="180" value="${item.baseSize || ""}"></label>
+        <label>${depthLocked ? "Auto D" : item.baseShape === "oval" ? "Oval D" : "Base D"}<input data-storage-field="baseDepth" type="number" min="10" max="180" value="${item.baseDepth || ""}" ${depthLocked ? "disabled" : ""}></label>
         <button type="button" data-storage-remove="${escapeHtml(item.id)}">Remove</button>
       </article>
     `;
@@ -2115,20 +2168,29 @@ document.getElementById("armyResults").addEventListener("click", (event) => {
   if (action === "save") saveRecommendation(recommendation);
   if (action === "export") requestExport(config, recommendation.name);
 });
-document.getElementById("storageResults").addEventListener("input", (event) => {
+function handleStorageUnitChange(event) {
   const field = event.target.dataset.storageField;
   const card = event.target.closest("[data-storage-unit]");
-  if (!field || !card) return;
+  if (!field || !card) return false;
   const unit = storageRecommendations.find((item) => item.id === card.dataset.storageUnit);
-  if (!unit) return;
-  unit[field] = Number(event.target.value) || 0;
+  if (!unit) return false;
+  if (field === "baseShape") {
+    unit.baseShape = normalizeStorageBaseShape(event.target.value, unit.baseSize, unit.baseDepth);
+  } else {
+    unit[field] = Number(event.target.value) || 0;
+  }
   if (field === "count") {
     const formation = recommendFormation(unit.count || 1);
     unit.columns = formation.columns;
     unit.rows = formation.rows;
   }
+  unit.baseShape = normalizeStorageBaseShape(unit.baseShape, unit.baseSize, unit.baseDepth);
+  if ((field === "baseShape" || field === "baseSize") && shapeLocksDepth(unit.baseShape)) unit.baseDepth = unit.baseSize;
   renderStorageRecommendations();
-});
+  return true;
+}
+document.getElementById("storageResults").addEventListener("input", handleStorageUnitChange);
+document.getElementById("storageResults").addEventListener("change", handleStorageUnitChange);
 document.getElementById("storageResults").addEventListener("click", (event) => {
   const removeId = event.target.dataset.storageRemove;
   if (!removeId) return;
