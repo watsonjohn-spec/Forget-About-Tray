@@ -25,12 +25,15 @@ function normalizeParameters(input = {}) {
   if (!items.length) throw new Error("Add at least one makeup item before exporting.");
   return {
     items,
+    layoutMode: input.layoutMode === "staircase" ? "staircase" : "caddy",
     columns: Math.round(numberInRange(input.columns ?? 3, 1, 6)),
+    maxSpineLength: numberInRange(input.maxSpineLength ?? 220, 100, 400),
     gap: numberInRange(input.gap ?? 6, 2, 30),
     edgeMargin: numberInRange(input.edgeMargin ?? 8, 3, 30),
     baseThickness: numberInRange(input.baseThickness ?? 3, 1.2, 12),
     wallThickness: numberInRange(input.wallThickness ?? 2, 1, 6),
-    holderHeight: numberInRange(input.holderHeight ?? 18, 5, 60),
+    holderHeight: numberInRange(input.holderHeight ?? 18, 5, 220),
+    stepRise: numberInRange(input.stepRise ?? 22, 10, 60),
     handleEnabled: Boolean(input.handleEnabled),
     handleHeight: numberInRange(input.handleHeight ?? 95, 45, 180),
     handleWidth: numberInRange(input.handleWidth ?? 70, 35, 180),
@@ -42,55 +45,72 @@ function normalizeParameters(input = {}) {
 }
 
 function itemLayout(config) {
-  const rowCount = Math.ceil(config.items.length / config.columns);
-  const columnWidths = Array.from({ length: config.columns }, () => 0);
-  const rowDepths = Array.from({ length: rowCount }, () => 0);
-  config.items.forEach((item, index) => {
-    const column = index % config.columns;
-    const row = Math.floor(index / config.columns);
-    columnWidths[column] = Math.max(columnWidths[column], item.width + item.clearance * 2);
-    rowDepths[row] = Math.max(rowDepths[row], item.depth + item.clearance * 2);
+  const prepared = config.items.map((item) => ({ ...item, slotWidth: item.width + item.clearance * 2, slotDepth: item.depth + item.clearance * 2 }));
+  if (config.layoutMode === "staircase") {
+    const rows = [];
+    prepared.forEach((item) => {
+      let row = rows.at(-1);
+      const used = row?.reduce((sum, candidate) => sum + candidate.slotWidth, 0) + Math.max(0, (row?.length || 0) - 1) * config.gap;
+      if (!row || used + item.slotWidth + config.gap > config.maxSpineLength) {
+        row = [];
+        rows.push(row);
+      }
+      row.push(item);
+    });
+    const rowDepths = rows.map((row) => Math.max(...row.map((item) => item.slotDepth)));
+    const outerWidth = Math.max(...rows.map((row) => row.reduce((sum, item) => sum + item.slotWidth, 0) + (row.length - 1) * config.gap)) + config.edgeMargin * 2;
+    const outerDepth = rowDepths.reduce((sum, depth) => sum + depth, 0) + Math.max(0, rows.length - 1) * config.gap + config.edgeMargin * 2;
+    const positions = [];
+    let y = config.edgeMargin;
+    rows.forEach((row, rowIndex) => {
+      let x = config.edgeMargin;
+      row.forEach((item, column) => {
+        positions.push({ ...item, x, y, z: rowIndex * config.stepRise, row: rowIndex, column });
+        x += item.slotWidth + config.gap;
+      });
+      y += rowDepths[rowIndex] + config.gap;
+    });
+    return { positions, outerWidth, outerDepth, rowDepths };
+  }
+  const sides = [[], []];
+  prepared.forEach((item, index) => sides[index % 2].push(item));
+  const sideDepths = sides.map((side) => Math.max(0, ...side.map((item) => item.slotDepth)));
+  const spineWidth = Math.max(config.wallThickness * 3, 8);
+  const sideLengths = sides.map((side) => side.reduce((sum, item) => sum + item.slotWidth, 0) + Math.max(0, side.length - 1) * config.gap);
+  const outerWidth = Math.max(...sideLengths, 60) + config.edgeMargin * 2;
+  const outerDepth = sideDepths[0] + spineWidth + sideDepths[1] + config.edgeMargin * 2;
+  const positions = [];
+  sides.forEach((side, sideIndex) => {
+    let x = config.edgeMargin;
+    side.forEach((item, column) => {
+      const y = sideIndex === 0 ? config.edgeMargin + sideDepths[0] - item.slotDepth : config.edgeMargin + sideDepths[0] + spineWidth;
+      positions.push({ ...item, x, y, z: 0, row: sideIndex, column });
+      x += item.slotWidth + config.gap;
+    });
   });
-  const columnStarts = [];
-  const rowStarts = [];
-  let cursor = config.edgeMargin;
-  columnWidths.forEach((width) => {
-    columnStarts.push(cursor);
-    cursor += width + config.gap;
-  });
-  const outerWidth = cursor - config.gap + config.edgeMargin;
-  cursor = config.edgeMargin;
-  rowDepths.forEach((depth) => {
-    rowStarts.push(cursor);
-    cursor += depth + config.gap;
-  });
-  const outerDepth = cursor - config.gap + config.edgeMargin;
-  const positions = config.items.map((item, index) => {
-    const column = index % config.columns;
-    const row = Math.floor(index / config.columns);
-    const slotWidth = item.width + item.clearance * 2;
-    const slotDepth = item.depth + item.clearance * 2;
-    return {
-      ...item,
-      x: columnStarts[column] + (columnWidths[column] - slotWidth) / 2,
-      y: rowStarts[row] + (rowDepths[row] - slotDepth) / 2,
-      slotWidth,
-      slotDepth,
-      row,
-      column
-    };
-  });
-  return { positions, outerWidth, outerDepth };
+  return { positions, outerWidth, outerDepth, spineWidth, spineY: config.edgeMargin + sideDepths[0] };
 }
 
 function buildGeometry(parameters) {
   const config = normalizeParameters(parameters);
-  const { positions, outerWidth, outerDepth } = itemLayout(config);
+  const layout = itemLayout(config);
+  const { positions, outerWidth, outerDepth } = layout;
   const boxes = [{ x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: config.baseThickness }];
-  const z = config.baseThickness;
+  if (config.layoutMode === "staircase") {
+    let y = config.edgeMargin;
+    layout.rowDepths.forEach((depth, index) => {
+      const height = config.baseThickness + index * config.stepRise;
+      boxes.push({ x: 0, y, z: 0, w: outerWidth, d: depth, h: height });
+      boxes.push({ x: 0, y: y + depth - config.wallThickness, z: height, w: outerWidth, d: config.wallThickness, h: config.stepRise + config.wallThickness });
+      y += depth + config.gap;
+    });
+  } else {
+    boxes.push({ x: 0, y: layout.spineY, z: config.baseThickness, w: outerWidth, d: layout.spineWidth, h: config.wallThickness });
+  }
   positions.forEach((position) => {
     const t = config.wallThickness;
-    const h = Math.min(config.holderHeight, Math.max(5, position.height * 0.45));
+    const h = Math.max(8, position.height * 2 / 3);
+    const z = config.baseThickness + Number(position.z || 0);
     boxes.push(
       { x: position.x - t, y: position.y - t, z, w: position.slotWidth + t * 2, d: t, h },
       { x: position.x - t, y: position.y + position.slotDepth, z, w: position.slotWidth + t * 2, d: t, h },
@@ -98,19 +118,20 @@ function buildGeometry(parameters) {
       { x: position.x + position.slotWidth, y: position.y, z, w: t, d: position.slotDepth, h }
     );
   });
-  if (config.handleEnabled) {
+  if (config.handleEnabled && config.layoutMode === "caddy") {
     const t = Math.max(config.wallThickness * 2, 4);
     const handleWidth = Math.min(config.handleWidth, Math.max(35, outerWidth - config.edgeMargin * 2));
     const startX = (outerWidth - handleWidth) / 2;
-    const handleY = (outerDepth - t) / 2;
+    const handleY = layout.spineY + (layout.spineWidth - t) / 2;
     boxes.push(
-      { x: startX, y: handleY, z, w: t, d: t, h: config.handleHeight },
-      { x: startX + handleWidth - t, y: handleY, z, w: t, d: t, h: config.handleHeight },
-      { x: startX, y: handleY, z: config.handleHeight, w: handleWidth, d: t, h: t }
+      { x: startX, y: handleY, z: config.baseThickness, w: t, d: t, h: config.handleHeight },
+      { x: startX + handleWidth - t, y: handleY, z: config.baseThickness, w: t, d: t, h: config.handleHeight },
+      { x: startX, y: handleY, z: config.baseThickness + config.handleHeight, w: handleWidth, d: t, h: t }
     );
   }
   const materialCm3 = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
-  const height = Math.max(config.baseThickness + config.holderHeight, config.handleEnabled ? config.handleHeight + Math.max(config.wallThickness * 2, 4) : 0);
+  const holderTop = Math.max(...positions.map((position) => config.baseThickness + Number(position.z || 0) + position.height * 2 / 3));
+  const height = Math.max(holderTop, config.handleEnabled && config.layoutMode === "caddy" ? config.baseThickness + config.handleHeight + Math.max(config.wallThickness * 2, 4) : 0);
   return { config, boxes, positions, outerWidth, outerDepth, height, materialCm3 };
 }
 
@@ -150,7 +171,7 @@ function safeFileName(parameters, name) {
 
 function describe(parameters) {
   const config = normalizeParameters(parameters);
-  return `${config.items.length}-slot makeup caddy${config.handleEnabled ? " with centre carrying handle" : ""}`;
+  return `${config.items.length}-slot ${config.layoutMode === "staircase" ? "freestanding staircase case" : "makeup caddy"}${config.handleEnabled && config.layoutMode === "caddy" ? " with centre carrying handle" : ""}`;
 }
 
 export const makeupCaddyGenerator = {

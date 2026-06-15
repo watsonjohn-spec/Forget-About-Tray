@@ -99,6 +99,7 @@ button { cursor: pointer; }
 .top-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
 .top-action-button { min-height: 40px; color: #f7f8ed; border-color: #314a35; background: var(--forest); }
 .top-action-button:hover { background: #527054; }
+.single-heading { display:flex; align-items:end; justify-content:space-between; gap:18px; }
 .account-menu-wrap { position: relative; }
 .account-menu-button { display: flex; align-items: center; gap: 7px; }
 .account-menu-button span { color: var(--muted); font-size: 9px; }
@@ -304,6 +305,8 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .match-pill { margin-top: 8px; display: inline-block; padding: 4px 7px; border-radius: 5px; color: #51603f; background: #e6ead9; font-size: 8px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .match-pill.unknown { color: #8b6529; background: #fff2d9; }
 .army-unit-fields { display: grid; grid-template-columns: repeat(4, 72px); gap: 7px; }
+.army-bases-field { display:flex; align-items:center; justify-content:center; padding:6px; border:1px solid var(--line); border-radius:6px; background:#fbfbf7; }
+.army-bases-field input { width:18px; height:18px; }
 .army-mini-field { display: grid; gap: 4px; color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .army-mini-field input { min-width: 0; width: 100%; height: 34px; padding: 0 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: #fbfbf7; font-size: 11px; font-weight: 750; }
 .army-unit-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 7px; }
@@ -405,6 +408,12 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .print-order dt { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .print-order dd { margin: 0; font-size: 10px; font-weight: 800; }
 .print-order small { color: var(--muted); font-size: 9px; }
+.action-card p, .action-card small, .button-large small { color: #34483a; }
+.preview-stage { position:relative; touch-action:none; }
+#trayPreview { cursor:grab; touch-action:none; }
+#trayPreview:active { cursor:grabbing; }
+.preview-angle-controls { position:absolute; top:10px; right:10px; z-index:3; display:flex; gap:4px; }
+.preview-angle-controls button { min-height:30px; padding:0 9px; border:1px solid var(--line); border-radius:6px; color:var(--forest); background:rgba(255,255,255,.88); font-size:9px; font-weight:800; }
 .provider-filters { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; text-align: left; }
 .provider-filters label { display: grid; gap: 4px; color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
 .provider-filters select { min-width: 0; width: 100%; height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: white; }
@@ -503,6 +512,7 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
   .army-unit-preview { max-width: 230px; margin: 0 auto; }
   .army-unit-name h4 { font-size: 20px; }
   .army-unit-fields { grid-template-columns: repeat(4, 1fr); }
+  .single-heading { align-items:start; flex-direction:column; }
   .army-unit-actions { grid-template-columns: repeat(3, 1fr); }
   .army-edit-bar { grid-template-columns: 1fr 1fr; }
   .army-edit-bar div { grid-column: 1 / -1; }

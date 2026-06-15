@@ -94,3 +94,29 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(app, /Confirm delivery and complete order/);
   assert.match(app, /releases the printer payout/);
 });
+
+test("UAT2 previews, explicit login, factory workflow, and makeup account tools are wired", async () => {
+  const [trayHtml, trayApp, account, factoryHtml, factoryApp, makeupHtml, makeupApp] = await Promise.all([
+    readFile(new URL("index.html", root), "utf8"),
+    readFile(new URL("app.js", root), "utf8"),
+    readFile(new URL("account.js", root), "utf8"),
+    readFile(new URL("factory/index.html", root), "utf8"),
+    readFile(new URL("factory/factory.js", root), "utf8"),
+    readFile(new URL("makeup/index.html", root), "utf8"),
+    readFile(new URL("makeup/makeup.js", root), "utf8")
+  ]);
+  assert.match(account, /forget-about-active-session/);
+  assert.match(account, /sessionStorage\.getItem\(activeSessionKey\)/);
+  assert.match(trayHtml, /data-preview-turn="-1"/);
+  assert.match(trayApp, /filamentColours\.filter\(\(colour\) => colour\.material === "pla"\)/);
+  assert.match(trayApp, /data-army-field="includeBases"/);
+  assert.match(trayApp, /checkout\/print\/verify/);
+  assert.match(factoryHtml, /id="capabilityGramsPerHour"/);
+  assert.match(factoryHtml, /id="capabilityPostage"/);
+  assert.match(factoryApp, /status !== "pending_payment"/);
+  assert.match(factoryApp, /data-job-label/);
+  assert.match(makeupHtml, /data-layout-mode="staircase"/);
+  assert.match(makeupHtml, /data-account-tab="orders"/);
+  assert.match(makeupApp, /data-complete-print-job/);
+  assert.match(makeupApp, /checkout\/print\/verify/);
+});

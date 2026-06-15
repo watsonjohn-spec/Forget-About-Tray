@@ -10,5 +10,17 @@ window.makeupCatalogue = [
   { id: "benefit-hoola", brand: "Benefit", category: "Bronzer", name: "Hoola Bronzer", width: 72, depth: 72, height: 24 },
   { id: "generic-mascara", brand: "Generic", category: "Mascara", name: "Mascara Tube", width: 20, depth: 20, height: 125 },
   { id: "generic-brush-pot", brand: "Generic", category: "Brushes", name: "Brush Pot", width: 70, depth: 70, height: 110 },
-  { id: "generic-palette", brand: "Generic", category: "Palette", name: "Eyeshadow Palette", width: 150, depth: 90, height: 16 }
+  { id: "generic-palette", brand: "Generic", category: "Palette", name: "Eyeshadow Palette", width: 150, depth: 90, height: 16 },
+  { id: "generic-foundation-round", brand: "Generic", category: "Foundation", name: "Round Foundation Bottle", width: 38, depth: 38, height: 110 },
+  { id: "generic-foundation-square", brand: "Generic", category: "Foundation", name: "Square Foundation Bottle", width: 42, depth: 32, height: 110 },
+  { id: "generic-lipstick", brand: "Generic", category: "Lipstick", name: "Lipstick Tube", width: 24, depth: 24, height: 80 },
+  { id: "generic-lip-gloss", brand: "Generic", category: "Lip gloss", name: "Lip Gloss Tube", width: 22, depth: 22, height: 115 },
+  { id: "generic-concealer", brand: "Generic", category: "Concealer", name: "Concealer Tube", width: 25, depth: 25, height: 115 },
+  { id: "generic-eyeliner", brand: "Generic", category: "Eyeliner", name: "Eyeliner Pencil", width: 12, depth: 12, height: 145 },
+  { id: "generic-brow-pencil", brand: "Generic", category: "Brows", name: "Brow Pencil", width: 12, depth: 12, height: 145 },
+  { id: "generic-perfume", brand: "Generic", category: "Fragrance", name: "Perfume Bottle", width: 60, depth: 35, height: 105 },
+  { id: "generic-nail-polish", brand: "Generic", category: "Nails", name: "Nail Polish Bottle", width: 32, depth: 32, height: 75 },
+  { id: "generic-compact-round", brand: "Generic", category: "Powder", name: "Round Compact", width: 78, depth: 78, height: 20 },
+  { id: "generic-sponge", brand: "Generic", category: "Tools", name: "Makeup Sponge", width: 45, depth: 45, height: 65 },
+  { id: "generic-brush-single", brand: "Generic", category: "Brushes", name: "Single Brush", width: 18, depth: 18, height: 190 }
 ];

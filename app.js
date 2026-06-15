@@ -37,11 +37,7 @@ const filamentColours = [
 ].map(([material, name, hex]) => ({ material, name, hex, key: `${material}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}` }));
 const inputs = Object.fromEntries([...numericKeys, ...checkboxKeys].map((key) => [key, document.getElementById(key)]));
 const filamentColourInput = document.getElementById("filamentColour");
-filamentColourInput.innerHTML = ["pla", "petg"].map((material) => `
-  <optgroup label="Bambu ${material.toUpperCase()}">
-    ${filamentColours.filter((colour) => colour.material === material).map((colour) => `<option value="${colour.key}" ${colour.key === defaults.filamentKey ? "selected" : ""}>${colour.name}</option>`).join("")}
-  </optgroup>
-`).join("");
+filamentColourInput.innerHTML = filamentColours.filter((colour) => colour.material === "pla").map((colour) => `<option value="${colour.key}" ${colour.key === defaults.filamentKey ? "selected" : ""}>${colour.name}</option>`).join("");
 let state = { ...defaults };
 let armyRecommendations = [];
 let activeArmyRecommendationId = "";
@@ -60,6 +56,9 @@ let catalogueContext = "army";
 let accountOrders = [];
 let marketplaceQuotes = [];
 let selectedMarketplaceQuoteId = "";
+let previewYaw = -Math.PI / 4;
+let previewPitch = Math.PI / 5;
+let previewDrag = null;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -200,15 +199,25 @@ function shadeHex(hex, amount) {
 
 function drawPreview(metrics) {
   const svg = document.getElementById("trayPreview");
-  const maxDimension = Math.max(metrics.outerWidth, metrics.outerDepth);
+  const basesDepth = state.includeBases ? 5 + state.rows * state.baseDepth + (state.rows - 1) * state.gap : 0;
+  const previewDepth = metrics.outerDepth + basesDepth;
+  const maxDimension = Math.max(metrics.outerWidth, previewDepth);
   const scale = 410 / maxDimension;
-  const originX = 370;
-  const originY = 120;
-  const heightScale = 7;
-  const project = (x, y, z = 0) => [
-    originX + (x - y) * scale * 0.78,
-    originY + (x + y) * scale * 0.38 - z * heightScale
-  ];
+  const originX = 380;
+  const originY = 245;
+  const heightScale = Math.max(4, scale * 1.8);
+  const centerX = metrics.outerWidth / 2;
+  const centerY = previewDepth / 2;
+  const project = (x, y, z = 0) => {
+    const dx = x - centerX;
+    const dy = y - centerY;
+    const rotatedX = Math.cos(previewYaw) * dx - Math.sin(previewYaw) * dy;
+    const rotatedY = Math.sin(previewYaw) * dx + Math.cos(previewYaw) * dy;
+    return [
+      originX + rotatedX * scale,
+      originY + rotatedY * scale * Math.sin(previewPitch) - z * heightScale * Math.cos(previewPitch)
+    ];
+  };
   const points = (values) => values.map(([x, y, z]) => project(x, y, z).join(",")).join(" ");
   const w = metrics.outerWidth;
   const d = metrics.outerDepth;
@@ -244,12 +253,15 @@ function drawPreview(metrics) {
   if (state.includeBases) {
     for (let column = 0; column < state.columns; column += 1) {
       for (let row = 0; row < state.rows; row += 1) {
-        const x1 = wall + state.clearance + column * (state.baseSize + state.gap);
-        const y1 = wall + state.clearance + row * (state.baseDepth + state.gap);
+        const x1 = column * (state.baseSize + state.gap);
+        const y1 = d + 5 + row * (state.baseDepth + state.gap);
         const x2 = x1 + state.baseSize;
         const y2 = y1 + state.baseDepth;
-        const z = base + 0.35;
-        markup += `<polygon points="${points([[x1,y1,z],[x2,y1,z],[x2,y2,z],[x1,y2,z]])}" fill="${filamentTop}" stroke="${filamentDark}" stroke-width=".7" opacity=".76"/>`;
+        markup += `
+          <polygon points="${points([[x1,y2,0],[x2,y2,0],[x2,y2,base],[x1,y2,base]])}" fill="${filamentSide}" stroke="${filamentDark}" stroke-width=".7"/>
+          <polygon points="${points([[x2,y1,0],[x2,y2,0],[x2,y2,base],[x2,y1,base]])}" fill="${filamentDark}" stroke="${filamentDark}" stroke-width=".7"/>
+          <polygon points="${points([[x1,y1,base],[x2,y1,base],[x2,y2,base],[x1,y2,base]])}" fill="${filamentTop}" stroke="${filamentDark}" stroke-width=".7"/>
+        `;
       }
     }
   }
@@ -468,7 +480,7 @@ function populateProviderFilters() {
   const colour = document.getElementById("providerColourFilter");
   const current = colour.value;
   const options = [...new Map(marketplaceQuotes.map((quote) => [quote.colourKey, quote])).values()];
-  colour.innerHTML = `<option value="">All colours</option>${options.map((quote) => `<option value="${escapeHtml(quote.colourKey)}">${escapeHtml(quote.colourName)} · ${escapeHtml(quote.material.toUpperCase())}</option>`).join("")}`;
+  colour.innerHTML = `<option value="">All colours</option>${options.map((quote) => `<option value="${escapeHtml(quote.colourKey)}">${escapeHtml(quote.colourName)}</option>`).join("")}`;
   colour.value = options.some((quote) => quote.colourKey === current) ? current : "";
 }
 
@@ -497,9 +509,11 @@ function renderProviderQuotes() {
       <span class="provider-price"><strong>${formatMoney(quote.totalIncVatPence, quote.currency)}</strong><small>all in</small></span>
       <details>
         <summary>Price breakdown</summary>
-        <span>Production ${formatMoney(quote.productionPricePence, quote.currency)}</span>
+        <span>Material (${quote.estimatedWeightGrams}g) ${formatMoney(quote.materialCostPence, quote.currency)}</span>
+        <span>Printer fee ${formatMoney(quote.printerFeePence, quote.currency)}</span>
         <span>Postage ${formatMoney(quote.postagePence, quote.currency)}</span>
-        <span>Platform service ${formatMoney(quote.platformFeePence, quote.currency)}</span>
+        <span>Forget About commission ${formatMoney(quote.commissionPence, quote.currency)}</span>
+        <span>Platform fee ${formatMoney(quote.platformFeePence, quote.currency)}</span>
         <span>VAT ${formatMoney(quote.vatAmountPence, quote.currency)}</span>
       </details>
       <button type="button" data-provider-quote="${escapeHtml(quote.id)}">${quote.id === selectedMarketplaceQuoteId ? "Selected" : "Select printer"}</button>
@@ -583,6 +597,17 @@ async function verifyUnlockPurchase(sessionId) {
   }
 }
 
+async function verifyPrintPurchase(sessionId) {
+  try {
+    const response = await authorizedFetch("/api/checkout/print/verify", { method: "POST", body: JSON.stringify({ sessionId }) });
+    const result = await response.json();
+    if (!response.ok || !result.paid) throw new Error(result.error || "Print payment could not be confirmed.");
+    showToast("Print order confirmed and sent to the factory.");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 function localPresets() {
   try {
     return JSON.parse(localStorage.getItem("movement-tray-presets")) || [];
@@ -608,7 +633,9 @@ async function persistPreset(name, config, clientRef = `${Date.now()}`) {
 
 async function savePreset() {
   try {
-  const name = `${state.columns} × ${state.rows} · ${state.baseSize}mm`;
+    const suggested = `${state.columns} × ${state.rows} · ${state.baseSize}mm`;
+    const name = window.prompt("Name this saved preset", suggested)?.trim();
+    if (!name) return;
     await persistPreset(name, { ...state });
     renderPresets();
     showToast(`${name} preset saved`);
@@ -946,14 +973,18 @@ function recommendationConfig(recommendation) {
     rows: recommendation.rows,
     baseSize: recommendation.baseSize,
     baseDepth: recommendation.baseDepth,
-    baseShape: recommendation.baseShape || (recommendation.baseSize === recommendation.baseDepth ? "square" : "rectangle")
+    baseShape: recommendation.baseShape || (recommendation.baseSize === recommendation.baseDepth ? "square" : "rectangle"),
+    includeBases: Boolean(recommendation.includeBases ?? recommendation.config?.includeBases)
   };
 }
 
 async function saveRecommendation(recommendation) {
   const config = recommendationConfig(recommendation);
   try {
-    await persistPreset(`${recommendation.name} - ${recommendation.columns} x ${recommendation.rows}`, config);
+    const suggested = `${recommendation.name} - ${recommendation.columns} x ${recommendation.rows}`;
+    const name = window.prompt("Name this saved preset", suggested)?.trim();
+    if (!name) return;
+    await persistPreset(name, config);
     renderPresets();
     showToast(`${recommendation.name} preset saved`);
   } catch (error) {
@@ -1069,6 +1100,7 @@ function renderArmyRecommendations() {
           <label class="army-mini-field">Rows<input data-army-field="rows" type="number" min="1" max="12" value="${item.rows}"></label>
           <label class="army-mini-field">Base W<input data-army-field="baseSize" type="number" min="10" max="150" value="${item.baseSize || ""}" placeholder="mm"></label>
           <label class="army-mini-field">Base D<input data-army-field="baseDepth" type="number" min="10" max="150" value="${item.baseDepth || ""}" placeholder="mm"></label>
+          <label class="army-mini-field army-bases-field">Print bases<input data-army-field="includeBases" type="checkbox" ${recommendationConfig(item).includeBases ? "checked" : ""}></label>
         </div>
         <div class="army-unit-actions">
           <button type="button" data-army-action="load" ${ready ? "" : "disabled"}>Edit tray</button>
@@ -1130,7 +1162,10 @@ async function saveFromHeader() {
   if (!recommendation || recommendation.baseSize <= 0 || recommendation.baseDepth <= 0) return showToast("Select a tray with a confirmed base size first");
   if (armyEditingId === recommendation.id) {
     readState();
-    await persistPreset(`${recommendation.name} - ${state.columns} x ${state.rows}`, { ...state });
+    const suggested = `${recommendation.name} - ${state.columns} x ${state.rows}`;
+    const name = window.prompt("Name this saved preset", suggested)?.trim();
+    if (!name) return;
+    await persistPreset(name, { ...state });
     renderPresets();
     return showToast(`${recommendation.name} preset saved`);
   }
@@ -1249,7 +1284,7 @@ function showOrderDetail(orderId) {
 async function processCheckoutResult() {
   const checkoutParameters = new URLSearchParams(window.location.search);
   const checkoutResult = checkoutParameters.get("checkout");
-  if (checkoutResult === "success") showToast("Checkout completed. Payment confirmation is pending.");
+  if (checkoutResult === "success") await verifyPrintPurchase(checkoutParameters.get("session_id"));
   if (checkoutResult === "cancelled") showToast("Stripe Checkout was cancelled.");
   if (checkoutResult === "unlock-success") await verifyUnlockPurchase(checkoutParameters.get("session_id"));
   if (checkoutResult === "unlock-cancelled") showToast("Unlimited STL unlock was cancelled.");
@@ -1299,6 +1334,27 @@ async function initializeAccount() {
 
 Object.values(inputs).forEach((input) => input.addEventListener("input", render));
 filamentColourInput.addEventListener("change", render);
+document.querySelectorAll("[data-preview-turn]").forEach((button) => button.addEventListener("click", () => {
+  previewYaw += Number(button.dataset.previewTurn) * Math.PI / 8;
+  render();
+}));
+document.querySelector("[data-preview-reset]").addEventListener("click", () => {
+  previewYaw = -Math.PI / 4;
+  previewPitch = Math.PI / 5;
+  render();
+});
+document.getElementById("trayPreview").addEventListener("pointerdown", (event) => {
+  previewDrag = { x: event.clientX, y: event.clientY, yaw: previewYaw, pitch: previewPitch };
+  event.currentTarget.setPointerCapture(event.pointerId);
+});
+document.getElementById("trayPreview").addEventListener("pointermove", (event) => {
+  if (!previewDrag) return;
+  previewYaw = previewDrag.yaw + (event.clientX - previewDrag.x) * 0.012;
+  previewPitch = clamp(previewDrag.pitch - (event.clientY - previewDrag.y) * 0.008, 0.12, 1.35);
+  render();
+});
+document.getElementById("trayPreview").addEventListener("pointerup", () => { previewDrag = null; });
+document.getElementById("trayPreview").addEventListener("pointercancel", () => { previewDrag = null; });
 document.querySelectorAll("[data-base-shape]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("[data-base-shape]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
@@ -1644,7 +1700,7 @@ document.getElementById("armyResults").addEventListener("input", (event) => {
   if (!field || !card) return;
   const recommendation = armyRecommendations.find((item) => item.id === card.dataset.recommendation);
   if (!recommendation) return;
-  recommendation[field] = Number(event.target.value) || 0;
+  recommendation[field] = field === "includeBases" ? event.target.checked : Number(event.target.value) || 0;
   if (field === "baseSize" || field === "baseDepth") {
     recommendation.baseShape = recommendation.baseSize === recommendation.baseDepth ? "square" : "rectangle";
   }

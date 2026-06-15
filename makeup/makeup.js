@@ -8,7 +8,7 @@ const filamentColours = [
 ];
 const defaults = {
   items: catalogue.slice(0, 3).map((item, index) => ({ ...item, id: `${item.id}-${index}`, clearance: 1.5 })),
-  columns: 3, gap: 6, edgeMargin: 8, baseThickness: 3, wallThickness: 2, holderHeight: 18,
+  layoutMode: "caddy", maxSpineLength: 220, gap: 6, edgeMargin: 8, baseThickness: 3, wallThickness: 2, stepRise: 22,
   handleEnabled: false, handleHeight: 95, handleWidth: 70,
   filamentKey: "pla-rose-gold", filamentMaterial: "pla", filamentName: "Rose Gold", filamentHex: "#b76e79"
 };
@@ -18,6 +18,10 @@ let marketplaceQuotes = [];
 let selectedQuoteId = "";
 let exportStatus = { freeExportUsed: false, unlimitedExports: false };
 let toastTimer;
+let accountOrders = [];
+let previewYaw = -Math.PI / 4;
+let previewPitch = Math.PI / 5;
+let previewDrag = null;
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]);
@@ -47,7 +51,7 @@ function money(pence, currency = "gbp") {
 }
 
 function readConstruction() {
-  ["columns", "gap", "edgeMargin", "baseThickness", "wallThickness", "holderHeight", "handleHeight", "handleWidth"].forEach((key) => {
+  ["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "handleHeight", "handleWidth"].forEach((key) => {
     state[key] = Number(document.getElementById(key).value);
   });
   state.handleEnabled = document.getElementById("handleEnabled").checked;
@@ -59,51 +63,99 @@ function readConstruction() {
 }
 
 function writeConstruction() {
-  ["columns", "gap", "edgeMargin", "baseThickness", "wallThickness", "holderHeight", "handleHeight", "handleWidth"].forEach((key) => {
+  ["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "handleHeight", "handleWidth"].forEach((key) => {
     document.getElementById(key).value = state[key];
   });
   document.getElementById("handleEnabled").checked = state.handleEnabled;
-  document.getElementById("handleFields").hidden = !state.handleEnabled;
+  document.getElementById("handleFields").hidden = !state.handleEnabled || state.layoutMode !== "caddy";
+  document.getElementById("handleEnabled").closest(".switch").hidden = state.layoutMode !== "caddy";
+  document.querySelectorAll("[data-layout-mode]").forEach((button) => button.classList.toggle("active", button.dataset.layoutMode === state.layoutMode));
   document.getElementById("filamentColour").value = state.filamentKey;
 }
 
 function geometry() {
   readConstruction();
-  if (!state.items.length) return { positions: [], outerWidth: 100, outerDepth: 70, height: state.baseThickness, materialCm3: 0 };
-  const rowCount = Math.ceil(state.items.length / state.columns);
-  const columnWidths = Array.from({ length: state.columns }, () => 0);
-  const rowDepths = Array.from({ length: rowCount }, () => 0);
-  state.items.forEach((item, index) => {
-    const column = index % state.columns;
-    const row = Math.floor(index / state.columns);
-    columnWidths[column] = Math.max(columnWidths[column], item.width + item.clearance * 2);
-    rowDepths[row] = Math.max(rowDepths[row], item.depth + item.clearance * 2);
+  if (!state.items.length) return { positions: [], boxes: [], outerWidth: 100, outerDepth: 70, height: state.baseThickness, materialCm3: 0 };
+  const items = state.items.map((item) => ({ ...item, slotWidth: item.width + item.clearance * 2, slotDepth: item.depth + item.clearance * 2 }));
+  let positions = [];
+  let outerWidth;
+  let outerDepth;
+  let rowDepths = [];
+  let spineY = 0;
+  let spineWidth = Math.max(state.wallThickness * 3, 8);
+  if (state.layoutMode === "staircase") {
+    const rows = [];
+    items.forEach((item) => {
+      let row = rows.at(-1);
+      const used = row?.reduce((sum, candidate) => sum + candidate.slotWidth, 0) + Math.max(0, (row?.length || 0) - 1) * state.gap;
+      if (!row || used + item.slotWidth + state.gap > state.maxSpineLength) { row = []; rows.push(row); }
+      row.push(item);
+    });
+    rowDepths = rows.map((row) => Math.max(...row.map((item) => item.slotDepth)));
+    outerWidth = Math.max(...rows.map((row) => row.reduce((sum, item) => sum + item.slotWidth, 0) + (row.length - 1) * state.gap)) + state.edgeMargin * 2;
+    outerDepth = rowDepths.reduce((sum, depth) => sum + depth, 0) + (rows.length - 1) * state.gap + state.edgeMargin * 2;
+    let y = state.edgeMargin;
+    rows.forEach((row, rowIndex) => {
+      let x = state.edgeMargin;
+      row.forEach((item, column) => { positions.push({ ...item, x, y, z: rowIndex * state.stepRise, row: rowIndex, column }); x += item.slotWidth + state.gap; });
+      y += rowDepths[rowIndex] + state.gap;
+    });
+  } else {
+    const sides = [[], []];
+    items.forEach((item, index) => sides[index % 2].push(item));
+    const sideDepths = sides.map((side) => Math.max(0, ...side.map((item) => item.slotDepth)));
+    const sideLengths = sides.map((side) => side.reduce((sum, item) => sum + item.slotWidth, 0) + Math.max(0, side.length - 1) * state.gap);
+    outerWidth = Math.max(...sideLengths, 60) + state.edgeMargin * 2;
+    outerDepth = sideDepths[0] + spineWidth + sideDepths[1] + state.edgeMargin * 2;
+    spineY = state.edgeMargin + sideDepths[0];
+    sides.forEach((side, sideIndex) => {
+      let x = state.edgeMargin;
+      side.forEach((item, column) => {
+        const y = sideIndex === 0 ? spineY - item.slotDepth : spineY + spineWidth;
+        positions.push({ ...item, x, y, z: 0, row: sideIndex, column });
+        x += item.slotWidth + state.gap;
+      });
+    });
+  }
+  const boxes = [{ x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: state.baseThickness, kind: "base" }];
+  if (state.layoutMode === "staircase") {
+    let y = state.edgeMargin;
+    rowDepths.forEach((depth, index) => {
+      const height = state.baseThickness + index * state.stepRise;
+      boxes.push({ x: 0, y, z: 0, w: outerWidth, d: depth, h: height, kind: "step" });
+      boxes.push({ x: 0, y: y + depth - state.wallThickness, z: height, w: outerWidth, d: state.wallThickness, h: state.stepRise + state.wallThickness, kind: "wall" });
+      y += depth + state.gap;
+    });
+  } else {
+    boxes.push({ x: 0, y: spineY, z: state.baseThickness, w: outerWidth, d: spineWidth, h: state.wallThickness, kind: "spine" });
+  }
+  positions.forEach((item) => {
+    const t = state.wallThickness;
+    const h = Math.max(8, item.height * 2 / 3);
+    const z = state.baseThickness + item.z;
+    boxes.push(
+      { x: item.x - t, y: item.y - t, z, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
+      { x: item.x - t, y: item.y + item.slotDepth, z, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
+      { x: item.x - t, y: item.y, z, w: t, d: item.slotDepth, h, kind: "wall" },
+      { x: item.x + item.slotWidth, y: item.y, z, w: t, d: item.slotDepth, h, kind: "wall" }
+    );
   });
-  const columnStarts = [];
-  const rowStarts = [];
-  let cursor = state.edgeMargin;
-  columnWidths.forEach((width) => { columnStarts.push(cursor); cursor += width + state.gap; });
-  const outerWidth = cursor - state.gap + state.edgeMargin;
-  cursor = state.edgeMargin;
-  rowDepths.forEach((depth) => { rowStarts.push(cursor); cursor += depth + state.gap; });
-  const outerDepth = cursor - state.gap + state.edgeMargin;
-  const positions = state.items.map((item, index) => {
-    const column = index % state.columns;
-    const row = Math.floor(index / state.columns);
-    const slotWidth = item.width + item.clearance * 2;
-    const slotDepth = item.depth + item.clearance * 2;
-    return { ...item, x: columnStarts[column] + (columnWidths[column] - slotWidth) / 2, y: rowStarts[row] + (rowDepths[row] - slotDepth) / 2, slotWidth, slotDepth };
-  });
-  const baseVolume = outerWidth * outerDepth * state.baseThickness;
-  const wallsVolume = positions.reduce((sum, item) => sum + (item.slotWidth * 2 + item.slotDepth * 2 + state.wallThickness * 4) * state.wallThickness * Math.min(state.holderHeight, item.height * .45), 0);
-  const handleVolume = state.handleEnabled ? (state.handleHeight * 2 + state.handleWidth) * Math.max(state.wallThickness * 2, 4) ** 2 : 0;
-  return { positions, outerWidth, outerDepth, height: Math.max(state.baseThickness + state.holderHeight, state.handleEnabled ? state.handleHeight + 4 : 0), materialCm3: (baseVolume + wallsVolume + handleVolume) / 1000 };
+  if (state.handleEnabled && state.layoutMode === "caddy") {
+    const t = Math.max(state.wallThickness * 2, 4);
+    const width = Math.min(state.handleWidth, outerWidth - state.edgeMargin * 2);
+    const x = (outerWidth - width) / 2;
+    const y = spineY + (spineWidth - t) / 2;
+    boxes.push({ x, y, z: state.baseThickness, w: t, d: t, h: state.handleHeight, kind: "handle" }, { x: x + width - t, y, z: state.baseThickness, w: t, d: t, h: state.handleHeight, kind: "handle" }, { x, y, z: state.baseThickness + state.handleHeight, w: width, d: t, h: t, kind: "handle" });
+  }
+  const materialCm3 = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
+  const height = Math.max(...boxes.map((box) => box.z + box.h));
+  return { positions, boxes, outerWidth, outerDepth, height, materialCm3 };
 }
 
 function renderSlotList() {
   document.getElementById("slotList").innerHTML = state.items.length ? state.items.map((item, index) => `
     <article class="slot-card" data-slot-index="${index}">
-      <div><strong>${index + 1}. ${escapeHtml(item.name)}</strong><small>${escapeHtml(item.brand)} · ${item.width} × ${item.depth} × ${item.height} mm</small></div>
+      <div><strong>${index + 1}. ${escapeHtml(item.name)}</strong><small>${item.width} × ${item.depth} × ${item.height} mm</small></div>
       <div class="slot-actions"><button data-move="-1" title="Move up">↑</button><button data-move="1" title="Move down">↓</button><button data-remove title="Remove">×</button></div>
     </article>
   `).join("") : `<div class="empty">Add a product to begin the caddy.</div>`;
@@ -112,20 +164,29 @@ function renderSlotList() {
 function renderPreview() {
   const metric = geometry();
   const svg = document.getElementById("caddyPreview");
-  const pad = 50;
-  const scale = Math.min((760 - pad * 2) / metric.outerWidth, (520 - pad * 2) / metric.outerDepth);
-  const offsetX = (760 - metric.outerWidth * scale) / 2;
-  const offsetY = (520 - metric.outerDepth * scale) / 2;
   const colour = state.filamentHex;
-  svg.innerHTML = `
-    <defs><filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-opacity=".18"/></filter></defs>
-    <rect x="${offsetX}" y="${offsetY}" width="${metric.outerWidth * scale}" height="${metric.outerDepth * scale}" rx="10" fill="${colour}" stroke="#75474e" stroke-width="2" filter="url(#shadow)"/>
-    ${metric.positions.map((item, index) => `<g>
-      <rect x="${offsetX + item.x * scale}" y="${offsetY + item.y * scale}" width="${item.slotWidth * scale}" height="${item.slotDepth * scale}" rx="6" fill="#fffaf8" fill-opacity=".72" stroke="#75474e" stroke-width="2"/>
-      <text x="${offsetX + (item.x + item.slotWidth / 2) * scale}" y="${offsetY + (item.y + item.slotDepth / 2) * scale}" dominant-baseline="middle" text-anchor="middle" fill="#38272b" font-size="${Math.max(8, Math.min(12, item.slotWidth * scale / 7))}" font-weight="800">${index + 1}</text>
-    </g>`).join("")}
-    ${state.handleEnabled ? `<g stroke="#75474e" stroke-width="8" stroke-linecap="round"><line x1="330" y1="265" x2="330" y2="145"/><line x1="430" y1="265" x2="430" y2="145"/><line x1="330" y1="145" x2="430" y2="145"/></g>` : ""}
-  `;
+  const scale = 390 / Math.max(metric.outerWidth, metric.outerDepth, metric.height);
+  const project = (x, y, z) => {
+    const dx = x - metric.outerWidth / 2;
+    const dy = y - metric.outerDepth / 2;
+    const rx = Math.cos(previewYaw) * dx - Math.sin(previewYaw) * dy;
+    const ry = Math.sin(previewYaw) * dx + Math.cos(previewYaw) * dy;
+    return [380 + rx * scale, 330 + ry * scale * Math.sin(previewPitch) - z * scale * Math.cos(previewPitch)];
+  };
+  const points = (vertices) => vertices.map((point) => project(...point).join(",")).join(" ");
+  const shade = (amount) => {
+    const number = Number.parseInt(colour.slice(1), 16);
+    const channel = (shift) => Math.max(0, Math.min(255, (number >> shift & 255) + amount)).toString(16).padStart(2, "0");
+    return `#${channel(16)}${channel(8)}${channel(0)}`;
+  };
+  svg.innerHTML = `<defs><filter id="shadow"><feDropShadow dx="0" dy="7" stdDeviation="6" flood-opacity=".18"/></filter></defs>${metric.boxes.map((box) => {
+    const x2 = box.x + box.w; const y2 = box.y + box.d; const z2 = box.z + box.h;
+    return `<g filter="url(#shadow)">
+      <polygon points="${points([[box.x,box.y,z2],[x2,box.y,z2],[x2,y2,z2],[box.x,y2,z2]])}" fill="${shade(28)}" stroke="${shade(-45)}" stroke-width=".8"/>
+      <polygon points="${points([[box.x,y2,box.z],[x2,y2,box.z],[x2,y2,z2],[box.x,y2,z2]])}" fill="${shade(-18)}" stroke="${shade(-50)}" stroke-width=".8"/>
+      <polygon points="${points([[x2,box.y,box.z],[x2,y2,box.z],[x2,y2,z2],[x2,box.y,z2]])}" fill="${shade(-38)}" stroke="${shade(-55)}" stroke-width=".8"/>
+    </g>`;
+  }).join("")}`;
   document.getElementById("outerSize").textContent = `${metric.outerWidth.toFixed(1)} × ${metric.outerDepth.toFixed(1)} mm`;
   document.getElementById("totalHeight").textContent = `${metric.height.toFixed(1)} mm`;
   document.getElementById("materialEstimate").textContent = `${(metric.materialCm3 * (state.filamentMaterial === "petg" ? 1.27 : 1.24)).toFixed(1)} g`;
@@ -229,7 +290,7 @@ async function loadMarketplace() {
   renderQuotes();
 }
 
-function renderQuotes() {
+function renderQuotesLegacy() {
   const colour = document.getElementById("providerColourFilter").value;
   const lead = Number(document.getElementById("providerLeadFilter").value || 0);
   const rating = Number(document.getElementById("providerRatingFilter").value || 0);
@@ -246,6 +307,24 @@ function renderQuotes() {
   document.getElementById("checkoutStatus").textContent = marketplaceQuotes.length ? "All prices include production, postage, platform service, and VAT." : "No matching providers are available yet.";
 }
 
+function renderQuotes() {
+  const colour = document.getElementById("providerColourFilter").value;
+  const lead = Number(document.getElementById("providerLeadFilter").value || 0);
+  const rating = Number(document.getElementById("providerRatingFilter").value || 0);
+  const filtered = marketplaceQuotes.filter((quote) => (!colour || quote.colourKey === colour) && (!lead || quote.leadTimeDays <= lead) && (!rating || quote.ratingAverage >= rating));
+  document.getElementById("providerQuotes").innerHTML = filtered.length ? filtered.map((quote) => `
+    <article class="provider-quote ${quote.id === selectedQuoteId ? "selected" : ""}">
+      <span class="colour-chip" style="background:${escapeHtml(quote.colourHex || "#ccc")}"></span>
+      <div><strong>${escapeHtml(quote.providerName)}</strong><small>${escapeHtml(quote.basedIn)} | ${quote.ratingCount ? `${quote.ratingAverage.toFixed(1)} / 5` : "New"} | ${quote.leadTimeDays} days</small><small>${escapeHtml(quote.colourName)} | ${Number(quote.estimatedWeightGrams || 0).toFixed(1)} g</small></div>
+      <strong>${money(quote.totalIncVatPence, quote.currency)}</strong>
+      <details class="quote-breakdown"><summary>Price breakdown</summary><p>Material ${money(quote.materialCostPence, quote.currency)} | Printer fee ${money(quote.printerFeePence, quote.currency)} | Postage ${money(quote.postagePence, quote.currency)} | Commission ${money(quote.commissionPence, quote.currency)} | Platform ${money(quote.platformFeePence, quote.currency)} | VAT ${money(quote.vatPence, quote.currency)}</p></details>
+      <button data-quote="${escapeHtml(quote.id)}">${quote.id === selectedQuoteId ? "Selected" : "Select printer"}</button>
+    </article>
+  `).join("") : `<div class="empty">No providers match these filters.</div>`;
+  document.getElementById("checkoutButton").disabled = !selectedQuoteId;
+  document.getElementById("checkoutStatus").textContent = marketplaceQuotes.length ? "All prices include production, postage, platform service, and VAT." : "No matching providers are available yet.";
+}
+
 async function beginCheckout() {
   const response = await api("/api/marketplace/checkout/session", { method: "POST", body: JSON.stringify({ quoteId: selectedQuoteId }) });
   const result = await response.json();
@@ -253,9 +332,37 @@ async function beginCheckout() {
   window.location.assign(result.url);
 }
 
-async function refreshOrders() {
+async function refreshOrdersLegacy() {
   const orders = await accountService.loadOrders();
   document.getElementById("ordersList").innerHTML = orders.length ? orders.map((order) => `<article class="order-card"><span>${escapeHtml(order.invoice_number || "Pending")} · ${escapeHtml(order.status)}</span><strong>${money(order.total_inc_vat, order.currency)}</strong></article>`).join("") : `<div class="empty">No Makeup orders yet.</div>`;
+}
+
+async function refreshOrders() {
+  accountOrders = await accountService.loadOrders();
+  document.getElementById("ordersList").innerHTML = accountOrders.length ? accountOrders.map((order) => `
+    <article class="order-card"><div><strong>${escapeHtml(order.invoice_number || "Pending invoice")}</strong><small>${escapeHtml(String(order.status || "pending").replaceAll("_", " "))}</small></div><strong>${money(order.total_inc_vat, order.currency)}</strong><button class="button secondary" data-order-detail="${escapeHtml(order.id)}" type="button">View details</button></article>
+  `).join("") : `<div class="empty">No Makeup orders yet.</div>`;
+  document.getElementById("orderDetail").innerHTML = "";
+}
+
+function showOrderDetail(orderId) {
+  const order = accountOrders.find((candidate) => candidate.id === orderId);
+  if (!order) return;
+  const job = Array.isArray(order.print_jobs) ? order.print_jobs[0] : order.print_jobs;
+  const items = Array.isArray(order.order_items) ? order.order_items : [];
+  const events = Array.isArray(job?.print_job_events) ? job.print_job_events : [];
+  const statuses = ["order_made", "producing", "posted", "complete"];
+  const currentStatus = job?.status || order.status || "pending";
+  const currentIndex = statuses.indexOf(currentStatus);
+  document.getElementById("orderDetail").innerHTML = `
+    <article class="order-detail">
+      <h3>${escapeHtml(order.invoice_number || "Pending invoice")}</h3>
+      ${job ? `<div class="order-status-track">${statuses.map((status, index) => `<span class="${index <= currentIndex ? "done" : ""}">${status.replaceAll("_", " ")}</span>`).join("")}</div>` : ""}
+      <div class="order-detail-grid"><div><span>Status</span><strong>${escapeHtml(currentStatus.replaceAll("_", " "))}</strong></div><div><span>Total</span><strong>${money(order.total_inc_vat, order.currency)}</strong></div><div><span>Ordered</span><strong>${new Date(order.paid_at || order.created_at).toLocaleString()}</strong></div><div><span>Tracking</span><strong>${escapeHtml(job?.tracking_reference || "Not posted")}</strong></div></div>
+      ${items.map((item) => `<p><strong>${escapeHtml(item.description || "Printed design")}</strong> | quantity ${item.quantity || 1}</p>`).join("")}
+      ${events.length ? `<div class="order-events">${events.map((event) => `<p><strong>${escapeHtml(String(event.to_status || "").replaceAll("_", " "))}</strong><small>${escapeHtml(event.note || "")} ${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</div>` : ""}
+      ${job?.status === "posted" ? `<button class="button primary" data-complete-print-job="${escapeHtml(job.id)}" type="button">Confirm delivery and complete order</button>` : ""}
+    </article>`;
 }
 
 async function processCheckoutResult() {
@@ -267,7 +374,9 @@ async function processCheckoutResult() {
       toast("Unlimited Makeup STL exports unlocked");
     }
   } else if (parameters.get("checkout") === "success") {
-    toast("Print order payment received");
+    const response = await api("/api/checkout/print/verify", { method: "POST", body: JSON.stringify({ sessionId: parameters.get("session_id") }) });
+    const result = await response.json().catch(() => ({}));
+    toast(response.ok ? "Print order payment received" : result.error || "Payment is still being confirmed");
   }
   if (parameters.get("checkout")) history.replaceState({}, "", location.pathname);
 }
@@ -278,7 +387,7 @@ function setAuthenticated(authenticated) {
 }
 
 async function initialize() {
-  document.getElementById("filamentColour").innerHTML = filamentColours.map((colour) => `<option value="${colour.key}">${colour.name} · ${colour.material.toUpperCase()}</option>`).join("");
+  document.getElementById("filamentColour").innerHTML = filamentColours.filter((colour) => colour.material === "pla").map((colour) => `<option value="${colour.key}">${colour.name}</option>`).join("");
   populateCatalogue();
   writeConstruction();
   renderPreview();
@@ -316,8 +425,19 @@ document.getElementById("slotList").addEventListener("click", (event) => {
   }
   renderPreview();
 });
-["columns", "gap", "edgeMargin", "baseThickness", "wallThickness", "holderHeight", "handleHeight", "handleWidth", "filamentColour"].forEach((id) => document.getElementById(id).addEventListener("input", renderPreview));
+["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "handleHeight", "handleWidth", "filamentColour"].forEach((id) => document.getElementById(id).addEventListener("input", renderPreview));
+document.querySelectorAll("[data-layout-mode]").forEach((button) => button.addEventListener("click", () => {
+  state.layoutMode = button.dataset.layoutMode;
+  writeConstruction();
+  renderPreview();
+}));
 document.getElementById("handleEnabled").addEventListener("change", () => { document.getElementById("handleFields").hidden = !document.getElementById("handleEnabled").checked; renderPreview(); });
+document.querySelectorAll("[data-preview-turn]").forEach((button) => button.addEventListener("click", () => { previewYaw += Number(button.dataset.previewTurn) * Math.PI / 8; renderPreview(); }));
+document.querySelector("[data-preview-reset]").addEventListener("click", () => { previewYaw = -Math.PI / 4; previewPitch = Math.PI / 5; renderPreview(); });
+document.getElementById("caddyPreview").addEventListener("pointerdown", (event) => { previewDrag = { x: event.clientX, y: event.clientY, yaw: previewYaw, pitch: previewPitch }; event.currentTarget.setPointerCapture(event.pointerId); });
+document.getElementById("caddyPreview").addEventListener("pointermove", (event) => { if (!previewDrag) return; previewYaw = previewDrag.yaw + (event.clientX - previewDrag.x) / 160; previewPitch = Math.max(.15, Math.min(1.35, previewDrag.pitch - (event.clientY - previewDrag.y) / 220)); renderPreview(); });
+document.getElementById("caddyPreview").addEventListener("pointerup", () => { previewDrag = null; });
+document.getElementById("caddyPreview").addEventListener("pointercancel", () => { previewDrag = null; });
 document.getElementById("saveDesign").addEventListener("click", () => saveDesign().catch((error) => toast(error.message)));
 document.getElementById("saveDesignTop").addEventListener("click", () => saveDesign().catch((error) => toast(error.message)));
 ["exportButton", "exportTop"].forEach((id) => document.getElementById(id).addEventListener("click", () => { if (!state.items.length) return toast("Add at least one product first"); document.getElementById("exportChoices").hidden = false; document.getElementById("printMarketplace").hidden = true; document.getElementById("exportDialog").showModal(); }));
@@ -343,8 +463,50 @@ document.getElementById("createAccount").addEventListener("click", async () => {
   try { const result = await accountService.signUp(document.getElementById("loginEmail").value, document.getElementById("loginPassword").value); document.getElementById("loginError").textContent = result.access_token ? "Account created." : "Check your email to confirm the account."; if (result.access_token) setAuthenticated(true); } catch (error) { document.getElementById("loginError").textContent = error.message; }
 });
 document.querySelectorAll("[data-oauth-provider]").forEach((button) => button.addEventListener("click", () => accountService.signInWithProvider(button.dataset.oauthProvider).catch((error) => { document.getElementById("loginError").textContent = error.message; })));
-document.getElementById("accountButton").addEventListener("click", async () => { document.getElementById("accountEmail").textContent = accountService.currentUser()?.email || ""; await refreshOrders(); document.getElementById("accountDialog").showModal(); });
+document.getElementById("accountButton").addEventListener("click", async () => {
+  try {
+    const [profile] = await Promise.all([accountService.loadProfile(), refreshOrders()]);
+    const address = profile?.default_address || {};
+    document.getElementById("accountEmail").value = accountService.currentUser()?.email || "";
+    document.getElementById("accountDisplayName").value = profile?.display_name || "";
+    document.getElementById("accountAddressLine1").value = address.line1 || "";
+    document.getElementById("accountAddressLine2").value = address.line2 || "";
+    document.getElementById("accountCity").value = address.city || "";
+    document.getElementById("accountCounty").value = address.county || "";
+    document.getElementById("accountPostcode").value = address.postcode || "";
+    document.getElementById("accountCountry").value = address.country || "GB";
+    document.getElementById("accountDialog").showModal();
+  } catch (error) { toast(error.message); }
+});
+document.querySelectorAll("[data-account-tab]").forEach((button) => button.addEventListener("click", () => {
+  document.querySelectorAll("[data-account-tab]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
+  document.querySelectorAll("[data-account-panel]").forEach((panel) => { panel.hidden = panel.dataset.accountPanel !== button.dataset.accountTab; });
+}));
+document.getElementById("makeupProfileForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await accountService.saveProfile({ display_name: document.getElementById("accountDisplayName").value.trim() || null, default_address: { line1: document.getElementById("accountAddressLine1").value.trim(), line2: document.getElementById("accountAddressLine2").value.trim(), city: document.getElementById("accountCity").value.trim(), county: document.getElementById("accountCounty").value.trim(), postcode: document.getElementById("accountPostcode").value.trim(), country: document.getElementById("accountCountry").value.trim().toUpperCase() } });
+    toast("Profile saved");
+  } catch (error) { toast(error.message); }
+});
+document.getElementById("changePassword").addEventListener("click", async () => {
+  const password = document.getElementById("accountNewPassword").value;
+  if (password.length < 8) return toast("Use a password with at least 8 characters");
+  try { await accountService.updatePassword(password); document.getElementById("accountNewPassword").value = ""; toast("Password updated"); } catch (error) { toast(error.message); }
+});
 document.getElementById("viewOrders").addEventListener("click", () => refreshOrders().catch((error) => toast(error.message)));
+document.getElementById("ordersList").addEventListener("click", (event) => { const button = event.target.closest("[data-order-detail]"); if (button) showOrderDetail(button.dataset.orderDetail); });
+document.getElementById("orderDetail").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-complete-print-job]");
+  if (!button || !window.confirm("Confirm this printed order has arrived? This completes the order and releases the printer payout.")) return;
+  try {
+    const response = await api(`/api/account/print-jobs/${encodeURIComponent(button.dataset.completePrintJob)}/complete`, { method: "POST", body: "{}" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Order could not be completed");
+    await refreshOrders();
+    toast(result.transfer?.released ? "Order completed and printer payout released" : "Order completed");
+  } catch (error) { toast(error.message); }
+});
 document.getElementById("logoutButton").addEventListener("click", async () => { await accountService.signOut(); document.getElementById("accountDialog").close(); setAuthenticated(false); });
 
 initialize();

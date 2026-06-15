@@ -1,6 +1,7 @@
 (() => {
   const legacySessionKey = "movement-tray-supabase-session";
   const sessionKey = "forget-about-supabase-session";
+  const activeSessionKey = "forget-about-active-session";
   let config = null;
   let session = null;
   let user = null;
@@ -74,10 +75,14 @@
   function storeSession(nextSession) {
     session = nextSession || null;
     user = session?.user || null;
-    if (session) localStorage.setItem(sessionKey, JSON.stringify(session));
+    if (session) {
+      localStorage.setItem(sessionKey, JSON.stringify(session));
+      sessionStorage.setItem(activeSessionKey, "true");
+    }
     else {
       localStorage.removeItem(sessionKey);
       localStorage.removeItem(legacySessionKey);
+      sessionStorage.removeItem(activeSessionKey);
     }
   }
 
@@ -128,8 +133,10 @@
           expires_at: Math.floor(Date.now() / 1000) + Number(hash.get("expires_in") || 3600)
         });
         history.replaceState({}, "", window.location.pathname + window.location.search);
-      } else {
+      } else if (sessionStorage.getItem(activeSessionKey) === "true") {
         storeSession(JSON.parse(localStorage.getItem(sessionKey) || localStorage.getItem(legacySessionKey) || "null"));
+      } else {
+        storeSession(null);
       }
       if (!session) return null;
       await ensureSession();
@@ -339,9 +346,14 @@
 
   async function loadOrders() {
     try {
-      return await restRequest(`orders?select=id,invoice_number,order_type,status,currency,total_inc_vat,paid_at,created_at,brand_key,generator_type,order_items(*),order_customer_snapshots(*),print_jobs(*,print_job_events(*))&brand_key=eq.${encodeURIComponent(brandKey())}&order=created_at.desc`);
+      const response = await fetch(`${apiBase()}/api/account/orders`, { headers: await authHeaders() });
+      return responseJson(response);
     } catch {
-      return restRequest("orders?select=id,invoice_number,order_type,status,currency,total_inc_vat,paid_at,created_at&order=created_at.desc");
+      try {
+        return await restRequest(`orders?select=id,invoice_number,order_type,status,currency,total_inc_vat,paid_at,created_at,brand_key,generator_type,order_items(*),order_customer_snapshots(*),print_jobs(*,print_job_events(*))&brand_key=eq.${encodeURIComponent(brandKey())}&order=created_at.desc`);
+      } catch {
+        return restRequest("orders?select=id,invoice_number,order_type,status,currency,total_inc_vat,paid_at,created_at&order=created_at.desc");
+      }
     }
   }
 

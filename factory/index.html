@@ -68,7 +68,7 @@
           <label>Display name<input id="printerDisplayName" required maxlength="80"></label>
           <label>Based in<input id="printerBasedIn" required placeholder="e.g. Leeds"></label>
           <label>Postcode area<input id="printerPostcodeArea" required maxlength="12" placeholder="e.g. LS1"></label>
-          <label>Lead time in days<input id="printerLeadTime" required type="number" min="1" max="90" value="7"></label>
+          <label>Handling time in days<input id="printerLeadTime" required type="number" min="1" max="90" value="2"></label>
           <label class="wide">Description<textarea id="printerDescription" rows="4" maxlength="800" placeholder="Tell customers about your printers and finishing standards."></textarea></label>
           <label class="switch-field wide"><input id="printerAcceptingJobs" type="checkbox"><span>Accept new jobs once the profile is approved</span></label>
           <button class="button button-primary" type="submit">Save provider profile</button>
@@ -79,14 +79,14 @@
         <div class="section-heading"><div><p class="eyebrow">Capacity and pricing</p><h2>Print capabilities</h2></div></div>
         <form class="factory-form capability-form" id="factoryCapabilityForm">
           <label>Material<select id="capabilityMaterial"><option value="pla">PLA</option><option value="petg">PETG</option></select></label>
-          <label>Colour name<input id="capabilityColourName" required placeholder="e.g. Bambu Green"></label>
-          <label>Colour<input id="capabilityColourHex" type="color" value="#3f6b47"></label>
+          <label>Colour capability<select id="capabilityColourName"></select></label>
+          <label>Colour sample<span class="capability-colour-sample" id="capabilityColourSample"></span></label>
           <label>Max width mm<input id="capabilityMaxWidth" type="number" min="1" max="1000" value="256"></label>
           <label>Max depth mm<input id="capabilityMaxDepth" type="number" min="1" max="1000" value="256"></label>
           <label>Max height mm<input id="capabilityMaxHeight" type="number" min="1" max="1000" value="256"></label>
-          <label>Base price £<input id="capabilityBasePrice" type="number" min="0" step="0.01" value="8.00"></label>
-          <label>Price per cm³ £<input id="capabilityVolumePrice" type="number" min="0" step="0.01" value="0.25"></label>
-          <label>Postage £<input id="capabilityPostage" type="number" min="0" step="0.01" value="3.50"></label>
+          <label>Printer fee per print £<input id="capabilityBasePrice" type="number" min="0" step="0.01" value="8.00"></label>
+          <label>Printing speed grams/hour<input id="capabilityGramsPerHour" type="number" min="1" max="1000" step="1" value="12"></label>
+          <label>Postage service<select id="capabilityPostage"></select></label>
           <button class="button button-primary" type="submit">Add capability</button>
         </form>
         <div class="capability-grid" id="factoryCapabilities"></div>
@@ -102,6 +102,11 @@
         <div class="payout-grid" id="factoryPayouts"></div>
       </section>
     </main>
+
+    <dialog class="job-dialog" id="factoryJobDialog">
+      <div class="job-dialog-heading"><div><p class="eyebrow">Production order</p><h2 id="jobDialogTitle">Job details</h2></div><button type="button" id="closeJobDialog">×</button></div>
+      <div class="job-dialog-content" id="jobDialogContent"></div>
+    </dialog>
 
     <div class="toast" id="factoryToast" role="status"></div>
     <script src="../public-config.js"></script>

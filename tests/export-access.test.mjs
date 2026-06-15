@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
@@ -17,6 +18,9 @@ const checkoutRequests = [];
 const printQuotes = [];
 const printJobs = [];
 const providerTransfers = [];
+const webhookSecret = "whsec_test_webhook_secret";
+const paymentAccounts = [];
+const stripeAccountRequests = [];
 const printerProfile = {
   id: "10000000-0000-4000-8000-000000000001",
   display_name: "Prototype Printer",
@@ -55,6 +59,17 @@ const mockSupabase = createServer(async (request, response) => {
     for await (const chunk of request) body += chunk;
     checkoutRequests.push(new URLSearchParams(body));
     return sendJson(response, 200, { id: `cs_test_${Date.now()}`, url: "https://checkout.stripe.test/session" });
+  }
+  if (url.pathname === "/v2/core/accounts" && request.method === "POST") {
+    const body = await requestJson(request);
+    stripeAccountRequests.push(body);
+    return sendJson(response, 200, {
+      id: "acct_test_factory_provider",
+      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { status: "inactive" }, payouts: { status: "inactive" } } } } }
+    });
+  }
+  if (url.pathname === "/v1/account_links" && request.method === "POST") {
+    return sendJson(response, 200, { url: "https://connect.stripe.test/onboarding" });
   }
   if (url.pathname === "/auth/v1/user") {
     const user = userFromToken(request.headers.authorization);
@@ -100,6 +115,15 @@ const mockSupabase = createServer(async (request, response) => {
     }]);
   }
 
+  if (url.pathname === "/rest/v1/printer_payment_accounts") {
+    if (request.method === "POST") {
+      const saved = { ...(await requestJson(request)), id: "50000000-0000-4000-8000-000000000001" };
+      paymentAccounts.push(saved);
+      return sendJson(response, 200, [saved]);
+    }
+    return sendJson(response, 200, paymentAccounts);
+  }
+
   if (url.pathname === "/rest/v1/print_quotes") {
     if (request.method === "POST") {
       const rows = await requestJson(request);
@@ -116,12 +140,23 @@ const mockSupabase = createServer(async (request, response) => {
     return sendJson(response, 200, {});
   }
 
+  if (url.pathname === "/rest/v1/stripe_events") {
+    if (request.method === "GET") return sendJson(response, 200, []);
+    await requestJson(request);
+    return sendJson(response, 200, {});
+  }
+
+  if (url.pathname === "/rest/v1/order_customer_snapshots" && request.method === "POST") {
+    await requestJson(request);
+    return sendJson(response, 200, {});
+  }
+
   if (url.pathname === "/rest/v1/provider_transfers" && request.method === "POST") {
     providerTransfers.push(await requestJson(request));
     return sendJson(response, 200, {});
   }
 
-  if (url.pathname === "/rest/v1/orders" && request.method === "POST") {
+  if (url.pathname === "/rest/v1/orders" && ["POST", "PATCH"].includes(request.method)) {
     await requestJson(request);
     return sendJson(response, 200, {});
   }
@@ -161,6 +196,7 @@ test.before(async () => {
       SUPABASE_SECRET_KEY: "secret-test-key",
       DOWNLOAD_TOKEN_SECRET: "test-download-secret",
       STRIPE_SECRET_KEY: "rk_test_abcdefghijklmnopqrstuvwxyz123456",
+      STRIPE_WEBHOOK_SECRET: webhookSecret,
       STRIPE_API_BASE: `http://127.0.0.1:${mockPort}`
     },
     stdio: ["ignore", "pipe", "pipe"]
@@ -261,6 +297,15 @@ test("factory route serves the dedicated provider login", async () => {
   assert.match(html, /src="\.\.\/account\.js"/);
 });
 
+test("factory Stripe Connect onboarding uses Accounts v2 and a hosted account link", async () => {
+  const response = await api("/api/factory/connect/start", "paid-token", {}, { "X-Forget-About-Path": "/factory/" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { url: "https://connect.stripe.test/onboarding", mode: "onboarding" });
+  assert.equal(stripeAccountRequests.length, 1);
+  assert.equal(stripeAccountRequests[0].defaults.responsibilities.requirements_collector, undefined);
+  assert.equal(stripeAccountRequests[0].configuration.recipient.capabilities.stripe_balance.stripe_transfers.requested, true);
+});
+
 test("node host exposes a deployment health check", async () => {
   const response = await fetch(`${baseUrl}/api/health`);
   assert.equal(response.status, 200);
@@ -302,6 +347,10 @@ test("marketplace quotes expose selectable providers and create held print jobs"
   assert.equal(quoteResult.quotes.length, 1);
   assert.equal(quoteResult.quotes[0].providerName, "Prototype Printer");
   assert.ok(quoteResult.quotes[0].totalIncVatPence > quoteResult.quotes[0].providerSharePence);
+  assert.equal(quoteResult.quotes[0].materialCostPence, quoteResult.quotes[0].estimatedWeightGrams * 2);
+  assert.equal(quoteResult.quotes[0].providerSharePence, quoteResult.quotes[0].materialCostPence + quoteResult.quotes[0].printerFeePence + quoteResult.quotes[0].postagePence);
+  assert.equal(quoteResult.quotes[0].commissionPence, Math.round(quoteResult.quotes[0].providerSharePence * 0.1));
+  assert.equal(quoteResult.quotes[0].platformFeePence, 50);
 
   const checkoutResponse = await api("/api/marketplace/checkout/session", "paid-token", { quoteId: quoteResult.quotes[0].id });
   assert.equal(checkoutResponse.status, 200);
@@ -324,6 +373,33 @@ test("checkout returns to the originating brand path", async () => {
   });
   assert.equal(response.status, 200);
   assert.match(checkoutRequests.at(-1).get("success_url"), /^http:\/\/127\.0\.0\.1:4192\/tray\?checkout=success/);
+});
+
+test("Stripe webhook accepts a valid signed checkout confirmation", async () => {
+  const event = {
+    id: "evt_signed_checkout",
+    type: "checkout.session.completed",
+    data: {
+      object: {
+        id: "cs_signed_checkout",
+        payment_status: "paid",
+        amount_total: 1200,
+        created: Math.floor(Date.now() / 1000),
+        metadata: { order_id: "40000000-0000-4000-8000-000000000001", user_id: paidUserId, purchase_type: "printed_design" },
+        customer_details: { email: "paid@example.test", address: { country: "GB" } }
+      }
+    }
+  };
+  const rawBody = JSON.stringify(event);
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = createHmac("sha256", webhookSecret).update(`${timestamp}.${rawBody}`).digest("hex");
+  const response = await fetch(`${baseUrl}/api/stripe/webhook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Stripe-Signature": `t=${timestamp},v1=${signature}` },
+    body: rawBody
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { received: true });
 });
 
 test("only one simultaneous sponsored-download claim succeeds", async () => {

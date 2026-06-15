@@ -1,5 +1,18 @@
 let factoryDashboardState = { profile: null, capabilities: [], jobs: [], transfers: [], paymentAccount: null };
 let toastTimer;
+const standardColours = [
+  ["all", "All standard colours", "#8b9499"], ["black", "Black", "#202223"], ["white", "White", "#f1f2ee"],
+  ["grey", "Grey", "#777c7d"], ["red", "Red", "#b93636"], ["orange", "Orange", "#e87524"],
+  ["yellow", "Yellow", "#f3c623"], ["green", "Green", "#398052"], ["blue", "Blue", "#32658c"],
+  ["purple", "Purple", "#6e4b8b"], ["pink", "Pink", "#d98c9b"], ["rose-gold", "Rose Gold", "#b76e79"],
+  ["brown", "Brown", "#6f4e37"]
+].map(([key, name, hex]) => ({ key, name, hex }));
+const postageServices = [
+  { key: "evri-standard", name: "Evri Standard 0-1kg", pricePence: 329, days: 3 },
+  { key: "evri-next-day", name: "Evri Next Day 0-1kg", pricePence: 412, days: 1 },
+  { key: "royal-mail-2nd", name: "Royal Mail 2nd Class small parcel", pricePence: 395, days: 3 },
+  { key: "royal-mail-1st", name: "Royal Mail 1st Class small parcel", pricePence: 515, days: 1 }
+];
 
 function apiBase() {
   return document.querySelector('meta[name="checkout-api-url"]').content.trim().replace(/\/$/, "");
@@ -24,11 +37,28 @@ function toast(message) {
 async function factoryFetch(path, options = {}) {
   const response = await fetch(`${apiBase()}${path}`, {
     ...options,
-    headers: { ...(await accountService.authHeaders()), ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) }
+    headers: { ...(await accountService.authHeaders()), "X-Forget-About-Path": window.location.pathname, ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) }
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || "Factory request failed.");
   return result;
+}
+
+async function factoryDownload(path, filename, open = false) {
+  const targetWindow = open ? window.open("", "_blank") : null;
+  if (targetWindow) targetWindow.opener = null;
+  const response = await fetch(`${apiBase()}${path}`, { headers: { ...(await accountService.authHeaders()), "X-Forget-About-Path": window.location.pathname } });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "Download failed.");
+  const url = URL.createObjectURL(await response.blob());
+  if (open && targetWindow) targetWindow.location.href = url;
+  else if (open) window.open(url, "_blank", "noopener");
+  else {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 function setAuthenticated(authenticated) {
@@ -62,30 +92,61 @@ function renderCapabilities() {
   document.getElementById("factoryCapabilities").innerHTML = capabilities.length ? capabilities.map((capability) => `
     <article class="capability-card">
       <div><h3><span class="colour-chip" style="background:${escapeHtml(capability.colour_hex || "#cccccc")}"></span> ${escapeHtml(capability.colour_name)} · ${escapeHtml(capability.material.toUpperCase())}</h3>
-      <p>${capability.max_width_mm} × ${capability.max_depth_mm} × ${capability.max_height_mm} mm · Base ${money(capability.base_price_pence)} · ${money(capability.price_per_cm3_pence)}/cm³ · Postage ${money(capability.postage_pence)}</p></div>
+      <p>${capability.max_width_mm} × ${capability.max_depth_mm} × ${capability.max_height_mm} mm · Printer fee ${money(capability.base_price_pence)} per print · ${capability.grams_per_hour || 12} g/hour · ${escapeHtml(postageServices.find((service) => service.key === capability.postage_service)?.name || capability.postage_service || "Postage")} ${money(capability.postage_pence)}</p></div>
       <button class="button button-secondary" data-remove-capability="${escapeHtml(capability.id)}" type="button">Remove</button>
     </article>
   `).join("") : '<div class="empty-state">Add at least one material and colour before the profile can receive marketplace jobs.</div>';
 }
 
-function nextJobAction(job) {
-  if (job.status === "order_made") return '<button class="button button-primary" data-job-status="producing" type="button">Start producing</button>';
-  if (job.status === "producing") return `<input data-job-tracking placeholder="Tracking reference"><button class="button button-primary" data-job-status="posted" type="button">Mark posted</button>`;
-  return "";
-}
-
 function renderJobs() {
-  const jobs = factoryDashboardState.jobs;
+  const jobs = factoryDashboardState.jobs.filter((job) => job.status !== "pending_payment");
   const active = jobs.filter((job) => ["order_made", "producing", "posted"].includes(job.status));
   document.getElementById("activeJobCount").textContent = active.length;
   document.getElementById("factoryJobs").innerHTML = jobs.length ? jobs.map((job) => `
-    <article class="job-card" data-job-id="${escapeHtml(job.id)}">
-      <div><h3>${escapeHtml(job.brand_key)} · ${escapeHtml(job.generator_type.replaceAll("_", " "))}</h3>
-      <p>Status: <strong>${escapeHtml(job.status.replaceAll("_", " "))}</strong> · ${escapeHtml(job.material.toUpperCase())} / ${escapeHtml(job.colour_key)} · Provider share ${money(job.provider_share_pence)}</p>
-      <p>Created ${new Date(job.created_at).toLocaleString()}${job.tracking_reference ? ` · Tracking ${escapeHtml(job.tracking_reference)}` : ""}</p></div>
-      <div class="job-card-actions">${nextJobAction(job)}</div>
+    <article class="job-card brand-${escapeHtml(job.brand_key)}" data-job-id="${escapeHtml(job.id)}">
+      <span class="job-brand-marker">${job.brand_key === "makeup" ? "MAKEUP" : "TRAY"}</span>
+      <div><h3>${escapeHtml(job.design_snapshot?.name || job.generator_type.replaceAll("_", " "))}</h3>
+      <p>Status: <strong>${escapeHtml(job.status.replaceAll("_", " "))}</strong> · ${escapeHtml(job.colour_key)} · Estimated ${job.design_snapshot?.estimatedWeightGrams || "?"}g</p>
+      <p>Provider payout ${money(job.provider_share_pence)} · Created ${new Date(job.created_at).toLocaleString()}${job.tracking_reference ? ` · Tracking ${escapeHtml(job.tracking_reference)}` : ""}</p></div>
+      <button class="button button-primary" data-open-job="${escapeHtml(job.id)}" type="button">Open order</button>
     </article>
   `).join("") : '<div class="empty-state">No assigned jobs yet. Approved profiles with active capabilities become selectable by customers.</div>';
+}
+
+function showJobDetail(jobId) {
+  const job = factoryDashboardState.jobs.find((candidate) => candidate.id === jobId);
+  if (!job) return;
+  const order = Array.isArray(job.orders) ? job.orders[0] : job.orders;
+  const snapshot = Array.isArray(order?.order_customer_snapshots) ? order.order_customer_snapshots[0] : order?.order_customer_snapshots;
+  const address = snapshot?.delivery_address || {};
+  const events = Array.isArray(job.print_job_events) ? job.print_job_events : [];
+  const quote = Array.isArray(job.print_quotes) ? job.print_quotes[0] : job.print_quotes;
+  const nextStatuses = job.status === "order_made" ? ["producing"] : job.status === "producing" ? ["posted"] : [];
+  document.getElementById("jobDialogTitle").textContent = job.design_snapshot?.name || `${job.brand_key} order`;
+  document.getElementById("jobDialogContent").innerHTML = `
+    <div class="job-detail-hero brand-${escapeHtml(job.brand_key)}"><strong>${job.brand_key === "makeup" ? "MAKEUP" : "TRAY"}</strong><span>${escapeHtml(job.status.replaceAll("_", " "))}</span></div>
+    <div class="job-detail-grid">
+      <div><span>Colour</span><strong>${escapeHtml(job.colour_key)}</strong></div>
+      <div><span>Material estimate</span><strong>${job.design_snapshot?.estimatedWeightGrams || quote?.estimated_weight_grams || "?"} g</strong></div>
+      <div><span>Print time</span><strong>${job.design_snapshot?.estimatedPrintHours || quote?.estimated_print_hours || "?"} hours</strong></div>
+      <div><span>Tracking</span><strong>${escapeHtml(job.tracking_reference || "Not posted")}</strong></div>
+    </div>
+    <section class="job-breakdown"><h3>Order breakdown</h3>
+      <p><span>Material</span><strong>${money(job.material_cost_pence)}</strong></p>
+      <p><span>Printer fee</span><strong>${money(job.printer_fee_pence)}</strong></p>
+      <p><span>Postage</span><strong>${money(job.postage_pence)}</strong></p>
+      <p><span>Your payout</span><strong>${money(job.provider_share_pence)}</strong></p>
+      <p><span>Forget About commission (10%)</span><strong>${money(job.commission_pence)}</strong></p>
+      <p><span>Platform fee</span><strong>${money(job.platform_fee_pence)}</strong></p>
+    </section>
+    <section class="job-address"><h3>Delivery address</h3><p>${[snapshot?.customer_name, address.line1, address.line2, address.city || address.town, address.county, address.postal_code || address.postcode, address.country].filter(Boolean).map(escapeHtml).join("<br>") || "Address pending payment confirmation."}</p></section>
+    <div class="job-downloads"><button class="button button-secondary" data-job-label="${escapeHtml(job.id)}">Open postage label</button><button class="button button-secondary" data-job-stl="${escapeHtml(job.id)}">Download STL</button></div>
+    ${nextStatuses.length ? `<div class="job-status-form"><label>Change status<select data-job-next-status>${nextStatuses.map((status) => `<option value="${status}">${status.replaceAll("_", " ")}</option>`).join("")}</select></label><label>Tracking number<input data-job-tracking value="${escapeHtml(job.tracking_reference || "")}"></label><button class="button button-primary" data-save-job-status="${escapeHtml(job.id)}">Update order</button></div>` : ""}
+    <div class="job-note-form"><label>Order note<textarea data-job-note rows="3" placeholder="Add a note visible in the order history"></textarea></label><button class="button button-secondary" data-save-job-note="${escapeHtml(job.id)}">Add note</button></div>
+    ${events.length ? `<section class="job-events"><h3>Order history</h3>${events.map((event) => `<p><strong>${escapeHtml(event.to_status.replaceAll("_", " "))}</strong><span>${escapeHtml(event.note || "")}</span><small>${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</section>` : ""}
+  `;
+  const dialog = document.getElementById("factoryJobDialog");
+  if (!dialog.open) dialog.showModal();
 }
 
 function renderPayouts() {
@@ -113,6 +174,9 @@ async function loadDashboard() {
 }
 
 async function initializeFactory() {
+  document.getElementById("capabilityColourName").innerHTML = standardColours.map((colour) => `<option value="${colour.key}">${colour.name}</option>`).join("");
+  document.getElementById("capabilityPostage").innerHTML = postageServices.map((service) => `<option value="${service.key}">${service.name} · ${money(service.pricePence)} · ${service.days} day${service.days === 1 ? "" : "s"}</option>`).join("");
+  updateColourSample();
   try {
     const session = await accountService.init();
     setAuthenticated(Boolean(session));
@@ -121,6 +185,12 @@ async function initializeFactory() {
     setAuthenticated(false);
     document.getElementById("factoryLoginMessage").textContent = error.message;
   }
+}
+
+function updateColourSample() {
+  const colour = standardColours.find((candidate) => candidate.key === document.getElementById("capabilityColourName").value) || standardColours[0];
+  document.getElementById("capabilityColourSample").style.background = colour.hex;
+  document.getElementById("capabilityColourSample").title = colour.name;
 }
 
 document.getElementById("factoryLoginForm").addEventListener("submit", async (event) => {
@@ -205,23 +275,22 @@ document.getElementById("factoryCapabilityForm").addEventListener("submit", asyn
       method: "POST",
       body: JSON.stringify({
         material: document.getElementById("capabilityMaterial").value,
-        colourName: document.getElementById("capabilityColourName").value,
-        colourHex: document.getElementById("capabilityColourHex").value,
+        colourKey: document.getElementById("capabilityColourName").value,
         maxWidthMm: Number(document.getElementById("capabilityMaxWidth").value),
         maxDepthMm: Number(document.getElementById("capabilityMaxDepth").value),
         maxHeightMm: Number(document.getElementById("capabilityMaxHeight").value),
         basePricePence: poundsToPence("capabilityBasePrice"),
-        pricePerCm3Pence: poundsToPence("capabilityVolumePrice"),
-        postagePence: poundsToPence("capabilityPostage")
+        gramsPerHour: Number(document.getElementById("capabilityGramsPerHour").value),
+        postageService: document.getElementById("capabilityPostage").value
       })
     });
-    document.getElementById("capabilityColourName").value = "";
     await loadDashboard();
     toast("Print capability added");
   } catch (error) {
     toast(error.message);
   }
 });
+document.getElementById("capabilityColourName").addEventListener("change", updateColourSample);
 
 document.getElementById("factoryCapabilities").addEventListener("click", async (event) => {
   const button = event.target.closest("[data-remove-capability]");
@@ -235,17 +304,40 @@ document.getElementById("factoryCapabilities").addEventListener("click", async (
   }
 });
 
-document.getElementById("factoryJobs").addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-job-status]");
-  const card = event.target.closest("[data-job-id]");
-  if (!button || !card) return;
+document.getElementById("factoryJobs").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-open-job]");
+  if (button) showJobDetail(button.dataset.openJob);
+});
+document.getElementById("closeJobDialog").addEventListener("click", () => document.getElementById("factoryJobDialog").close());
+document.getElementById("jobDialogContent").addEventListener("click", async (event) => {
   try {
-    await factoryFetch(`/api/factory/jobs/${encodeURIComponent(card.dataset.jobId)}/status`, {
-      method: "POST",
-      body: JSON.stringify({ status: button.dataset.jobStatus, trackingReference: card.querySelector("[data-job-tracking]")?.value || "" })
-    });
-    await loadDashboard();
-    toast(`Job marked ${button.dataset.jobStatus}`);
+    const statusButton = event.target.closest("[data-save-job-status]");
+    const noteButton = event.target.closest("[data-save-job-note]");
+    const stlButton = event.target.closest("[data-job-stl]");
+    const labelButton = event.target.closest("[data-job-label]");
+    if (stlButton) return factoryDownload(`/api/factory/jobs/${encodeURIComponent(stlButton.dataset.jobStl)}/stl`, `print-job-${stlButton.dataset.jobStl}.stl`);
+    if (labelButton) return factoryDownload(`/api/factory/jobs/${encodeURIComponent(labelButton.dataset.jobLabel)}/label`, "", true);
+    if (statusButton) {
+      await factoryFetch(`/api/factory/jobs/${encodeURIComponent(statusButton.dataset.saveJobStatus)}/status`, {
+        method: "POST",
+        body: JSON.stringify({
+          status: document.querySelector("[data-job-next-status]").value,
+          trackingReference: document.querySelector("[data-job-tracking]").value,
+          note: document.querySelector("[data-job-note]").value
+        })
+      });
+    }
+    if (noteButton) {
+      await factoryFetch(`/api/factory/jobs/${encodeURIComponent(noteButton.dataset.saveJobNote)}/note`, {
+        method: "POST",
+        body: JSON.stringify({ note: document.querySelector("[data-job-note]").value })
+      });
+    }
+    if (statusButton || noteButton) {
+      await loadDashboard();
+      showJobDetail(statusButton?.dataset.saveJobStatus || noteButton.dataset.saveJobNote);
+      toast("Order updated");
+    }
   } catch (error) {
     toast(error.message);
   }

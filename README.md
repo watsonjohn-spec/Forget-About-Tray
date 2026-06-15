@@ -8,9 +8,9 @@ Forget About Tray is now the first generator in the shared Forget About platform
 
 - Configure rows, columns, base size, spacing, and clearance
 - Add a perimeter lip and interval notches
-- Live isometric preview and exact dimensions
+- Rotatable, draggable 3D preview and exact dimensions
 - Save tray presets and army projects to a Supabase account
-- Download an account-gated printable ASCII STL, or order the tray from the print service
+- Download an account-gated printable ASCII STL, or order the tray from the print factory
 - Paste an army list to get editable per-unit tray recommendations
 - Filter a broad Old World base catalogue by army and remember corrected base sizes locally
 - Save and reload complete army tray projects
@@ -22,7 +22,7 @@ Forget About Tray is now the first generator in the shared Forget About platform
 - Server-side Stripe Checkout sessions with test-mode protection
 - Customer-selected print providers with colour, rating, UK location, lead time, and all-in price comparison
 - A separate rose-gold Forget About Makeup caddy generator at `/makeup/`
-- Ordered makeup-product slots, custom dimensions, and an optional centre carrying handle
+- Ordered makeup-product slots, custom dimensions, a centre-spine caddy, a staircase case, and an optional carrying handle
 
 ## Run locally
 
@@ -54,7 +54,7 @@ Before running the account-enabled app for the first time, open the Supabase SQL
 
 Re-run `supabase/schema.sql` after pulling the multi-brand platform update. It enables the Makeup brand and generator, migrates existing tray designs and army lists into the generic design/project model, and adds the print marketplace foundation without deleting the legacy records.
 
-The marketplace is designed for UK-only fulfilment initially. Choosing **Have it printed** creates live, time-limited quotes from suitable printer capabilities. It uses Stripe Connect separate charges and transfers: the printer share remains held until the print job reaches `complete`.
+The marketplace is designed for UK-only fulfilment initially. Choosing **Have it printed** creates live, time-limited quotes from suitable printer capabilities. Material is costed at GBP 20/kg by default, then the printer's per-print fee, standard postage, 10% Forget About commission, fixed platform fee, and VAT are shown separately. It uses Stripe Connect separate charges and transfers: the printer share remains held until the print job reaches `complete`.
 
 Makeup catalogue dimensions are deliberately marked approximate because cosmetic packaging changes frequently. Customers can add custom products and should measure packaging before ordering a final print.
 
@@ -76,7 +76,9 @@ GitHub Pages cannot securely run this checkout endpoint because it is static hos
 
 Before fulfilling live orders, configure the Stripe webhook that verifies `checkout.session.completed`. The return page is only a customer-facing status message and is not proof of payment.
 
-Set the Stripe webhook endpoint to `/api/stripe/webhook`, subscribe to `checkout.session.completed` and `checkout.session.async_payment_succeeded`, and store its signing secret as `STRIPE_WEBHOOK_SECRET`.
+Set the Stripe webhook endpoint to `https://forget-about-tray.onrender.com/api/stripe/webhook`, subscribe to `checkout.session.completed` and `checkout.session.async_payment_succeeded`, and store that exact endpoint's signing secret as `STRIPE_WEBHOOK_SECRET`. The customer return route also verifies a paid print Checkout Session, so a delayed webhook does not leave a paid order hidden from the factory queue.
+
+After this UAT2 update, run `supabase/schema.sql` again. It adds print weight, speed, postage, commission, platform-fee, and payout-breakdown fields without deleting existing orders.
 
 The account page lets users download their stored data and submit an account-deletion request. Deletion requests require an administrative review because legally required order and VAT records must remain restricted until their retention period expires.
 

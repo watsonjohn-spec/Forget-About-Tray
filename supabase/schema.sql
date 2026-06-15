@@ -291,6 +291,10 @@ create table if not exists public.printer_capabilities (
   unique (printer_profile_id, process, material, colour_key)
 );
 
+alter table public.printer_capabilities add column if not exists grams_per_hour numeric not null default 12 check (grams_per_hour > 0);
+alter table public.printer_capabilities add column if not exists postage_service text not null default 'evri-standard';
+alter table public.printer_capabilities add column if not exists postage_days integer not null default 3 check (postage_days > 0);
+
 create table if not exists public.print_quotes (
   id uuid primary key default gen_random_uuid(),
   customer_user_id uuid not null references auth.users(id) on delete cascade,
@@ -311,6 +315,15 @@ create table if not exists public.print_quotes (
   expires_at timestamptz not null,
   created_at timestamptz not null default now()
 );
+
+alter table public.print_quotes add column if not exists estimated_weight_grams numeric;
+alter table public.print_quotes add column if not exists estimated_print_hours numeric;
+alter table public.print_quotes add column if not exists handling_days integer;
+alter table public.print_quotes add column if not exists postage_service text;
+alter table public.print_quotes add column if not exists postage_days integer;
+alter table public.print_quotes add column if not exists material_cost_pence integer not null default 0;
+alter table public.print_quotes add column if not exists printer_fee_pence integer not null default 0;
+alter table public.print_quotes add column if not exists commission_pence integer not null default 0;
 
 create table if not exists public.print_jobs (
   id uuid primary key default gen_random_uuid(),
@@ -334,6 +347,12 @@ create table if not exists public.print_jobs (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.print_jobs add column if not exists material_cost_pence integer not null default 0;
+alter table public.print_jobs add column if not exists printer_fee_pence integer not null default 0;
+alter table public.print_jobs add column if not exists platform_fee_pence integer not null default 0;
+alter table public.print_jobs add column if not exists commission_pence integer not null default 0;
+alter table public.print_jobs add column if not exists postage_pence integer not null default 0;
 
 create table if not exists public.print_job_events (
   id uuid primary key default gen_random_uuid(),

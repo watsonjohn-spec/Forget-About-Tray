@@ -82,9 +82,10 @@
 
       <section class="mode-panel active" id="singleMode" data-mode-panel="single">
       <div class="single-heading">
-        <p class="eyebrow">Maker's bench</p>
+        <div><p class="eyebrow">Maker's bench</p>
         <h2>Build a tray for one formation</h2>
-        <p>Set the model count, choose a base from the catalogue, and tune the construction. The live preview and printable STL update as you work.</p>
+        <p>Set the model count, choose a base from the catalogue, and tune the construction.</p></div>
+        <button class="catalogue-pill" id="openSingleCatalogue" type="button">Open base catalogue</button>
       </div>
       <section class="workspace">
         <aside class="panel controls-panel">
@@ -94,7 +95,6 @@
               <h2>Tray setup</h2>
             </div>
             <div class="panel-heading-actions">
-              <button class="text-button" id="openSingleCatalogue" type="button">Base catalogue</button>
               <button class="text-button" id="resetButton" type="button">Reset</button>
             </div>
           </div>
@@ -216,11 +216,16 @@
                 <span class="step">02</span>
                 <h2>Print preview</h2>
               </div>
-              <label class="preview-colour-control">Filament colour
+              <label class="preview-colour-control">Print colour
                 <select id="filamentColour" aria-label="Preview filament colour"></select>
               </label>
             </div>
             <div class="preview-stage">
+              <div class="preview-angle-controls" aria-label="Rotate preview">
+                <button type="button" data-preview-turn="-1" aria-label="Rotate left">←</button>
+                <button type="button" data-preview-reset aria-label="Reset preview angle">Reset</button>
+                <button type="button" data-preview-turn="1" aria-label="Rotate right">→</button>
+              </div>
               <div class="dimension dimension-width" id="widthLabel">108.2 mm</div>
               <div class="dimension dimension-depth" id="depthLabel">82.2 mm</div>
               <svg id="trayPreview" role="img" aria-label="Configured tray preview" viewBox="0 0 760 450"></svg>
@@ -237,7 +242,7 @@
             <div>
               <span class="step">03</span>
               <h2>Make it physical</h2>
-              <p>Download the STL for your own slicer, or order the finished tray from the print service.</p>
+              <p>Download the STL for your own slicer, or order the finished tray from the print factory.</p>
             </div>
             <div class="action-buttons">
               <button class="button button-secondary" id="savePreset" type="button">Save preset</button>

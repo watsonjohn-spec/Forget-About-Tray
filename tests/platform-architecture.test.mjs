@@ -33,6 +33,9 @@ test("makeup caddies are a separate enabled generator under the makeup brand", (
   assert.ok(geometry.boxes.length > 10);
   assert.match(generator.renderStl(parameters), /^solid makeup_caddy/);
   assert.match(generator.safeFileName(parameters, "Dressing table"), /2-slots-handle\.stl$/);
+  const staircase = generator.buildGeometry({ ...parameters, items: [...parameters.items, { ...parameters.items[1], id: "foundation-two" }], layoutMode: "staircase", maxSpineLength: 100, stepRise: 22 });
+  assert.ok(staircase.positions.some((position) => position.z > 0));
+  assert.ok(staircase.height > geometry.config.baseThickness);
 });
 
 test("generator contract validates parameters and renders an STL", () => {
@@ -84,9 +87,14 @@ test("factory portal keeps completion and payout release outside printer control
   ]);
   assert.match(html, /id="factoryLoginForm"/);
   assert.match(html, /id="createFactoryAccount"/);
-  assert.match(factorySource, /data-job-status="producing"/);
-  assert.match(factorySource, /data-job-status="posted"/);
-  assert.doesNotMatch(factorySource, /data-job-status="complete"/);
+  assert.match(factorySource, /data-job-next-status/);
+  assert.match(factorySource, /\["producing"\]/);
+  assert.match(factorySource, /\["posted"\]/);
+  assert.doesNotMatch(factorySource, /nextStatuses[\s\S]*"complete"/);
+  assert.match(factorySource, /data-job-label/);
+  assert.match(factorySource, /data-job-stl/);
+  assert.match(factorySource, /data-save-job-note/);
+  assert.match(factorySource, /status !== "pending_payment"/);
   assert.match(serverSource, /Printers can only mark jobs as producing or posted/);
   assert.match(serverSource, /status: "pending_review", accepting_jobs: false/);
   assert.match(serverSource, /\/v2\/core\/accounts/);

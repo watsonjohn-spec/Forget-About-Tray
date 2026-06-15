@@ -19,10 +19,14 @@ services:
         value: "800"
       - key: PRINT_PRICE_PER_CM3_PENCE
         value: "25"
-      - key: MARKETPLACE_FEE_PERCENT
-        value: "15"
+      - key: MARKETPLACE_PLATFORM_FEE_PENCE
+        value: "50"
+      - key: MARKETPLACE_COMMISSION_PERCENT
+        value: "10"
       - key: MARKETPLACE_VAT_PERCENT
         value: "20"
+      - key: PLA_COST_PER_GRAM_PENCE
+        value: "2"
       - key: MARKETPLACE_QUOTE_MINUTES
         value: "30"
       - key: MARKETPLACE_INCLUDE_PENDING

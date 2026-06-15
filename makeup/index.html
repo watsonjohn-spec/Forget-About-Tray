@@ -45,6 +45,11 @@
         <p>Choose products from the starter catalogue or enter your own measurements. Reorder every slot, tune the construction, and add a centre carrying handle.</p>
       </section>
 
+      <nav class="makeup-mode-tabs" aria-label="Makeup holder type">
+        <button class="active" type="button" data-layout-mode="caddy"><strong>Caddy</strong><small>Products nest around a central carrying spine</small></button>
+        <button type="button" data-layout-mode="staircase"><strong>Freestanding case</strong><small>Products sit against the back wall of stepped layers</small></button>
+      </nav>
+
       <section class="builder">
         <aside class="panel controls">
           <div class="panel-heading"><div><span>01</span><h2>Add products</h2></div></div>
@@ -71,14 +76,14 @@
           <div class="control-block construction">
             <h3>Construction</h3>
             <div class="three-fields">
-              <label>Columns<input id="columns" type="number" min="1" max="6" value="3"></label>
+              <label>Maximum row length<input id="maxSpineLength" type="number" min="100" max="400" value="220"></label>
               <label>Gap<input id="gap" type="number" min="2" max="30" value="6"></label>
               <label>Edge margin<input id="edgeMargin" type="number" min="3" max="30" value="8"></label>
             </div>
             <div class="three-fields">
               <label>Base thickness<input id="baseThickness" type="number" min="1.2" max="12" step="0.1" value="3"></label>
               <label>Wall thickness<input id="wallThickness" type="number" min="1" max="6" step="0.1" value="2"></label>
-              <label>Holder height<input id="holderHeight" type="number" min="5" max="60" value="18"></label>
+              <label>Staircase rise<input id="stepRise" type="number" min="10" max="60" value="22"></label>
             </div>
             <label class="switch"><span><strong>Centre carrying handle</strong><small>Add two supports and a top grip.</small></span><input id="handleEnabled" type="checkbox"></label>
             <div class="two-fields" id="handleFields" hidden>
@@ -89,8 +94,8 @@
         </aside>
 
         <section class="panel preview-panel">
-          <div class="panel-heading"><div><span>02</span><h2>Caddy preview</h2></div><label>Filament<select id="filamentColour"></select></label></div>
-          <div class="preview-stage"><svg id="caddyPreview" viewBox="0 0 760 520" role="img" aria-label="Makeup caddy preview"></svg></div>
+          <div class="panel-heading"><div><span>02</span><h2>Caddy preview</h2></div><label>Print colour<select id="filamentColour"></select></label></div>
+          <div class="preview-stage"><div class="preview-angle-controls"><button data-preview-turn="-1" type="button">←</button><button data-preview-reset type="button">Reset</button><button data-preview-turn="1" type="button">→</button></div><svg id="caddyPreview" viewBox="0 0 760 520" role="img" aria-label="Makeup caddy preview"></svg></div>
           <div class="stats">
             <div><span>Outer size</span><strong id="outerSize">-</strong></div>
             <div><span>Height</span><strong id="totalHeight">-</strong></div>
@@ -111,10 +116,16 @@
 
     <dialog id="accountDialog">
       <div class="dialog-heading"><div><p class="eyebrow">Your account</p><h2>Account and orders</h2></div><button data-close="accountDialog">×</button></div>
+      <nav class="account-tabs"><button class="active" data-account-tab="profile">Profile and address</button><button data-account-tab="password">Password</button><button data-account-tab="orders">Orders</button></nav>
       <div class="account-content">
-        <p id="accountEmail"></p>
-        <button class="button secondary" id="viewOrders" type="button">Refresh order history</button>
-        <div id="ordersList"></div>
+        <form id="makeupProfileForm" data-account-panel="profile">
+          <label>Email<input id="accountEmail" disabled></label><label>Display name<input id="accountDisplayName"></label>
+          <label>Address line 1<input id="accountAddressLine1"></label><label>Address line 2<input id="accountAddressLine2"></label>
+          <div class="three-fields"><label>Town or city<input id="accountCity"></label><label>County<input id="accountCounty"></label><label>Postcode<input id="accountPostcode"></label></div>
+          <label>Country code<input id="accountCountry" maxlength="2" value="GB"></label><button class="button primary">Save profile</button>
+        </form>
+        <section data-account-panel="password" hidden><label>New password<input id="accountNewPassword" type="password" minlength="8"></label><button class="button primary" id="changePassword" type="button">Update password</button></section>
+        <section data-account-panel="orders" hidden><button class="button secondary" id="viewOrders" type="button">Refresh order history</button><div id="ordersList"></div><div id="orderDetail"></div></section>
         <button class="button text" id="logoutButton" type="button">Log out</button>
       </div>
     </dialog>
