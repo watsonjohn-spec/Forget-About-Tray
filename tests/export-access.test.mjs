@@ -14,6 +14,21 @@ const concurrentUserId = "00000000-0000-4000-8000-000000000003";
 const profiles = new Map([[freeUserId, false], [paidUserId, true], [concurrentUserId, false]]);
 const orderItems = [];
 const checkoutRequests = [];
+const printQuotes = [];
+const printJobs = [];
+const providerTransfers = [];
+const printerProfile = {
+  id: "10000000-0000-4000-8000-000000000001",
+  display_name: "Prototype Printer",
+  description: "Local test provider",
+  based_in: "Leeds",
+  postcode_area: "LS1",
+  rating_average: 4.8,
+  rating_count: 12,
+  lead_time_days: 4,
+  status: "active",
+  accepting_jobs: true
+};
 
 function userFromToken(header = "") {
   if (header === "Bearer free-token") return { id: freeUserId, email: "free@example.test" };
@@ -61,6 +76,49 @@ const mockSupabase = createServer(async (request, response) => {
   if (url.pathname === "/rest/v1/entitlements") {
     const userId = url.searchParams.get("user_id")?.replace("eq.", "");
     return sendJson(response, 200, userId === paidUserId ? [{ id: "paid-entitlement" }] : []);
+  }
+
+  if (url.pathname === "/rest/v1/printer_profiles") {
+    return sendJson(response, 200, [printerProfile]);
+  }
+
+  if (url.pathname === "/rest/v1/printer_capabilities") {
+    return sendJson(response, 200, [{
+      id: "20000000-0000-4000-8000-000000000001",
+      printer_profile_id: printerProfile.id,
+      material: "pla",
+      colour_key: "forest-green",
+      colour_name: "Forest Green",
+      colour_hex: "#31543a",
+      max_width_mm: 256,
+      max_depth_mm: 256,
+      max_height_mm: 256,
+      base_price_pence: 500,
+      price_per_cm3_pence: 20,
+      postage_pence: 350,
+      active: true
+    }]);
+  }
+
+  if (url.pathname === "/rest/v1/print_quotes") {
+    if (request.method === "POST") {
+      const rows = await requestJson(request);
+      const saved = rows.map((row, index) => ({ ...row, id: `30000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`, created_at: new Date().toISOString() }));
+      printQuotes.push(...saved);
+      return sendJson(response, 200, saved);
+    }
+    const id = url.searchParams.get("id")?.replace("eq.", "");
+    return sendJson(response, 200, id ? printQuotes.filter((quote) => quote.id === id) : printQuotes);
+  }
+
+  if (url.pathname === "/rest/v1/print_jobs" && request.method === "POST") {
+    printJobs.push(await requestJson(request));
+    return sendJson(response, 200, {});
+  }
+
+  if (url.pathname === "/rest/v1/provider_transfers" && request.method === "POST") {
+    providerTransfers.push(await requestJson(request));
+    return sendJson(response, 200, {});
   }
 
   if (url.pathname === "/rest/v1/orders" && request.method === "POST") {
@@ -182,6 +240,18 @@ test("enabled brand route serves the shared app shell", async () => {
   assert.match(await response.text(), /<script src="platform\.js"><\/script>/);
 });
 
+test("makeup route serves the rose-gold caddy generator", async () => {
+  const response = await fetch(`${baseUrl}/makeup`);
+  assert.equal(response.status, 200);
+  assert.match(response.url, /\/makeup\/$/);
+  const html = await response.text();
+  assert.match(html, /Forget About Makeup/);
+  assert.match(html, /id="slotList"/);
+  assert.match(html, /src="makeup\.js"/);
+  assert.equal((await fetch(`${baseUrl}/makeup/makeup.css`)).status, 200);
+  assert.equal((await fetch(`${baseUrl}/makeup/makeup.js`)).status, 200);
+});
+
 test("factory route serves the dedicated provider login", async () => {
   const response = await fetch(`${baseUrl}/factory/`);
   assert.equal(response.status, 200);
@@ -218,6 +288,27 @@ test("physical print checkout preserves the complete tray configuration", async 
   assert.equal(orderItems.at(-1).tray_configuration.notchesEnabled, true);
   assert.equal(orderItems.at(-1).tray_configuration.notchWidth, 7);
   assert.equal(orderItems.at(-1).tray_configuration.includeBases, true);
+});
+
+test("marketplace quotes expose selectable providers and create held print jobs", async () => {
+  const config = {
+    columns: 2, rows: 2, baseSize: 25, baseDepth: 25, gap: 1, clearance: 1,
+    plateThickness: 2, lipEnabled: true, wallHeight: 3, wallThickness: 1.6,
+    notchesEnabled: false, notchWidth: 2
+  };
+  const quoteResponse = await api("/api/marketplace/quotes", "paid-token", { config, name: "Provider test tray" });
+  assert.equal(quoteResponse.status, 200);
+  const quoteResult = await quoteResponse.json();
+  assert.equal(quoteResult.quotes.length, 1);
+  assert.equal(quoteResult.quotes[0].providerName, "Prototype Printer");
+  assert.ok(quoteResult.quotes[0].totalIncVatPence > quoteResult.quotes[0].providerSharePence);
+
+  const checkoutResponse = await api("/api/marketplace/checkout/session", "paid-token", { quoteId: quoteResult.quotes[0].id });
+  assert.equal(checkoutResponse.status, 200);
+  assert.equal(printJobs.at(-1).status, "pending_payment");
+  assert.equal(printJobs.at(-1).payout_status, "held");
+  assert.equal(providerTransfers.at(-1).status, "held");
+  assert.match(checkoutRequests.at(-1).get("payment_intent_data[transfer_group]"), /^PRINT_JOB_/);
 });
 
 test("checkout returns to the originating brand path", async () => {

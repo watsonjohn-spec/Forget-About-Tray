@@ -15,6 +15,26 @@ test("movement trays are registered as a versioned generator under the tray bran
   assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "board-games"));
 });
 
+test("makeup caddies are a separate enabled generator under the makeup brand", () => {
+  const { brand, generator } = resolvePlatformContext({ brandKey: "makeup" });
+  assert.equal(brand.enabled, true);
+  assert.equal(brand.defaultGeneratorType, "makeup_caddy");
+  assert.equal(generator.catalogueType, "makeup_products");
+  const parameters = {
+    items: [
+      { id: "lipstick", brand: "MAC", name: "Lipstick", category: "Lipstick", width: 22, depth: 22, height: 76, clearance: 1.5 },
+      { id: "foundation", brand: "Maybelline", name: "Foundation", category: "Foundation", width: 38, depth: 30, height: 105, clearance: 1.5 }
+    ],
+    columns: 2, gap: 6, edgeMargin: 8, baseThickness: 3, wallThickness: 2, holderHeight: 18,
+    handleEnabled: true, handleHeight: 95, handleWidth: 70
+  };
+  const geometry = generator.buildGeometry(parameters);
+  assert.equal(geometry.positions.length, 2);
+  assert.ok(geometry.boxes.length > 10);
+  assert.match(generator.renderStl(parameters), /^solid makeup_caddy/);
+  assert.match(generator.safeFileName(parameters, "Dressing table"), /2-slots-handle\.stl$/);
+});
+
 test("generator contract validates parameters and renders an STL", () => {
   const { generator } = resolvePlatformContext({ brandKey: "tray" });
   const source = {
@@ -74,6 +94,8 @@ test("factory portal keeps completion and payout release outside printer control
   assert.doesNotMatch(serverSource, /requirements_collector: "stripe"/);
   assert.match(serverSource, /print-job-transfer-\$\{job\.id\}/);
   assert.match(serverSource, /assertPrintJobTransition\(job\.status, "complete"\)/);
+  assert.match(serverSource, /\/api\/marketplace\/quotes/);
+  assert.match(serverSource, /payment_intent_data\[transfer_group\]/);
   assert.match(renderBlueprint, /healthCheckPath: \/api\/health/);
   assert.match(renderBlueprint, /SUPABASE_SECRET_KEY/);
   assert.match(renderBlueprint, /STRIPE_SECRET_KEY/);

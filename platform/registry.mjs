@@ -1,4 +1,5 @@
 import { movementTrayGenerator } from "./generators/movement-tray.mjs";
+import { makeupCaddyGenerator } from "./generators/makeup-caddy.mjs";
 
 const brands = [
   {
@@ -28,22 +29,22 @@ const brands = [
     key: "makeup",
     path: "makeup",
     name: "Forget About Makeup",
-    studioName: "Makeup Studio",
-    defaultGeneratorType: null,
-    generatorTypes: [],
-    enabled: false,
+    studioName: "Forget About Makeup",
+    defaultGeneratorType: "makeup_caddy",
+    generatorTypes: ["makeup_caddy"],
+    enabled: true,
     entitlementScope: "brand",
     theme: {
-      themeColor: "#7b4f58",
-      ink: "#35262b",
-      muted: "#806a70",
-      line: "#cfb9bd",
-      paper: "#eee2e2",
-      panel: "#faf3f1",
-      white: "#fffafa",
-      accent: "#aa766f",
-      accentDark: "#70464f",
-      highlight: "#c89a8f"
+      themeColor: "#6f4148",
+      ink: "#38272b",
+      muted: "#80686c",
+      line: "#d3b4b5",
+      paper: "#ead8d5",
+      panel: "#f8eeeb",
+      white: "#fffaf8",
+      accent: "#b76e79",
+      accentDark: "#75474e",
+      highlight: "#d7a69f"
     }
   },
   {
@@ -92,7 +93,10 @@ const brands = [
   }
 ];
 
-const generators = new Map([[movementTrayGenerator.type, movementTrayGenerator]]);
+const generators = new Map([
+  [movementTrayGenerator.type, movementTrayGenerator],
+  [makeupCaddyGenerator.type, makeupCaddyGenerator]
+]);
 
 export const marketplacePolicy = {
   countryCode: "GB",

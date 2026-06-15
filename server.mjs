@@ -12,6 +12,10 @@ const allowLiveStripe = process.env.ALLOW_LIVE_STRIPE === "true";
 const currency = (process.env.STRIPE_CURRENCY || "gbp").toLowerCase();
 const basePrice = Number(process.env.PRINT_BASE_PRICE_PENCE || 800);
 const pricePerCm3 = Number(process.env.PRINT_PRICE_PER_CM3_PENCE || 25);
+const marketplaceFeePercent = Number(process.env.MARKETPLACE_FEE_PERCENT || 15);
+const marketplaceVatPercent = Number(process.env.MARKETPLACE_VAT_PERCENT || 20);
+const marketplaceQuoteMinutes = Number(process.env.MARKETPLACE_QUOTE_MINUTES || 30);
+const marketplaceIncludePending = process.env.MARKETPLACE_INCLUDE_PENDING !== "false";
 const unlimitedExportsPrice = Number(process.env.UNLIMITED_EXPORTS_PRICE_PENCE || 500);
 const stripeApiBase = process.env.STRIPE_API_BASE || "https://api.stripe.com";
 const stripeApiVersion = process.env.STRIPE_API_VERSION || "2026-05-27.dahlia";
@@ -46,6 +50,41 @@ function priceGeneratedDesign(generator, input) {
   const geometry = generator.buildGeometry(input);
   const amount = Math.max(50, Math.round(basePrice + geometry.materialCm3 * pricePerCm3));
   return { ...geometry, amount };
+}
+
+function geometryEnvelope(geometry) {
+  const width = Math.max(Number(geometry.outerWidth || 0), ...geometry.boxes.map((box) => Number(box.x) + Number(box.w)));
+  const depth = Math.max(Number(geometry.outerDepth || 0), ...geometry.boxes.map((box) => Number(box.y) + Number(box.d)));
+  const height = Math.max(0, ...geometry.boxes.map((box) => Number(box.z) + Number(box.h)));
+  return { width, depth, height };
+}
+
+function publicQuote(row, profile, capability) {
+  return {
+    id: row.id,
+    printerProfileId: row.printer_profile_id,
+    providerName: profile.display_name,
+    description: profile.description || "",
+    basedIn: profile.based_in,
+    postcodeArea: profile.postcode_area,
+    providerStatus: profile.status,
+    acceptingJobs: profile.accepting_jobs,
+    ratingAverage: Number(profile.rating_average || 0),
+    ratingCount: Number(profile.rating_count || 0),
+    leadTimeDays: Number(row.lead_time_days),
+    colourKey: row.colour_key,
+    colourName: capability.colour_name,
+    colourHex: capability.colour_hex,
+    material: row.material,
+    productionPricePence: Number(row.production_price_pence),
+    postagePence: Number(row.postage_pence),
+    platformFeePence: Number(row.platform_fee_pence),
+    vatAmountPence: Number(row.vat_amount_pence),
+    totalIncVatPence: Number(row.total_inc_vat_pence),
+    providerSharePence: Number(row.provider_share_pence),
+    currency: row.currency,
+    expiresAt: row.expires_at
+  };
 }
 
 function sendJson(response, status, body, origin = "") {
@@ -529,6 +568,13 @@ async function updateFactoryJob(request, response, jobId) {
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify({ print_job_id: job.id, actor_user_id: user.id, from_status: job.status, to_status: nextStatus, note: cleanText(body.note, 500) || null })
     });
+    if (nextStatus === "producing") {
+      await supabaseAdmin(`orders?id=eq.${encodeURIComponent(job.order_id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ refund_locked_at: update.producing_at, updated_at: update.updated_at })
+      });
+    }
     sendJson(response, 200, { job: saved?.[0] || null }, origin);
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Print job could not be updated." }, origin);
@@ -621,6 +667,194 @@ function checkoutReturnOrigin(request, origin) {
   const requestedPath = String(request.headers["x-forget-about-path"] || "").replace(/\/$/, "");
   const safePath = requestedPath.startsWith("/") && !requestedPath.startsWith("//") ? requestedPath : "";
   return `${baseOrigin}${safePath}`;
+}
+
+async function createMarketplaceQuotes(request, response) {
+  const origin = checkoutOrigin(request);
+  if (!checkoutOriginAllowed(request)) return sendJson(response, 403, { error: "Origin is not allowed." });
+  try {
+    const user = await authenticateUser(request);
+    const body = await readJson(request);
+    const { brand, generator } = requestPlatformContext(request, body);
+    const parameters = generator.normalizeParameters(body.config || body.parameters || {});
+    const geometry = generator.buildGeometry(parameters);
+    const envelope = geometryEnvelope(geometry);
+    const [profiles, capabilities] = await Promise.all([
+      supabaseAdmin("printer_profiles?select=*&status=neq.suspended&order=rating_average.desc,lead_time_days.asc"),
+      supabaseAdmin("printer_capabilities?select=*&active=eq.true&order=colour_name.asc")
+    ]);
+    const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
+    const eligible = (capabilities || []).filter((capability) => {
+      const profile = profileMap.get(capability.printer_profile_id);
+      const available = profile && (
+        (profile.status === "active" && profile.accepting_jobs)
+        || (marketplaceIncludePending && profile.status === "pending_review")
+      );
+      return available
+        && Number(capability.max_width_mm) >= envelope.width
+        && Number(capability.max_depth_mm) >= envelope.depth
+        && Number(capability.max_height_mm) >= envelope.height;
+    });
+    const now = Date.now();
+    const expiresAt = new Date(now + marketplaceQuoteMinutes * 60_000).toISOString();
+    const name = cleanText(body.name || generator.name, 80);
+    const designSnapshot = {
+      name,
+      generatorVersion: generator.version,
+      parameters,
+      dimensions: envelope,
+      materialCm3: geometry.materialCm3
+    };
+    const quoteRows = eligible.map((capability) => {
+      const profile = profileMap.get(capability.printer_profile_id);
+      const productionPrice = Math.max(0, Math.round(Number(capability.base_price_pence) + Number(capability.price_per_cm3_pence) * geometry.materialCm3));
+      const postage = Number(capability.postage_pence);
+      const providerShare = productionPrice + postage;
+      const platformFee = Math.max(0, Math.round(providerShare * marketplaceFeePercent / 100));
+      const vatAmount = Math.max(0, Math.round((providerShare + platformFee) * marketplaceVatPercent / 100));
+      return {
+        customer_user_id: user.id,
+        printer_profile_id: profile.id,
+        brand_key: brand.key,
+        generator_type: generator.type,
+        design_snapshot: designSnapshot,
+        colour_key: capability.colour_key,
+        material: capability.material,
+        production_price_pence: productionPrice,
+        postage_pence: postage,
+        platform_fee_pence: platformFee,
+        vat_amount_pence: vatAmount,
+        total_inc_vat_pence: providerShare + platformFee + vatAmount,
+        provider_share_pence: providerShare,
+        currency,
+        lead_time_days: profile.lead_time_days,
+        expires_at: expiresAt
+      };
+    });
+    if (!quoteRows.length) {
+      return sendJson(response, 200, {
+        quotes: [],
+        dimensions: envelope,
+        message: "No providers currently have an active printer capability large enough for this design."
+      }, origin);
+    }
+    const saved = await supabaseAdmin("print_quotes", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(quoteRows)
+    });
+    const savedQuotes = (saved || []).map((quote) => {
+      const profile = profileMap.get(quote.printer_profile_id);
+      const capability = eligible.find((candidate) => (
+        candidate.printer_profile_id === quote.printer_profile_id
+        && candidate.colour_key === quote.colour_key
+        && candidate.material === quote.material
+      ));
+      return publicQuote(quote, profile, capability);
+    });
+    sendJson(response, 200, { quotes: savedQuotes, dimensions: envelope, expiresAt }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Printer quotes could not be created." }, origin);
+  }
+}
+
+async function createMarketplaceCheckout(request, response) {
+  const origin = checkoutOrigin(request);
+  if (!checkoutOriginAllowed(request)) return sendJson(response, 403, { error: "Origin is not allowed." });
+  const readiness = stripeReady();
+  if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
+  try {
+    const user = await authenticateUser(request);
+    const body = await readJson(request);
+    const quoteId = cleanText(body.quoteId, 80);
+    const quotes = await supabaseAdmin(`print_quotes?select=*&id=eq.${encodeURIComponent(quoteId)}&customer_user_id=eq.${encodeURIComponent(user.id)}&limit=1`);
+    const quote = quotes?.[0];
+    if (!quote) throw new Error("The selected printer quote could not be found.");
+    if (new Date(quote.expires_at).getTime() <= Date.now()) throw new Error("That printer quote has expired. Refresh the available providers.");
+    const { brand, generator } = resolvePlatformContext({ brandKey: quote.brand_key, generatorType: quote.generator_type });
+    const profiles = await supabaseAdmin(`printer_profiles?select=*&id=eq.${encodeURIComponent(quote.printer_profile_id)}&limit=1`);
+    const profile = profiles?.[0];
+    if (!profile || profile.status === "suspended") throw new Error("That printer is no longer available.");
+    const orderId = randomUUID();
+    const printJobId = randomUUID();
+    const returnOrigin = checkoutReturnOrigin(request, origin);
+    const designName = cleanText(quote.design_snapshot?.name || generator.name, 80);
+    const parameters = new URLSearchParams({
+      mode: "payment",
+      success_url: `${returnOrigin}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${returnOrigin}?checkout=cancelled`,
+      billing_address_collection: "required",
+      "line_items[0][price_data][currency]": quote.currency,
+      "line_items[0][price_data][unit_amount]": String(quote.total_inc_vat_pence),
+      "line_items[0][price_data][product_data][name]": `${designName} printed by ${profile.display_name}`.slice(0, 120),
+      "line_items[0][price_data][product_data][description]": generator.describe(quote.design_snapshot.parameters).slice(0, 500),
+      "line_items[0][quantity]": "1",
+      "payment_intent_data[transfer_group]": `PRINT_JOB_${printJobId}`,
+      "metadata[purchase_type]": "marketplace_print",
+      "metadata[user_id]": user.id,
+      "metadata[order_id]": orderId,
+      "metadata[print_job_id]": printJobId,
+      "metadata[quote_id]": quote.id,
+      "metadata[brand_key]": brand.key,
+      "metadata[generator_type]": generator.type,
+      "metadata[printer_profile_id]": profile.id
+    });
+    if (user.email) parameters.set("customer_email", user.email);
+    parameters.set("shipping_address_collection[allowed_countries][0]", marketplacePolicy.countryCode);
+    const session = await stripeForm("/v1/checkout/sessions", parameters);
+    if (!session.url) throw new Error("Stripe Checkout could not be created.");
+    await createPendingOrder({
+      id: orderId,
+      userId: user.id,
+      sessionId: session.id,
+      orderType: "printed_design",
+      amount: quote.total_inc_vat_pence,
+      description: `${designName} printed by ${profile.display_name}`,
+      brandKey: brand.key,
+      generatorType: generator.type,
+      designSnapshot: quote.design_snapshot,
+      trayConfiguration: generator.type === "movement_tray" ? quote.design_snapshot.parameters : null,
+      financials: {
+        subtotalExVat: Number(quote.production_price_pence) + Number(quote.platform_fee_pence),
+        postageExVat: Number(quote.postage_pence),
+        vatRate: marketplaceVatPercent,
+        vatAmount: Number(quote.vat_amount_pence)
+      }
+    });
+    await supabaseAdmin("print_jobs", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        id: printJobId,
+        order_id: orderId,
+        customer_user_id: user.id,
+        printer_profile_id: profile.id,
+        quote_id: quote.id,
+        brand_key: brand.key,
+        generator_type: generator.type,
+        design_snapshot: quote.design_snapshot,
+        colour_key: quote.colour_key,
+        material: quote.material,
+        status: "pending_payment",
+        provider_share_pence: quote.provider_share_pence,
+        payout_status: "held"
+      })
+    });
+    await supabaseAdmin("provider_transfers", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        print_job_id: printJobId,
+        printer_profile_id: profile.id,
+        amount_pence: quote.provider_share_pence,
+        currency: quote.currency,
+        status: "held"
+      })
+    });
+    sendJson(response, 200, { url: session.url, amount: quote.total_inc_vat_pence, currency: quote.currency, mode: readiness.mode }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Printer checkout could not be created." }, origin);
+  }
 }
 
 async function createStripeCheckout(request, response) {
@@ -908,7 +1142,7 @@ async function requestAccountDeletion(request, response) {
 
 async function createPendingOrder({
   id, userId, sessionId, orderType, amount, description, brandKey = "tray", generatorType = "movement_tray",
-  designSnapshot = null, trayConfiguration = null
+  designSnapshot = null, trayConfiguration = null, financials = null
 }) {
   const order = {
     id,
@@ -919,7 +1153,13 @@ async function createPendingOrder({
     status: "pending_payment",
     currency,
     total_inc_vat: amount,
-    stripe_checkout_session_id: sessionId
+    stripe_checkout_session_id: sessionId,
+    ...(financials ? {
+      subtotal_ex_vat: financials.subtotalExVat,
+      postage_ex_vat: financials.postageExVat,
+      vat_rate: financials.vatRate,
+      vat_amount: financials.vatAmount
+    } : {})
   };
   try {
     await supabaseAdmin("orders", {
@@ -1014,6 +1254,32 @@ async function finalizeCheckoutSession(session) {
       });
     }
   }
+  if (session.metadata?.purchase_type === "marketplace_print" && session.metadata?.print_job_id) {
+    const printJobId = session.metadata.print_job_id;
+    const jobs = await supabaseAdmin(`print_jobs?select=*&id=eq.${encodeURIComponent(printJobId)}&order_id=eq.${encodeURIComponent(orderId)}&limit=1`);
+    const job = jobs?.[0];
+    if (job?.status === "pending_payment") {
+      const updatedAt = new Date().toISOString();
+      await Promise.all([
+        supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(printJobId)}`, {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ status: "order_made", updated_at: updatedAt })
+        }),
+        supabaseAdmin("print_job_events", {
+          method: "POST",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({
+            print_job_id: printJobId,
+            actor_user_id: userId,
+            from_status: "pending_payment",
+            to_status: "order_made",
+            note: "Stripe confirmed customer payment."
+          })
+        })
+      ]);
+    }
+  }
 }
 
 function stripeEventVerified(rawBody, signatureHeader) {
@@ -1080,7 +1346,7 @@ createServer(async (request, response) => {
     await handleStripeWebhook(request, response);
     return;
   }
-  if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account") || pathname.startsWith("/api/factory"))) {
+  if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account") || pathname.startsWith("/api/factory") || pathname.startsWith("/api/marketplace"))) {
     response.writeHead(204, {
       ...(origin ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin" } : {}),
       "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Forget-About-Brand, X-Forget-About-Generator, X-Forget-About-Path, X-Forget-About-Device",
@@ -1105,6 +1371,14 @@ createServer(async (request, response) => {
   }
   if (request.method === "POST" && pathname === "/api/checkout/session") {
     await createStripeCheckout(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/marketplace/quotes") {
+    await createMarketplaceQuotes(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/marketplace/checkout/session") {
+    await createMarketplaceCheckout(request, response);
     return;
   }
   if (request.method === "POST" && pathname === "/api/checkout/quote") {
@@ -1180,7 +1454,12 @@ createServer(async (request, response) => {
   }
 
   const brandRoute = publicPlatformConfig.brands.find((brand) => brand.enabled && (pathname === `/${brand.path}` || pathname === `/${brand.path}/`));
-  if (brandRoute && pathname.endsWith("/")) {
+  if (brandRoute?.key === "makeup" && !pathname.endsWith("/")) {
+    response.writeHead(308, { Location: `/${brandRoute.path}/${requestUrl.search}` });
+    response.end();
+    return;
+  }
+  if (brandRoute && brandRoute.key !== "makeup" && pathname.endsWith("/")) {
     response.writeHead(308, { Location: `/${brandRoute.path}${requestUrl.search}` });
     response.end();
     return;
@@ -1190,7 +1469,8 @@ createServer(async (request, response) => {
     response.end();
     return;
   }
-  const relativePath = pathname === "/" || brandRoute ? "index.html" : pathname === "/factory/" ? "factory/index.html" : pathname.slice(1);
+  const brandEntry = brandRoute?.key === "makeup" ? "makeup/index.html" : "index.html";
+  const relativePath = pathname === "/" ? "index.html" : brandRoute ? brandEntry : pathname === "/factory/" ? "factory/index.html" : pathname.slice(1);
   const filePath = normalize(join(root, relativePath));
 
   if (!filePath.startsWith(normalize(root)) || !existsSync(filePath) || !statSync(filePath).isFile()) {

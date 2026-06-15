@@ -20,6 +20,9 @@ Forget About Tray is now the first generator in the shared Forget About platform
 - Offer one sponsored STL download per account, then a one-off GBP 5 unlimited-download unlock
 - Supabase user accounts with cloud-saved trays, armies, profiles, and order history
 - Server-side Stripe Checkout sessions with test-mode protection
+- Customer-selected print providers with colour, rating, UK location, lead time, and all-in price comparison
+- A separate rose-gold Forget About Makeup caddy generator at `/makeup/`
+- Ordered makeup-product slots, custom dimensions, and an optional centre carrying handle
 
 ## Run locally
 
@@ -49,11 +52,15 @@ For Print Factory onboarding and payouts, the Stripe key must also be allowed to
 
 Before running the account-enabled app for the first time, open the Supabase SQL Editor and run `supabase/schema.sql`. This creates profiles, saved designs, army lists, entitlements, immutable order snapshots, VAT-ready order fields, and Row Level Security policies.
 
-Re-run `supabase/schema.sql` after pulling the multi-brand platform update. It migrates existing tray designs and army lists into the generic design/project model and adds the print marketplace foundation without deleting the legacy records.
+Re-run `supabase/schema.sql` after pulling the multi-brand platform update. It enables the Makeup brand and generator, migrates existing tray designs and army lists into the generic design/project model, and adds the print marketplace foundation without deleting the legacy records.
 
-The marketplace is designed for UK-only fulfilment initially. It uses customer-selected printers and Stripe Connect separate charges and transfers: the printer share remains held until the print job reaches `complete`.
+The marketplace is designed for UK-only fulfilment initially. Choosing **Have it printed** creates live, time-limited quotes from suitable printer capabilities. It uses Stripe Connect separate charges and transfers: the printer share remains held until the print job reaches `complete`.
+
+Makeup catalogue dimensions are deliberately marked approximate because cosmetic packaging changes frequently. Customers can add custom products and should measure packaging before ordering a final print.
 
 The shared provider portal is available at `/factory/`. Printers create a dedicated email/password account there, complete their marketplace profile, add materials and colours, and manage assigned jobs. Factory accounts use Supabase Auth, so credentials are not hard-coded into the public site. Printer profiles begin in `pending_review`; approve them administratively before setting them active in the marketplace.
+
+`MARKETPLACE_INCLUDE_PENDING=true` lets the first pending-review provider appear during prototype testing. Set it to `false` before accepting live customer orders so only approved, active providers can be selected.
 
 For a confirmed prototype login, double-click `Create Factory Login.cmd`. It uses the private Supabase admin key already stored in `.env`, creates or resets `factory.prototype@forgetabout.im`, and displays a newly generated password locally. Change `FACTORY_PROTOTYPE_EMAIL` in `.env` if you want a different login address.
 

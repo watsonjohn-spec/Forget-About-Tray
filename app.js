@@ -58,6 +58,8 @@ let cloudPresets = [];
 let cloudArmyProjects = [];
 let catalogueContext = "army";
 let accountOrders = [];
+let marketplaceQuotes = [];
+let selectedMarketplaceQuoteId = "";
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -397,7 +399,7 @@ function startAdGate() {
   }, 1000);
 }
 
-function showPrintOrder() {
+async function showPrintOrder() {
   const metrics = trayMetrics(pendingExportConfig);
   document.getElementById("exportChoices").hidden = true;
   document.getElementById("unlockExports").hidden = true;
@@ -407,7 +409,7 @@ function showPrintOrder() {
     <div><dt>Base</dt><dd>${pendingExportConfig.baseSize} x ${pendingExportConfig.baseDepth} mm</dd></div>
     <div><dt>Outer size</dt><dd>${metrics.outerWidth.toFixed(1)} x ${metrics.outerDepth.toFixed(1)} mm</dd></div>
   `;
-  configureStripeCheckout();
+  await configureStripeCheckout();
 }
 
 function showUnlockExports() {
@@ -432,27 +434,78 @@ function formatMoney(amount, currency) {
 async function configureStripeCheckout() {
   const button = document.getElementById("stripeCheckoutButton");
   const status = document.getElementById("stripeCheckoutStatus");
+  const quotesContainer = document.getElementById("providerQuotes");
   button.disabled = true;
-  status.textContent = "Checking Stripe configuration...";
+  selectedMarketplaceQuoteId = "";
+  marketplaceQuotes = [];
+  quotesContainer.innerHTML = `<div class="provider-empty">Checking available printers...</div>`;
+  status.textContent = "Creating live printer quotes...";
   try {
     const [configResponse, quoteResponse] = await Promise.all([
       fetch(checkoutApiUrl("/api/checkout/config"), { headers: platformHeaders() }),
-      fetch(checkoutApiUrl("/api/checkout/quote"), {
+      authorizedFetch("/api/marketplace/quotes", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...platformHeaders() },
-        body: JSON.stringify({ config: pendingExportConfig })
+        body: JSON.stringify({ config: pendingExportConfig, name: pendingExportPrefix || "Printed design" })
       })
     ]);
     if (!configResponse.ok || !quoteResponse.ok) throw new Error("Stripe checkout backend is not available.");
     const config = await configResponse.json();
-    const quote = await quoteResponse.json();
-    document.getElementById("printOrderSummary").insertAdjacentHTML("beforeend", `<div><dt>Estimated price</dt><dd>${formatMoney(quote.amount, quote.currency)}</dd></div>`);
+    const result = await quoteResponse.json();
+    marketplaceQuotes = result.quotes || [];
+    populateProviderFilters();
+    renderProviderQuotes();
     if (!config.enabled) throw new Error(config.reason || "Stripe is not configured.");
-    button.disabled = false;
-    status.textContent = `${config.mode === "test" ? "Stripe test mode" : "Stripe live mode"} - final price confirmed at checkout.`;
+    status.textContent = marketplaceQuotes.length
+      ? `${marketplaceQuotes.length} printer option${marketplaceQuotes.length === 1 ? "" : "s"} available. Select one to continue in ${config.mode === "test" ? "Stripe test mode" : "Stripe live mode"}.`
+      : result.message || "No matching printers are available yet.";
   } catch (error) {
+    quotesContainer.innerHTML = `<div class="provider-empty">${escapeHtml(error.message)}</div>`;
     status.textContent = `${error.message} Deploy a secure Node checkout backend and set checkout-api-url when using GitHub Pages.`;
   }
+}
+
+function populateProviderFilters() {
+  const colour = document.getElementById("providerColourFilter");
+  const current = colour.value;
+  const options = [...new Map(marketplaceQuotes.map((quote) => [quote.colourKey, quote])).values()];
+  colour.innerHTML = `<option value="">All colours</option>${options.map((quote) => `<option value="${escapeHtml(quote.colourKey)}">${escapeHtml(quote.colourName)} · ${escapeHtml(quote.material.toUpperCase())}</option>`).join("")}`;
+  colour.value = options.some((quote) => quote.colourKey === current) ? current : "";
+}
+
+function filteredProviderQuotes() {
+  const colour = document.getElementById("providerColourFilter").value;
+  const maximumLead = Number(document.getElementById("providerLeadFilter").value || 0);
+  const minimumRating = Number(document.getElementById("providerRatingFilter").value || 0);
+  return marketplaceQuotes.filter((quote) => (
+    (!colour || quote.colourKey === colour)
+    && (!maximumLead || quote.leadTimeDays <= maximumLead)
+    && (!minimumRating || quote.ratingAverage >= minimumRating)
+  ));
+}
+
+function renderProviderQuotes() {
+  const quotes = filteredProviderQuotes();
+  const container = document.getElementById("providerQuotes");
+  container.innerHTML = quotes.length ? quotes.map((quote) => `
+    <article class="provider-quote ${quote.id === selectedMarketplaceQuoteId ? "selected" : ""}">
+      <span class="provider-colour" style="background:${escapeHtml(quote.colourHex || "#c8c8c8")}"></span>
+      <span class="provider-main">
+        <strong>${escapeHtml(quote.providerName)}</strong>
+        <small>${escapeHtml(quote.basedIn)} · ${quote.ratingCount ? `${quote.ratingAverage.toFixed(1)} / 5 from ${quote.ratingCount}` : "New provider"} · ${quote.leadTimeDays} day lead time</small>
+        ${quote.providerStatus === "pending_review" ? `<em>Prototype provider · platform review pending</em>` : ""}
+      </span>
+      <span class="provider-price"><strong>${formatMoney(quote.totalIncVatPence, quote.currency)}</strong><small>all in</small></span>
+      <details>
+        <summary>Price breakdown</summary>
+        <span>Production ${formatMoney(quote.productionPricePence, quote.currency)}</span>
+        <span>Postage ${formatMoney(quote.postagePence, quote.currency)}</span>
+        <span>Platform service ${formatMoney(quote.platformFeePence, quote.currency)}</span>
+        <span>VAT ${formatMoney(quote.vatAmountPence, quote.currency)}</span>
+      </details>
+      <button type="button" data-provider-quote="${escapeHtml(quote.id)}">${quote.id === selectedMarketplaceQuoteId ? "Selected" : "Select printer"}</button>
+    </article>
+  `).join("") : `<div class="provider-empty">No printers match these filters.</div>`;
+  document.getElementById("stripeCheckoutButton").disabled = !selectedMarketplaceQuoteId;
 }
 
 async function beginStripeCheckout() {
@@ -461,9 +514,10 @@ async function beginStripeCheckout() {
   button.disabled = true;
   status.textContent = "Creating secure Stripe Checkout...";
   try {
-    const response = await authorizedFetch("/api/checkout/session", {
+    if (!selectedMarketplaceQuoteId) throw new Error("Select a printer before continuing.");
+    const response = await authorizedFetch("/api/marketplace/checkout/session", {
       method: "POST",
-      body: JSON.stringify({ config: pendingExportConfig, name: pendingExportPrefix || "Printed design" })
+      body: JSON.stringify({ quoteId: selectedMarketplaceQuoteId })
     });
     const result = await response.json();
     if (!response.ok || !result.url) throw new Error(result.error || "Stripe Checkout could not be created.");
@@ -1556,6 +1610,15 @@ document.getElementById("chooseEmailExport").addEventListener("click", async () 
 document.getElementById("chooseUnlimitedExport").addEventListener("click", showUnlockExports);
 document.getElementById("choosePrintOrder").addEventListener("click", showPrintOrder);
 document.getElementById("stripeCheckoutButton").addEventListener("click", beginStripeCheckout);
+document.getElementById("providerQuotes").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-provider-quote]");
+  if (!button) return;
+  selectedMarketplaceQuoteId = button.dataset.providerQuote;
+  renderProviderQuotes();
+});
+["providerColourFilter", "providerLeadFilter", "providerRatingFilter"].forEach((id) => {
+  document.getElementById(id).addEventListener("change", renderProviderQuotes);
+});
 document.getElementById("unlockCheckoutButton").addEventListener("click", beginUnlockCheckout);
 async function completeSponsoredExport(delivery) {
   try {

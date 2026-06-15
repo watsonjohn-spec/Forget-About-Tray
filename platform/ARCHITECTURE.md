@@ -33,7 +33,10 @@ Each server-side generator module must provide:
 }
 ```
 
-`platform/generators/movement-tray.mjs` is the first implementation.
+Current implementations:
+
+- `platform/generators/movement-tray.mjs` builds ranked miniature movement trays.
+- `platform/generators/makeup-caddy.mjs` builds ordered cosmetic-holder caddies with an optional carry handle.
 
 Generator parameter catalogues are stored separately from saved designs. This allows each generator to have a catalogue similar to the Old World unit catalogue without coupling catalogues to movement trays.
 

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#6f4148" />
+    <meta name="checkout-api-url" content="https://forget-about-tray.onrender.com" />
+    <title>Forget About Makeup</title>
+    <link rel="stylesheet" href="makeup.css" />
+  </head>
+  <body>
+    <div class="auth-gate" id="authGate">
+      <form class="login-card" id="loginForm">
+        <span class="brand-gem" aria-hidden="true"></span>
+        <div><p class="eyebrow">Forget About Makeup</p><h1>Enter your dressing room</h1></div>
+        <p>Sign in to keep caddies, downloads, and print orders together.</p>
+        <label>Email<input id="loginEmail" autocomplete="email" required type="email"></label>
+        <label>Password<input id="loginPassword" autocomplete="current-password" required type="password"></label>
+        <p class="login-error" id="loginError"></p>
+        <button class="button primary" type="submit">Sign in</button>
+        <div class="oauth-actions">
+          <button class="button secondary" data-oauth-provider="google" type="button">Google</button>
+          <button class="button secondary" data-oauth-provider="apple" type="button">Apple</button>
+        </div>
+        <button class="button text" id="createAccount" type="button">Create an account</button>
+      </form>
+    </div>
+
+    <header>
+      <a class="brand" href="./"><span class="brand-gem"></span><strong>Forget About Makeup</strong></a>
+      <p><strong>Arrange the ritual.</strong><em>Carry it beautifully.</em></p>
+      <nav>
+        <button class="button header-button" id="saveDesignTop" type="button">Save caddy</button>
+        <button class="button header-button" id="exportTop" type="button">Export STL</button>
+        <button class="button header-button" id="accountButton" type="button">Account</button>
+      </nav>
+    </header>
+
+    <main>
+      <aside class="ad-slot"><span>Sponsored placement</span><strong>Beauty and storage brands · responsive leaderboard</strong><small>970 × 90</small></aside>
+
+      <section class="hero">
+        <p class="eyebrow">The dressing table</p>
+        <h1>Build a makeup caddy around what you actually use.</h1>
+        <p>Choose products from the starter catalogue or enter your own measurements. Reorder every slot, tune the construction, and add a centre carrying handle.</p>
+      </section>
+
+      <section class="builder">
+        <aside class="panel controls">
+          <div class="panel-heading"><div><span>01</span><h2>Add products</h2></div></div>
+          <div class="control-block">
+            <p class="note">Starter catalogue measurements are approximate because packaging changes. Measure before a final print.</p>
+            <label>Brand<select id="brandFilter"></select></label>
+            <label>Product<select id="productSelect"></select></label>
+            <button class="button primary" id="addProduct" type="button">Add selected product</button>
+          </div>
+          <form class="control-block custom-form" id="customProductForm">
+            <h3>Add custom product</h3>
+            <label>Name<input id="customName" required placeholder="My foundation"></label>
+            <div class="three-fields">
+              <label>Width<input id="customWidth" required type="number" min="8" max="180" value="35"></label>
+              <label>Depth<input id="customDepth" required type="number" min="8" max="180" value="35"></label>
+              <label>Height<input id="customHeight" required type="number" min="8" max="300" value="100"></label>
+            </div>
+            <button class="button secondary" type="submit">Add custom slot</button>
+          </form>
+          <div class="control-block">
+            <div class="block-heading"><h3>Slot order</h3><small>Items flow left to right, then down.</small></div>
+            <div class="slot-list" id="slotList"></div>
+          </div>
+          <div class="control-block construction">
+            <h3>Construction</h3>
+            <div class="three-fields">
+              <label>Columns<input id="columns" type="number" min="1" max="6" value="3"></label>
+              <label>Gap<input id="gap" type="number" min="2" max="30" value="6"></label>
+              <label>Edge margin<input id="edgeMargin" type="number" min="3" max="30" value="8"></label>
+            </div>
+            <div class="three-fields">
+              <label>Base thickness<input id="baseThickness" type="number" min="1.2" max="12" step="0.1" value="3"></label>
+              <label>Wall thickness<input id="wallThickness" type="number" min="1" max="6" step="0.1" value="2"></label>
+              <label>Holder height<input id="holderHeight" type="number" min="5" max="60" value="18"></label>
+            </div>
+            <label class="switch"><span><strong>Centre carrying handle</strong><small>Add two supports and a top grip.</small></span><input id="handleEnabled" type="checkbox"></label>
+            <div class="two-fields" id="handleFields" hidden>
+              <label>Handle height<input id="handleHeight" type="number" min="45" max="180" value="95"></label>
+              <label>Handle width<input id="handleWidth" type="number" min="35" max="180" value="70"></label>
+            </div>
+          </div>
+        </aside>
+
+        <section class="panel preview-panel">
+          <div class="panel-heading"><div><span>02</span><h2>Caddy preview</h2></div><label>Filament<select id="filamentColour"></select></label></div>
+          <div class="preview-stage"><svg id="caddyPreview" viewBox="0 0 760 520" role="img" aria-label="Makeup caddy preview"></svg></div>
+          <div class="stats">
+            <div><span>Outer size</span><strong id="outerSize">-</strong></div>
+            <div><span>Height</span><strong id="totalHeight">-</strong></div>
+            <div><span>Est. material</span><strong id="materialEstimate">-</strong></div>
+            <div><span>Slots</span><strong id="slotCount">0</strong></div>
+          </div>
+          <div class="preview-actions">
+            <input id="designName" value="My makeup caddy" aria-label="Design name">
+            <button class="button secondary" id="saveDesign" type="button">Save caddy</button>
+            <button class="button primary" id="exportButton" type="button">Export or print</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="saved-section"><div><p class="eyebrow">Your dressing room</p><h2>Saved caddies</h2></div><div class="saved-grid" id="savedDesigns"></div></section>
+      <aside class="ad-slot"><span>Partner placement</span><strong>Second responsive campaign space</strong><small>970 × 90</small></aside>
+    </main>
+
+    <dialog id="accountDialog">
+      <div class="dialog-heading"><div><p class="eyebrow">Your account</p><h2>Account and orders</h2></div><button data-close="accountDialog">×</button></div>
+      <div class="account-content">
+        <p id="accountEmail"></p>
+        <button class="button secondary" id="viewOrders" type="button">Refresh order history</button>
+        <div id="ordersList"></div>
+        <button class="button text" id="logoutButton" type="button">Log out</button>
+      </div>
+    </dialog>
+
+    <dialog id="exportDialog">
+      <div class="dialog-heading"><div><p class="eyebrow">Choose fulfilment</p><h2>Get this caddy</h2></div><button data-close="exportDialog">×</button></div>
+      <div class="export-choices" id="exportChoices">
+        <button class="export-choice" id="downloadStl" type="button"><strong>Download STL</strong><small>Use unlimited access or your one sponsored download.</small></button>
+        <button class="export-choice" id="unlockStl" type="button"><strong>Unlock unlimited STLs</strong><small>One £5 payment unlocks this brand.</small></button>
+        <button class="export-choice" id="printCaddy" type="button"><strong>Have it printed</strong><small>Compare UK print providers and colours.</small></button>
+      </div>
+      <section class="print-marketplace" id="printMarketplace" hidden>
+        <h3>Choose your printer</h3>
+        <p>Payment is refundable until the provider starts producing the order.</p>
+        <div class="provider-filters"><select id="providerColourFilter"><option value="">All colours</option></select><select id="providerLeadFilter"><option value="">Any lead time</option><option value="3">Up to 3 days</option><option value="7">Up to 7 days</option><option value="14">Up to 14 days</option></select><select id="providerRatingFilter"><option value="">Any rating</option><option value="4">4+ stars</option></select></div>
+        <div id="providerQuotes" class="provider-quotes"></div>
+        <button class="button primary" id="checkoutButton" disabled type="button">Pay for selected printer</button>
+        <small id="checkoutStatus"></small>
+      </section>
+    </dialog>
+
+    <div class="toast" id="toast"></div>
+    <script src="../public-config.js"></script>
+    <script src="../platform.js"></script>
+    <script src="../account.js"></script>
+    <script src="catalogue.js"></script>
+    <script src="makeup.js"></script>
+  </body>
+</html>

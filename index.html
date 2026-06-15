@@ -449,11 +449,17 @@
       </section>
       <section class="print-order" id="printOrder" hidden>
         <div class="print-order-mark">3D</div>
-        <h3>Printed tray checkout</h3>
-        <p>The selected tray configuration is ready to send to secure Stripe Checkout.</p>
+        <h3>Choose your printer</h3>
+        <p>Compare the all-in price, colour, rating, location, and lead time. Payment is refundable until the printer starts producing your order.</p>
         <dl id="printOrderSummary"></dl>
-        <button class="button button-primary" id="stripeCheckoutButton" type="button" disabled>Continue to Stripe Checkout</button>
-        <small id="stripeCheckoutStatus">Checking Stripe configuration...</small>
+        <div class="provider-filters">
+          <label>Colour<select id="providerColourFilter"><option value="">All colours</option></select></label>
+          <label>Maximum lead time<select id="providerLeadFilter"><option value="">Any lead time</option><option value="3">3 days</option><option value="7">7 days</option><option value="14">14 days</option></select></label>
+          <label>Minimum rating<select id="providerRatingFilter"><option value="">Any rating</option><option value="4">4+ stars</option><option value="4.5">4.5+ stars</option></select></label>
+        </div>
+        <div class="provider-quotes" id="providerQuotes"></div>
+        <button class="button button-primary" id="stripeCheckoutButton" type="button" disabled>Pay for selected printer</button>
+        <small id="stripeCheckoutStatus">Loading available printers...</small>
       </section>
     </dialog>
 

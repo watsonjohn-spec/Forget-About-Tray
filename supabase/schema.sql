@@ -66,17 +66,21 @@ create table if not exists public.brand_generators (
 insert into public.brands (key, name, path, enabled, entitlement_scope)
 values
   ('tray', 'Forget About Tray', 'tray', true, 'brand'),
-  ('makeup', 'Forget About Makeup', 'makeup', false, 'brand'),
+  ('makeup', 'Forget About Makeup', 'makeup', true, 'brand'),
   ('crosstitch', 'Forget About Crosstitch', 'crosstitch', false, 'brand'),
   ('board-games', 'Forget About Board Games', 'board-games', false, 'brand')
-on conflict (key) do update set name = excluded.name, path = excluded.path, entitlement_scope = excluded.entitlement_scope;
+on conflict (key) do update set name = excluded.name, path = excluded.path, enabled = excluded.enabled, entitlement_scope = excluded.entitlement_scope;
 
 insert into public.generator_definitions (type, name, current_version, parameter_catalogue_type, enabled)
-values ('movement_tray', 'Movement tray', 1, 'old_world_units', true)
-on conflict (type) do update set name = excluded.name, current_version = excluded.current_version, parameter_catalogue_type = excluded.parameter_catalogue_type;
+values
+  ('movement_tray', 'Movement tray', 1, 'old_world_units', true),
+  ('makeup_caddy', 'Makeup caddy', 1, 'makeup_products', true)
+on conflict (type) do update set name = excluded.name, current_version = excluded.current_version, parameter_catalogue_type = excluded.parameter_catalogue_type, enabled = excluded.enabled;
 
 insert into public.brand_generators (brand_key, generator_type, enabled)
-values ('tray', 'movement_tray', true)
+values
+  ('tray', 'movement_tray', true),
+  ('makeup', 'makeup_caddy', true)
 on conflict (brand_key, generator_type) do update set enabled = excluded.enabled;
 
 create table if not exists public.designs (
