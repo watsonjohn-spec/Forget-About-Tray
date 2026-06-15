@@ -155,7 +155,14 @@
   async function signUp(email, password) {
     const result = await authRequest("/signup", {
       method: "POST",
-      body: JSON.stringify({ email, password, data: { signup_brand_key: brandKey() } })
+      body: JSON.stringify({
+        email,
+        password,
+        data: {
+          signup_brand_key: brandKey(),
+          signup_surface: window.location.pathname.toLowerCase().includes("/factory") ? "factory" : "customer"
+        }
+      })
     });
     if (result.access_token) storeSession(result);
     return result;

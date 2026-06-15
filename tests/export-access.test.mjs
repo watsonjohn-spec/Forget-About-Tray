@@ -182,6 +182,15 @@ test("enabled brand route serves the shared app shell", async () => {
   assert.match(await response.text(), /<script src="platform\.js"><\/script>/);
 });
 
+test("factory route serves the dedicated provider login", async () => {
+  const response = await fetch(`${baseUrl}/factory/`);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Forget About Print Factory/);
+  assert.match(html, /id="createFactoryAccount"/);
+  assert.match(html, /src="\.\.\/account\.js"/);
+});
+
 test("physical print checkout preserves the complete tray configuration", async () => {
   const config = {
     columns: 4,

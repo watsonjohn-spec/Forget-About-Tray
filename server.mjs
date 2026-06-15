@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { extname, join, normalize } from "node:path";
 import { marketplacePolicy, publicPlatformConfig, resolvePlatformContext } from "./platform/registry.mjs";
+import { assertPrintJobTransition } from "./platform/print-factory.mjs";
 
 const port = Number(process.env.PORT || 4173);
 const root = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
@@ -147,6 +148,172 @@ async function optionalSupabaseAdmin(path, options = {}) {
     return await supabaseAdmin(path, options);
   } catch {
     return [];
+  }
+}
+
+function cleanText(value, maximum = 500) {
+  return String(value || "").trim().slice(0, maximum);
+}
+
+function cleanPositiveInteger(value, fallback, maximum = 100_000) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 && number <= maximum ? number : fallback;
+}
+
+async function loadPrinterProfile(userId) {
+  const profiles = await supabaseAdmin(`printer_profiles?select=*&user_id=eq.${encodeURIComponent(userId)}&limit=1`);
+  return profiles?.[0] || null;
+}
+
+async function factoryDashboard(request, response) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const profile = await loadPrinterProfile(user.id);
+    if (!profile) return sendJson(response, 200, { account: { email: user.email }, profile: null, capabilities: [], jobs: [], transfers: [], paymentAccount: null }, origin);
+    const profileId = encodeURIComponent(profile.id);
+    const [capabilities, jobs, transfers, paymentAccounts] = await Promise.all([
+      supabaseAdmin(`printer_capabilities?select=*&printer_profile_id=eq.${profileId}&order=colour_name.asc`),
+      supabaseAdmin(`print_jobs?select=*,print_job_events(*)&printer_profile_id=eq.${profileId}&order=created_at.desc`),
+      supabaseAdmin(`provider_transfers?select=*&printer_profile_id=eq.${profileId}&order=created_at.desc`),
+      supabaseAdmin(`printer_payment_accounts?select=charges_enabled,transfers_enabled,onboarding_complete,updated_at&printer_profile_id=eq.${profileId}&limit=1`)
+    ]);
+    sendJson(response, 200, {
+      account: { email: user.email },
+      profile,
+      capabilities: capabilities || [],
+      jobs: jobs || [],
+      transfers: transfers || [],
+      paymentAccount: paymentAccounts?.[0] || null
+    }, origin);
+  } catch (error) {
+    sendJson(response, 401, { error: error.message }, origin);
+  }
+}
+
+async function saveFactoryProfile(request, response) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const body = await readJson(request);
+    const profile = await loadPrinterProfile(user.id);
+    const editable = {
+      display_name: cleanText(body.displayName, 80),
+      description: cleanText(body.description, 800) || null,
+      based_in: cleanText(body.basedIn, 120),
+      postcode_area: cleanText(body.postcodeArea, 12).toUpperCase(),
+      lead_time_days: cleanPositiveInteger(body.leadTimeDays, 7, 90),
+      accepting_jobs: Boolean(body.acceptingJobs),
+      updated_at: new Date().toISOString()
+    };
+    if (!editable.display_name || !editable.based_in || !editable.postcode_area || editable.lead_time_days < 1) {
+      throw new Error("Display name, UK location, postcode area, and lead time are required.");
+    }
+    let saved;
+    if (profile) {
+      saved = await supabaseAdmin(`printer_profiles?id=eq.${encodeURIComponent(profile.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify(editable)
+      });
+    } else {
+      saved = await supabaseAdmin("printer_profiles", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ ...editable, user_id: user.id, status: "pending_review", accepting_jobs: false })
+      });
+    }
+    sendJson(response, 200, { profile: saved?.[0] || null }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Printer profile could not be saved." }, origin);
+  }
+}
+
+async function addFactoryCapability(request, response) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const profile = await loadPrinterProfile(user.id);
+    if (!profile) throw new Error("Create your printer profile first.");
+    const body = await readJson(request);
+    const material = cleanText(body.material, 20).toLowerCase();
+    const colourName = cleanText(body.colourName, 80);
+    const colourKey = cleanText(body.colourKey || colourName, 80).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    if (!["pla", "petg"].includes(material) || !colourName || !colourKey) throw new Error("Choose PLA or PETG and provide a colour.");
+    const capability = {
+      printer_profile_id: profile.id,
+      process: "fdm",
+      material,
+      colour_key: colourKey,
+      colour_name: colourName,
+      colour_hex: /^#[0-9a-f]{6}$/i.test(body.colourHex || "") ? body.colourHex : null,
+      max_width_mm: cleanPositiveInteger(body.maxWidthMm, 256, 1000),
+      max_depth_mm: cleanPositiveInteger(body.maxDepthMm, 256, 1000),
+      max_height_mm: cleanPositiveInteger(body.maxHeightMm, 256, 1000),
+      base_price_pence: cleanPositiveInteger(body.basePricePence, 0),
+      price_per_cm3_pence: cleanPositiveInteger(body.pricePerCm3Pence, 0),
+      postage_pence: cleanPositiveInteger(body.postagePence, 0),
+      active: true
+    };
+    const saved = await supabaseAdmin("printer_capabilities?on_conflict=printer_profile_id,process,material,colour_key", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(capability)
+    });
+    sendJson(response, 200, { capability: saved?.[0] || null }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Printer capability could not be saved." }, origin);
+  }
+}
+
+async function removeFactoryCapability(request, response, capabilityId) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const profile = await loadPrinterProfile(user.id);
+    if (!profile) throw new Error("Printer profile not found.");
+    await supabaseAdmin(`printer_capabilities?id=eq.${encodeURIComponent(capabilityId)}&printer_profile_id=eq.${encodeURIComponent(profile.id)}`, {
+      method: "DELETE",
+      headers: { Prefer: "return=minimal" }
+    });
+    sendJson(response, 200, { deleted: true }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Printer capability could not be removed." }, origin);
+  }
+}
+
+async function updateFactoryJob(request, response, jobId) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const profile = await loadPrinterProfile(user.id);
+    if (!profile) throw new Error("Printer profile not found.");
+    const jobs = await supabaseAdmin(`print_jobs?select=*&id=eq.${encodeURIComponent(jobId)}&printer_profile_id=eq.${encodeURIComponent(profile.id)}&limit=1`);
+    const job = jobs?.[0];
+    if (!job) throw new Error("Print job not found.");
+    const body = await readJson(request);
+    const nextStatus = cleanText(body.status, 30);
+    if (!["producing", "posted"].includes(nextStatus)) throw new Error("Printers can only mark jobs as producing or posted.");
+    assertPrintJobTransition(job.status, nextStatus);
+    const update = {
+      status: nextStatus,
+      updated_at: new Date().toISOString(),
+      ...(nextStatus === "producing" ? { producing_at: new Date().toISOString() } : {}),
+      ...(nextStatus === "posted" ? { posted_at: new Date().toISOString(), tracking_reference: cleanText(body.trackingReference, 120) || null } : {})
+    };
+    const saved = await supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(update)
+    });
+    await supabaseAdmin("print_job_events", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ print_job_id: job.id, actor_user_id: user.id, from_status: job.status, to_status: nextStatus, note: cleanText(body.note, 500) || null })
+    });
+    sendJson(response, 200, { job: saved?.[0] || null }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Print job could not be updated." }, origin);
   }
 }
 
@@ -691,11 +858,11 @@ createServer(async (request, response) => {
     await handleStripeWebhook(request, response);
     return;
   }
-  if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account"))) {
+  if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account") || pathname.startsWith("/api/factory"))) {
     response.writeHead(204, {
       ...(origin ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin" } : {}),
       "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Forget-About-Brand, X-Forget-About-Generator, X-Forget-About-Path, X-Forget-About-Device",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS"
     });
     response.end();
     return;
@@ -754,6 +921,28 @@ createServer(async (request, response) => {
     await requestAccountDeletion(request, response);
     return;
   }
+  if (request.method === "GET" && pathname === "/api/factory/dashboard") {
+    await factoryDashboard(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/factory/profile") {
+    await saveFactoryProfile(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/factory/capabilities") {
+    await addFactoryCapability(request, response);
+    return;
+  }
+  const factoryCapabilityRoute = pathname.match(/^\/api\/factory\/capabilities\/([0-9a-f-]+)$/i);
+  if (request.method === "DELETE" && factoryCapabilityRoute) {
+    await removeFactoryCapability(request, response, factoryCapabilityRoute[1]);
+    return;
+  }
+  const factoryJobStatusRoute = pathname.match(/^\/api\/factory\/jobs\/([0-9a-f-]+)\/status$/i);
+  if (request.method === "POST" && factoryJobStatusRoute) {
+    await updateFactoryJob(request, response, factoryJobStatusRoute[1]);
+    return;
+  }
 
   const brandRoute = publicPlatformConfig.brands.find((brand) => brand.enabled && (pathname === `/${brand.path}` || pathname === `/${brand.path}/`));
   if (brandRoute && pathname.endsWith("/")) {
@@ -761,7 +950,12 @@ createServer(async (request, response) => {
     response.end();
     return;
   }
-  const relativePath = pathname === "/" || brandRoute ? "index.html" : pathname.slice(1);
+  if (pathname === "/factory") {
+    response.writeHead(308, { Location: `/factory/${requestUrl.search}` });
+    response.end();
+    return;
+  }
+  const relativePath = pathname === "/" || brandRoute ? "index.html" : pathname === "/factory/" ? "factory/index.html" : pathname.slice(1);
   const filePath = normalize(join(root, relativePath));
 
   if (!filePath.startsWith(normalize(root)) || !existsSync(filePath) || !statSync(filePath).isFile()) {

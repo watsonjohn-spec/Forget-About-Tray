@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#253642" />
+    <meta name="checkout-api-url" content="" />
+    <title>Forget About Print Factory</title>
+    <link rel="stylesheet" href="factory.css" />
+  </head>
+  <body>
+    <section class="factory-login" id="factoryLogin">
+      <form class="login-panel" id="factoryLoginForm">
+        <div class="factory-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <p class="eyebrow">Forget About Print Factory</p>
+        <h1>Printer sign in</h1>
+        <p>One provider account receives eligible jobs from every Forget About brand.</p>
+        <label>Email<input id="factoryEmail" type="email" autocomplete="email" required></label>
+        <label>Password<input id="factoryPassword" type="password" autocomplete="current-password" minlength="8" required></label>
+        <p class="login-message" id="factoryLoginMessage" role="alert"></p>
+        <button class="button button-primary" type="submit">Sign in</button>
+        <button class="button button-secondary" id="createFactoryAccount" type="button">Create printer account</button>
+        <small>New accounts may require email confirmation before the first sign in.</small>
+      </form>
+    </section>
+
+    <header class="factory-header">
+      <a href="./" class="factory-brand">
+        <span class="factory-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span><strong>Forget About Print Factory</strong><small>Cross-brand provider workspace</small></span>
+      </a>
+      <div class="header-actions">
+        <span id="factoryAccountEmail"></span>
+        <button class="button button-secondary" id="factoryRefresh" type="button">Refresh</button>
+        <button class="button button-primary" id="factoryLogout" type="button">Log out</button>
+      </div>
+    </header>
+
+    <main class="factory-main">
+      <section class="factory-hero">
+        <div>
+          <p class="eyebrow">Provider operations</p>
+          <h1>Make good prints. Keep customers informed.</h1>
+          <p>Jobs remain refundable until production begins. Provider payouts stay held until the customer order reaches complete.</p>
+        </div>
+        <div class="hero-metrics">
+          <div><span>Active jobs</span><strong id="activeJobCount">0</strong></div>
+          <div><span>Held payouts</span><strong id="heldPayoutTotal">£0.00</strong></div>
+          <div><span>Rating</span><strong id="factoryRating">New</strong></div>
+        </div>
+      </section>
+
+      <nav class="factory-tabs" aria-label="Factory sections">
+        <button class="active" data-factory-tab="jobs" type="button">Jobs</button>
+        <button data-factory-tab="profile" type="button">Provider profile</button>
+        <button data-factory-tab="capabilities" type="button">Print capabilities</button>
+        <button data-factory-tab="payouts" type="button">Payouts</button>
+      </nav>
+
+      <section class="factory-panel active" data-factory-panel="jobs">
+        <div class="section-heading"><div><p class="eyebrow">Production queue</p><h2>Assigned jobs</h2></div><span class="status-pill" id="factoryAcceptingStatus">Profile setup required</span></div>
+        <div class="job-grid" id="factoryJobs"></div>
+      </section>
+
+      <section class="factory-panel" data-factory-panel="profile" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Marketplace listing</p><h2>Provider profile</h2></div><span class="status-pill" id="factoryProfileStatus">Pending setup</span></div>
+        <form class="factory-form" id="factoryProfileForm">
+          <label>Display name<input id="printerDisplayName" required maxlength="80"></label>
+          <label>Based in<input id="printerBasedIn" required placeholder="e.g. Leeds"></label>
+          <label>Postcode area<input id="printerPostcodeArea" required maxlength="12" placeholder="e.g. LS1"></label>
+          <label>Lead time in days<input id="printerLeadTime" required type="number" min="1" max="90" value="7"></label>
+          <label class="wide">Description<textarea id="printerDescription" rows="4" maxlength="800" placeholder="Tell customers about your printers and finishing standards."></textarea></label>
+          <label class="switch-field wide"><input id="printerAcceptingJobs" type="checkbox"><span>Accept new jobs once the profile is approved</span></label>
+          <button class="button button-primary" type="submit">Save provider profile</button>
+        </form>
+      </section>
+
+      <section class="factory-panel" data-factory-panel="capabilities" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Capacity and pricing</p><h2>Print capabilities</h2></div></div>
+        <form class="factory-form capability-form" id="factoryCapabilityForm">
+          <label>Material<select id="capabilityMaterial"><option value="pla">PLA</option><option value="petg">PETG</option></select></label>
+          <label>Colour name<input id="capabilityColourName" required placeholder="e.g. Bambu Green"></label>
+          <label>Colour<input id="capabilityColourHex" type="color" value="#3f6b47"></label>
+          <label>Max width mm<input id="capabilityMaxWidth" type="number" min="1" max="1000" value="256"></label>
+          <label>Max depth mm<input id="capabilityMaxDepth" type="number" min="1" max="1000" value="256"></label>
+          <label>Max height mm<input id="capabilityMaxHeight" type="number" min="1" max="1000" value="256"></label>
+          <label>Base price £<input id="capabilityBasePrice" type="number" min="0" step="0.01" value="8.00"></label>
+          <label>Price per cm³ £<input id="capabilityVolumePrice" type="number" min="0" step="0.01" value="0.25"></label>
+          <label>Postage £<input id="capabilityPostage" type="number" min="0" step="0.01" value="3.50"></label>
+          <button class="button button-primary" type="submit">Add capability</button>
+        </form>
+        <div class="capability-grid" id="factoryCapabilities"></div>
+      </section>
+
+      <section class="factory-panel" data-factory-panel="payouts" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Financials</p><h2>Held and completed payouts</h2></div><span class="status-pill" id="connectStatus">Stripe Connect not onboarded</span></div>
+        <p class="factory-note">Payouts are held while a job is producing or posted. They become eligible only after the order reaches complete.</p>
+        <div class="payout-grid" id="factoryPayouts"></div>
+      </section>
+    </main>
+
+    <div class="toast" id="factoryToast" role="status"></div>
+    <script src="../public-config.js"></script>
+    <script src="../account.js"></script>
+    <script src="factory.js"></script>
+  </body>
+</html>

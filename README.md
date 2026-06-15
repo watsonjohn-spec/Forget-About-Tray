@@ -49,7 +49,11 @@ Before running the account-enabled app for the first time, open the Supabase SQL
 
 Re-run `supabase/schema.sql` after pulling the multi-brand platform update. It migrates existing tray designs and army lists into the generic design/project model and adds the print marketplace foundation without deleting the legacy records.
 
-The marketplace is designed for UK-only fulfilment initially. It uses customer-selected printers and Stripe Connect separate charges and transfers: the printer share remains held until the print job reaches `complete`. The provider-selection and factory user interfaces are the next implementation phase.
+The marketplace is designed for UK-only fulfilment initially. It uses customer-selected printers and Stripe Connect separate charges and transfers: the printer share remains held until the print job reaches `complete`.
+
+The shared provider portal is available at `/factory/`. Printers create a dedicated email/password account there, complete their marketplace profile, add materials and colours, and manage assigned jobs. Factory accounts use Supabase Auth, so credentials are not hard-coded into the public site. Printer profiles begin in `pending_review`; approve them administratively before setting them active in the marketplace.
+
+For a confirmed prototype login, double-click `Create Factory Login.cmd`. It uses the private Supabase admin key already stored in `.env`, creates or resets `factory.prototype@forgetabout.im`, and displays a newly generated password locally. Change `FACTORY_PROTOTYPE_EMAIL` in `.env` if you want a different login address.
 
 To enable Google and Apple sign-in, open **Supabase Dashboard → Authentication → Providers**, configure Google and Apple, then add the deployed app URL to **Authentication → URL Configuration → Redirect URLs**. Email and password sign-in remains available.
 

@@ -54,3 +54,18 @@ test("printer quote filters cover customer selection fields", () => {
   ];
   assert.deepEqual(filterPrinterQuotes(quotes, { colourKey: "green", maximumLeadTimeDays: 5, minimumRating: 4.5 }), [quotes[0]]);
 });
+
+test("factory portal keeps completion and payout release outside printer controls", async () => {
+  const [html, factorySource, serverSource] = await Promise.all([
+    readFile(new URL("../factory/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../factory/factory.js", import.meta.url), "utf8"),
+    readFile(new URL("../server.mjs", import.meta.url), "utf8")
+  ]);
+  assert.match(html, /id="factoryLoginForm"/);
+  assert.match(html, /id="createFactoryAccount"/);
+  assert.match(factorySource, /data-job-status="producing"/);
+  assert.match(factorySource, /data-job-status="posted"/);
+  assert.doesNotMatch(factorySource, /data-job-status="complete"/);
+  assert.match(serverSource, /Printers can only mark jobs as producing or posted/);
+  assert.match(serverSource, /status: "pending_review", accepting_jobs: false/);
+});
