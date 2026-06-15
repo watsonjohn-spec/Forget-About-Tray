@@ -90,4 +90,6 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(app, /materialEstimate"\)\.textContent = `\$\{\(metrics\.volume \/ 1000 \* materialDensity\)\.toFixed\(1\)\} g`/);
   assert.match(app, /window\.location\.href = `mailto:/);
   assert.match(app, /window\.confirm\("Request account deletion\?/);
+  assert.match(app, /Confirm delivery and complete order/);
+  assert.match(app, /releases the printer payout/);
 });

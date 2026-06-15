@@ -1186,6 +1186,7 @@ function showOrderDetail(orderId) {
       ${items.length ? items.map((item) => `<p><strong>${escapeHtml(item.description || "Order item")}</strong><br><small>Quantity ${item.quantity || 1} · ${formatMoney(item.total_inc_vat || 0, order.currency)}</small></p>`).join("") : "<p>No line-item detail is available for this order.</p>"}
     </div>
     ${events.length ? `<div class="order-events"><h5>Status history</h5>${events.map((event) => `<p><strong>${escapeHtml(String(event.to_status || "").replaceAll("_", " "))}</strong><small>${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</div>` : ""}
+    ${job?.status === "posted" ? `<button class="button button-primary" type="button" data-complete-print-job="${escapeHtml(job.id)}">Confirm delivery and complete order</button>` : ""}
   `;
   detail.hidden = false;
   detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -1338,6 +1339,21 @@ document.querySelectorAll("[data-account-page-button]").forEach((button) => {
 document.getElementById("accountOrdersList").addEventListener("click", (event) => {
   const button = event.target.closest("[data-order-detail]");
   if (button) showOrderDetail(button.dataset.orderDetail);
+});
+document.getElementById("accountOrderDetail").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-complete-print-job]");
+  if (!button || !window.confirm("Confirm that this printed order has arrived? This completes the order and releases the printer payout.")) return;
+  button.disabled = true;
+  try {
+    const response = await authorizedFetch(`/api/account/print-jobs/${encodeURIComponent(button.dataset.completePrintJob)}/complete`, { method: "POST", body: "{}" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Order could not be completed.");
+    await loadAccountDialog("orders");
+    showToast(result.transfer?.released ? "Order completed and printer payout released" : "Order completed; printer payout remains held for review");
+  } catch (error) {
+    showToast(error.message);
+    button.disabled = false;
+  }
 });
 document.addEventListener("click", (event) => {
   if (event.target.closest(".account-menu-wrap")) return;

@@ -56,10 +56,11 @@ test("printer quote filters cover customer selection fields", () => {
 });
 
 test("factory portal keeps completion and payout release outside printer controls", async () => {
-  const [html, factorySource, serverSource] = await Promise.all([
+  const [html, factorySource, serverSource, renderBlueprint] = await Promise.all([
     readFile(new URL("../factory/index.html", import.meta.url), "utf8"),
     readFile(new URL("../factory/factory.js", import.meta.url), "utf8"),
-    readFile(new URL("../server.mjs", import.meta.url), "utf8")
+    readFile(new URL("../server.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../render.yaml", import.meta.url), "utf8")
   ]);
   assert.match(html, /id="factoryLoginForm"/);
   assert.match(html, /id="createFactoryAccount"/);
@@ -68,4 +69,11 @@ test("factory portal keeps completion and payout release outside printer control
   assert.doesNotMatch(factorySource, /data-job-status="complete"/);
   assert.match(serverSource, /Printers can only mark jobs as producing or posted/);
   assert.match(serverSource, /status: "pending_review", accepting_jobs: false/);
+  assert.match(serverSource, /\/v2\/core\/accounts/);
+  assert.match(serverSource, /\/v1\/transfers/);
+  assert.match(serverSource, /print-job-transfer-\$\{job\.id\}/);
+  assert.match(serverSource, /assertPrintJobTransition\(job\.status, "complete"\)/);
+  assert.match(renderBlueprint, /healthCheckPath: \/api\/health/);
+  assert.match(renderBlueprint, /SUPABASE_SECRET_KEY/);
+  assert.match(renderBlueprint, /STRIPE_SECRET_KEY/);
 });

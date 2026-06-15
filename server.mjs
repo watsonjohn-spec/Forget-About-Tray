@@ -14,6 +14,7 @@ const basePrice = Number(process.env.PRINT_BASE_PRICE_PENCE || 800);
 const pricePerCm3 = Number(process.env.PRINT_PRICE_PER_CM3_PENCE || 25);
 const unlimitedExportsPrice = Number(process.env.UNLIMITED_EXPORTS_PRICE_PENCE || 500);
 const stripeApiBase = process.env.STRIPE_API_BASE || "https://api.stripe.com";
+const stripeApiVersion = process.env.STRIPE_API_VERSION || "2026-02-25.clover";
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 const allowedCountries = (process.env.STRIPE_ALLOWED_COUNTRIES || "GB,US").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean);
 const allowedOrigin = process.env.CHECKOUT_ALLOWED_ORIGIN || "";
@@ -111,6 +112,37 @@ function stripeReady() {
   return { ready: true, mode: liveKey ? "live" : "test" };
 }
 
+async function stripeJson(path, options = {}) {
+  const response = await fetch(`${stripeApiBase}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${stripeKey}`,
+      "Stripe-Version": stripeApiVersion,
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    }
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error?.message || body.message || "Stripe request failed.");
+  return body;
+}
+
+async function stripeForm(path, parameters, options = {}) {
+  const response = await fetch(`${stripeApiBase}${path}`, {
+    method: options.method || "POST",
+    headers: {
+      Authorization: `Bearer ${stripeKey}`,
+      "Stripe-Version": stripeApiVersion,
+      "Content-Type": "application/x-www-form-urlencoded",
+      ...(options.headers || {})
+    },
+    body: parameters
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error?.message || body.message || "Stripe request failed.");
+  return body;
+}
+
 function supabaseReady() {
   return Boolean(supabaseUrl && supabasePublishableKey && supabaseSecretKey);
 }
@@ -188,6 +220,190 @@ async function factoryDashboard(request, response) {
     }, origin);
   } catch (error) {
     sendJson(response, 401, { error: error.message }, origin);
+  }
+}
+
+function recipientAccountReady(account) {
+  const recipient = account.configuration?.recipient;
+  const capabilities = recipient?.capabilities?.stripe_balance || {};
+  const transfers = capabilities.stripe_transfers?.status === "active";
+  const payouts = capabilities.payouts?.status === "active";
+  return { transfers, payouts, onboardingComplete: transfers && payouts };
+}
+
+async function syncPrinterPaymentAccount(profile) {
+  const rows = await supabaseAdmin(`printer_payment_accounts?select=*&printer_profile_id=eq.${encodeURIComponent(profile.id)}&limit=1`);
+  const paymentAccount = rows?.[0];
+  if (!paymentAccount) return null;
+  const account = await stripeJson(`/v2/core/accounts/${encodeURIComponent(paymentAccount.stripe_connected_account_id)}?include[]=configuration.recipient&include[]=requirements`);
+  const ready = recipientAccountReady(account);
+  const saved = await supabaseAdmin(`printer_payment_accounts?printer_profile_id=eq.${encodeURIComponent(profile.id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      charges_enabled: false,
+      transfers_enabled: ready.transfers,
+      onboarding_complete: ready.onboardingComplete,
+      updated_at: new Date().toISOString()
+    })
+  });
+  return { paymentAccount: saved?.[0] || paymentAccount, account };
+}
+
+async function startFactoryConnect(request, response) {
+  const origin = checkoutOrigin(request);
+  const readiness = stripeReady();
+  if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
+  try {
+    const user = await authenticateUser(request);
+    const profile = await loadPrinterProfile(user.id);
+    if (!profile) throw new Error("Create your provider profile before starting Stripe onboarding.");
+    let paymentAccounts = await supabaseAdmin(`printer_payment_accounts?select=*&printer_profile_id=eq.${encodeURIComponent(profile.id)}&limit=1`);
+    let paymentAccount = paymentAccounts?.[0];
+    if (!paymentAccount) {
+      const account = await stripeJson("/v2/core/accounts", {
+        method: "POST",
+        headers: { "Idempotency-Key": `printer-profile-${profile.id}` },
+        body: JSON.stringify({
+          contact_email: user.email,
+          display_name: profile.display_name,
+          dashboard: "express",
+          identity: { country: "gb", entity_type: "individual" },
+          configuration: {
+            recipient: {
+              capabilities: {
+                stripe_balance: {
+                  stripe_transfers: { requested: true }
+                }
+              }
+            }
+          },
+          defaults: {
+            currency,
+            locales: ["en-GB"],
+            responsibilities: {
+              fees_collector: "application",
+              losses_collector: "application",
+              requirements_collector: "stripe"
+            }
+          },
+          include: ["configuration.recipient", "requirements", "identity", "defaults"]
+        })
+      });
+      const ready = recipientAccountReady(account);
+      paymentAccounts = await supabaseAdmin("printer_payment_accounts", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({
+          printer_profile_id: profile.id,
+          stripe_connected_account_id: account.id,
+          charges_enabled: false,
+          transfers_enabled: ready.transfers,
+          onboarding_complete: ready.onboardingComplete
+        })
+      });
+      paymentAccount = paymentAccounts?.[0];
+    }
+    const login = await stripeForm(`/v1/accounts/${encodeURIComponent(paymentAccount.stripe_connected_account_id)}/login_links`, new URLSearchParams());
+    sendJson(response, 200, { url: login.url }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Stripe Connect onboarding could not be started." }, origin);
+  }
+}
+
+async function factoryConnectStatus(request, response) {
+  const origin = checkoutOrigin(request);
+  const readiness = stripeReady();
+  if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
+  try {
+    const user = await authenticateUser(request);
+    const profile = await loadPrinterProfile(user.id);
+    if (!profile) throw new Error("Create your provider profile first.");
+    const result = await syncPrinterPaymentAccount(profile);
+    sendJson(response, 200, {
+      connected: Boolean(result),
+      paymentAccount: result?.paymentAccount || null,
+      requirements: result?.account?.requirements || null
+    }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Stripe Connect status could not be refreshed." }, origin);
+  }
+}
+
+async function releaseProviderTransfer(job) {
+  if (job.status !== "complete" || job.payout_status !== "held") return { released: false, reason: "not_eligible" };
+  const paymentAccounts = await supabaseAdmin(`printer_payment_accounts?select=*&printer_profile_id=eq.${encodeURIComponent(job.printer_profile_id)}&limit=1`);
+  const paymentAccount = paymentAccounts?.[0];
+  if (!paymentAccount?.transfers_enabled) return { released: false, reason: "connect_not_ready" };
+  const transferRecord = {
+    print_job_id: job.id,
+    printer_profile_id: job.printer_profile_id,
+    amount_pence: job.provider_share_pence,
+    currency,
+    status: "held",
+    updated_at: new Date().toISOString()
+  };
+  await supabaseAdmin("provider_transfers?on_conflict=print_job_id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(transferRecord)
+  });
+  try {
+    const parameters = new URLSearchParams({
+      amount: String(job.provider_share_pence),
+      currency,
+      destination: paymentAccount.stripe_connected_account_id,
+      transfer_group: `PRINT_JOB_${job.id}`,
+      description: `Print job ${job.id}`,
+      "metadata[print_job_id]": job.id
+    });
+    const transfer = await stripeForm("/v1/transfers", parameters, { headers: { "Idempotency-Key": `print-job-transfer-${job.id}` } });
+    await Promise.all([
+      supabaseAdmin(`provider_transfers?print_job_id=eq.${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ stripe_transfer_id: transfer.id, status: "transferred", transferred_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      }),
+      supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ payout_status: "transferred", updated_at: new Date().toISOString() })
+      })
+    ]);
+    return { released: true, transferId: transfer.id };
+  } catch (error) {
+    await supabaseAdmin(`provider_transfers?print_job_id=eq.${encodeURIComponent(job.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: "failed", updated_at: new Date().toISOString() })
+    });
+    return { released: false, reason: "stripe_transfer_failed", error: error.message };
+  }
+}
+
+async function completeCustomerPrintJob(request, response, jobId) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const jobs = await supabaseAdmin(`print_jobs?select=*&id=eq.${encodeURIComponent(jobId)}&customer_user_id=eq.${encodeURIComponent(user.id)}&limit=1`);
+    const job = jobs?.[0];
+    if (!job) throw new Error("Print job not found.");
+    assertPrintJobTransition(job.status, "complete");
+    const completedAt = new Date().toISOString();
+    const saved = await supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ status: "complete", completed_at: completedAt, updated_at: completedAt })
+    });
+    await supabaseAdmin("print_job_events", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ print_job_id: job.id, actor_user_id: user.id, from_status: job.status, to_status: "complete", note: "Customer confirmed delivery." })
+    });
+    const transfer = await releaseProviderTransfer(saved?.[0] || { ...job, status: "complete", completed_at: completedAt });
+    sendJson(response, 200, { job: saved?.[0] || null, transfer }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Print job could not be completed." }, origin);
   }
 }
 
@@ -854,6 +1070,10 @@ createServer(async (request, response) => {
     }, origin);
     return;
   }
+  if (request.method === "GET" && pathname === "/api/health") {
+    sendJson(response, 200, { status: "ok", service: "forget-about-platform" }, origin);
+    return;
+  }
   if (request.method === "POST" && pathname === "/api/stripe/webhook") {
     await handleStripeWebhook(request, response);
     return;
@@ -929,6 +1149,14 @@ createServer(async (request, response) => {
     await saveFactoryProfile(request, response);
     return;
   }
+  if (request.method === "POST" && pathname === "/api/factory/connect/start") {
+    await startFactoryConnect(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/factory/connect/status") {
+    await factoryConnectStatus(request, response);
+    return;
+  }
   if (request.method === "POST" && pathname === "/api/factory/capabilities") {
     await addFactoryCapability(request, response);
     return;
@@ -941,6 +1169,11 @@ createServer(async (request, response) => {
   const factoryJobStatusRoute = pathname.match(/^\/api\/factory\/jobs\/([0-9a-f-]+)\/status$/i);
   if (request.method === "POST" && factoryJobStatusRoute) {
     await updateFactoryJob(request, response, factoryJobStatusRoute[1]);
+    return;
+  }
+  const customerCompleteJobRoute = pathname.match(/^\/api\/account\/print-jobs\/([0-9a-f-]+)\/complete$/i);
+  if (request.method === "POST" && customerCompleteJobRoute) {
+    await completeCustomerPrintJob(request, response, customerCompleteJobRoute[1]);
     return;
   }
 

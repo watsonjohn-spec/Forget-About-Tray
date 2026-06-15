@@ -55,6 +55,8 @@ The shared provider portal is available at `/factory/`. Printers create a dedica
 
 For a confirmed prototype login, double-click `Create Factory Login.cmd`. It uses the private Supabase admin key already stored in `.env`, creates or resets `factory.prototype@forgetabout.im`, and displays a newly generated password locally. Change `FACTORY_PROTOTYPE_EMAIL` in `.env` if you want a different login address.
 
+The factory payout flow uses Stripe Connect Accounts v2 recipient accounts. A printer starts Stripe onboarding from the Payouts page. The platform uses separate charges and transfers, keeps the provider share held through `order_made`, `producing`, and `posted`, and creates the Stripe transfer only after the customer confirms delivery and completes the order.
+
 To enable Google and Apple sign-in, open **Supabase Dashboard → Authentication → Providers**, configure Google and Apple, then add the deployed app URL to **Authentication → URL Configuration → Redirect URLs**. Email and password sign-in remains available.
 
 `npm run public-config` generates `public-config.js` using only `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. These values are designed to be public and allow account login to work on GitHub Pages. The Supabase secret key is never included. `Publish to GitHub.cmd` runs this automatically before publishing.
@@ -78,5 +80,11 @@ npm run check
 ## Deploy
 
 The account, order, and payment features require the Node server. Deploy the repository as a Node web service with `npm start`, then add the values from `.env.example` as private host environment variables.
+
+`render.yaml` defines a Render Node web service. Connect the GitHub repository to Render as a Blueprint, then provide the private Stripe and Supabase values requested by Render. The service health check is `/api/health`. The Render-hosted URL serves both the customer app and `/factory/`.
+
+Start the Render deployment from:
+
+`https://render.com/deploy?repo=https://github.com/watsonjohn-spec/Forget-About-Tray`
 
 GitHub Pages can display the frontend but cannot run the secure account, Stripe, webhook, or order-record endpoints.

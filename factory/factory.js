@@ -157,6 +157,23 @@ document.getElementById("createFactoryAccount").addEventListener("click", async 
 
 document.getElementById("factoryLogout").addEventListener("click", async () => { await accountService.signOut(); setAuthenticated(false); });
 document.getElementById("factoryRefresh").addEventListener("click", async () => { await loadDashboard(); toast("Factory data refreshed"); });
+document.getElementById("startConnectOnboarding").addEventListener("click", async () => {
+  try {
+    const result = await factoryFetch("/api/factory/connect/start", { method: "POST", body: "{}" });
+    window.location.assign(result.url);
+  } catch (error) {
+    toast(error.message);
+  }
+});
+document.getElementById("refreshConnectStatus").addEventListener("click", async () => {
+  try {
+    const result = await factoryFetch("/api/factory/connect/status", { method: "POST", body: "{}" });
+    await loadDashboard();
+    toast(result.paymentAccount?.onboarding_complete ? "Stripe Connect is ready" : "Stripe still needs more onboarding information");
+  } catch (error) {
+    toast(error.message);
+  }
+});
 document.querySelectorAll("[data-factory-tab]").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.factoryTab)));
 
 document.getElementById("factoryProfileForm").addEventListener("submit", async (event) => {
