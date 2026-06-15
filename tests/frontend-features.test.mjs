@@ -64,3 +64,30 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.deepEqual(Object.keys(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG).sort(), ["supabasePublishableKey", "supabaseUrl"]);
   assert.doesNotMatch(publicConfigSource, /sb_secret_|sk_(?:test|live)_|rk_(?:test|live)_|whsec_/);
 });
+
+test("UAT shell keeps primary actions visible and separates account pages", async () => {
+  const [html, css, app] = await Promise.all([
+    readFile(new URL("index.html", root), "utf8"),
+    readFile(new URL("styles.css", root), "utf8"),
+    readFile(new URL("app.js", root), "utf8")
+  ]);
+
+  assert.match(html, /id="brandHome"/);
+  assert.match(html, /class="button top-action-button" id="savePresetTop"/);
+  assert.match(html, /class="button top-action-button" id="exportTop"/);
+  assert.match(html, /class="button top-action-button account-menu-button" id="accountButton"/);
+  assert.match(html, /id="filamentColour"/);
+  assert.match(html, /id="includeBases"/);
+  assert.match(html, /id="chooseEmailExport"/);
+  assert.match(html, /data-account-page="profile"/);
+  assert.match(html, /data-account-page="password"/);
+  assert.match(html, /data-account-page="orders"/);
+  assert.doesNotMatch(html, />Isometric preview</);
+  assert.doesNotMatch(html, /Your configurations are saved to your workshop account/);
+  assert.match(css, /100dvh/);
+  assert.match(css, /\.top-action-button/);
+  assert.match(app, /document\.getElementById\("bodyCount"\)\.textContent = state\.columns \* state\.rows/);
+  assert.match(app, /materialEstimate"\)\.textContent = `\$\{\(metrics\.volume \/ 1000 \* materialDensity\)\.toFixed\(1\)\} g`/);
+  assert.match(app, /window\.location\.href = `mailto:/);
+  assert.match(app, /window\.confirm\("Request account deletion\?/);
+});

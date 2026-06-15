@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { publicPlatformConfig } from "../platform/registry.mjs";
 
 const root = new URL("../", import.meta.url);
 const envText = readFileSync(new URL(".env", root), "utf8");
@@ -21,7 +22,7 @@ const config = {
 
 writeFileSync(
   new URL("public-config.js", root),
-  `// Generated from public-only .env values. Safe to serve to browsers.\nwindow.MOVEMENT_TRAY_PUBLIC_CONFIG = ${JSON.stringify(config)};\n`
+  `// Generated from public-only configuration. Safe to serve to browsers.\nwindow.MOVEMENT_TRAY_PUBLIC_CONFIG = ${JSON.stringify(config)};\nwindow.FORGET_ABOUT_PLATFORM_CONFIG = ${JSON.stringify(publicPlatformConfig)};\n`
 );
 
 console.log("Generated public-config.js");

@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#2c211b" />
     <meta name="checkout-api-url" content="" />
-    <title>Movement Tray Studio</title>
+    <title>Forget About Tray</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body data-active-mode="single">
     <div class="auth-gate" id="authGate">
       <form class="login-card" id="loginForm">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-        <div><p class="eyebrow">Your workshop account</p><h1>Enter the workshop</h1></div>
+        <div><p class="eyebrow" data-brand-name>Forget About Tray</p><h1>Enter the workshop</h1></div>
         <p>Sign in to access your trays, armies, downloads, and orders on any device.</p>
         <label>Email<input id="loginUsername" autocomplete="email" required type="email"></label>
         <label>Password<input id="loginPassword" autocomplete="current-password" required type="password"></label>
@@ -32,22 +32,20 @@
       </form>
     </div>
     <header class="topbar">
-      <a class="brand" href="#" aria-label="Movement Tray Studio home">
-        <span class="brand-mark" aria-hidden="true">
-          <span></span><span></span><span></span><span></span>
-        </span>
-        <span>
-          <strong>Movement Tray</strong>
-          <small>Studio</small>
-        </span>
-      </a>
-      <p class="top-tagline"><strong>Build the formation.</strong><em>Print the advantage.</em></p>
+      <div class="brand-intro">
+        <a class="brand" id="brandHome" href="#" aria-label="Forget About Tray home">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </span>
+          <span><strong data-brand-name>Forget About Tray</strong></span>
+        </a>
+        <p class="top-tagline"><strong>Build the formation.</strong><em>Print the advantage.</em></p>
+      </div>
       <div class="top-actions">
-        <span class="status-dot single-only"><i></i> Ready to print</span>
-        <button class="button button-ghost single-only" id="savePresetTop" type="button">Save preset</button>
-        <button class="button button-primary single-only" id="exportTop" type="button">Export STL</button>
+        <button class="button top-action-button" id="savePresetTop" type="button">Save preset</button>
+        <button class="button top-action-button" id="exportTop" type="button">Export STL</button>
         <div class="account-menu-wrap">
-          <button class="button button-ghost account-menu-button" id="accountButton" type="button" aria-expanded="false">Account <span>▾</span></button>
+          <button class="button top-action-button account-menu-button" id="accountButton" type="button" aria-expanded="false">Account <span>▾</span></button>
           <div class="account-menu" id="accountMenu" hidden>
             <strong id="accountMenuEmail">Workshop account</strong>
             <button type="button" data-account-view="profile">Profile and address</button>
@@ -60,6 +58,15 @@
     </header>
 
     <main>
+      <aside class="ad-slot ad-slot-top" aria-label="Advertisement">
+        <span class="ad-label">Sponsored field note</span>
+        <div>
+          <strong>Leaderboard advertising space</strong>
+          <small>Ideal for miniatures, paints, terrain, and print services · 970 × 90</small>
+        </div>
+        <span class="ad-cta">Advertise here</span>
+      </aside>
+
       <nav class="mode-tabs" aria-label="Tray builder mode">
         <button class="mode-tab active" type="button" data-mode="single" aria-selected="true">
           <span>01</span>
@@ -73,16 +80,12 @@
         </button>
       </nav>
 
-      <aside class="ad-slot ad-slot-top" aria-label="Advertisement">
-        <span class="ad-label">Sponsored field note</span>
-        <div>
-          <strong>Leaderboard advertising space</strong>
-          <small>Ideal for miniatures, paints, terrain, and print services · 970 × 90</small>
-        </div>
-        <span class="ad-cta">Advertise here</span>
-      </aside>
-
       <section class="mode-panel active" id="singleMode" data-mode-panel="single">
+      <div class="single-heading">
+        <p class="eyebrow">Maker's bench</p>
+        <h2>Build a tray for one formation</h2>
+        <p>Set the model count, choose a base from the catalogue, and tune the construction. The live preview and printable STL update as you work.</p>
+      </div>
       <section class="workspace">
         <aside class="panel controls-panel">
           <div class="panel-heading">
@@ -188,6 +191,11 @@
               <input id="notchesEnabled" type="checkbox" checked />
               <i aria-hidden="true"></i>
             </label>
+            <label class="switch-row">
+              <span><strong>Include printable bases</strong><small>Add matching model bases to the STL export</small></span>
+              <input id="includeBases" type="checkbox" />
+              <i aria-hidden="true"></i>
+            </label>
             <div class="two-fields conditional" id="lipFields">
               <label class="number-field">
                 <span>Wall thickness</span>
@@ -208,19 +216,20 @@
                 <span class="step">02</span>
                 <h2>Print preview</h2>
               </div>
-              <span class="live-pill"><i></i> Live geometry</span>
+              <label class="preview-colour-control">Filament colour
+                <select id="filamentColour" aria-label="Preview filament colour"></select>
+              </label>
             </div>
             <div class="preview-stage">
               <div class="dimension dimension-width" id="widthLabel">108.2 mm</div>
               <div class="dimension dimension-depth" id="depthLabel">82.2 mm</div>
-              <svg id="trayPreview" role="img" aria-label="Isometric preview of configured movement tray" viewBox="0 0 760 450"></svg>
-              <div class="view-label">Isometric preview</div>
+              <svg id="trayPreview" role="img" aria-label="Configured tray preview" viewBox="0 0 760 450"></svg>
             </div>
             <div class="stats">
               <div><span>Outer size</span><strong id="outerSize">108.2 × 82.2 mm</strong></div>
               <div><span>Total height</span><strong id="totalHeight">5.0 mm</strong></div>
-              <div><span>Est. material</span><strong id="materialEstimate">19.4 cm³</strong></div>
-              <div><span>STL bodies</span><strong id="bodyCount">15</strong></div>
+              <div><span>Est. material</span><strong id="materialEstimate">24.1 g</strong></div>
+              <div><span>STL bodies</span><strong id="bodyCount">12</strong></div>
             </div>
           </div>
 
@@ -246,7 +255,6 @@
             <p class="eyebrow">Return to formation</p>
             <h2>Saved presets</h2>
           </div>
-          <p>Your configurations are saved to your workshop account.</p>
         </div>
         <div id="presets" class="presets-grid"></div>
       </section>
@@ -345,8 +353,13 @@
         <div><p class="eyebrow">Workshop account</p><h2>Account and orders</h2></div>
         <button class="dialog-close" type="button" data-close-dialog="accountDialog" aria-label="Close">×</button>
       </div>
-      <div class="account-layout">
-        <form class="account-profile-form" id="accountProfileForm">
+      <nav class="account-page-nav" aria-label="Account pages">
+        <button type="button" data-account-page-button="profile">Profile and address</button>
+        <button type="button" data-account-page-button="password">Change password</button>
+        <button type="button" data-account-page-button="orders">Order history</button>
+      </nav>
+      <div class="account-pages">
+        <form class="account-profile-form account-page" id="accountProfileForm" data-account-page="profile">
           <h3>Profile and default address</h3>
           <p>Keep your preferred address with your account. Checkout collects the delivery address, and completed orders retain the address used at purchase for accounting records.</p>
           <label>Email<input id="accountEmail" type="email" disabled></label>
@@ -361,22 +374,25 @@
           <label>Country code<input id="accountCountry" type="text" maxlength="2" value="GB" autocomplete="country"></label>
           <label class="account-consent"><input id="accountMarketingConsent" type="checkbox"> Send me occasional product news</label>
           <button class="button button-primary" type="submit">Save profile</button>
-          <section class="password-panel" id="accountPasswordSection">
-            <h3>Change password</h3>
-            <label>New password<input id="accountNewPassword" type="password" minlength="8" autocomplete="new-password"></label>
-            <label>Confirm password<input id="accountConfirmPassword" type="password" minlength="8" autocomplete="new-password"></label>
-            <button class="button button-secondary" id="changePasswordButton" type="button">Update password</button>
+          <section class="privacy-panel">
+            <h3>Privacy and account data</h3>
+            <p>Download your stored data or request account deletion. Order and VAT records required by law remain restricted until their retention period expires.</p>
+            <button class="button button-secondary" id="downloadAccountData" type="button">Download my data</button>
+            <button class="button button-danger" id="requestAccountDeletion" type="button">Request account deletion</button>
           </section>
         </form>
-        <section class="account-orders" id="accountOrdersSection">
+        <section class="account-profile-form account-page" id="accountPasswordSection" data-account-page="password" hidden>
+          <h3>Change password</h3>
+          <p>Use a unique password with at least eight characters.</p>
+          <label>New password<input id="accountNewPassword" type="password" minlength="8" autocomplete="new-password"></label>
+          <label>Confirm password<input id="accountConfirmPassword" type="password" minlength="8" autocomplete="new-password"></label>
+          <button class="button button-primary" id="changePasswordButton" type="button">Update password</button>
+        </section>
+        <section class="account-orders account-page" id="accountOrdersSection" data-account-page="orders" hidden>
           <h3>Purchase history</h3>
-          <p>Paid STL access and physical print orders appear here.</p>
+          <p>Select an order to view its purchase details and fulfilment status.</p>
           <div id="accountOrdersList"></div>
-          <div class="account-data-actions">
-            <button class="button button-secondary" id="downloadAccountData" type="button">Download my data</button>
-            <button class="button button-ghost" id="requestAccountDeletion" type="button">Request account deletion</button>
-          </div>
-          <small>Deletion requests remove account data where possible. Order and VAT records required by law remain restricted until their retention period expires.</small>
+          <div id="accountOrderDetail" class="account-order-detail" hidden></div>
         </section>
       </div>
     </dialog>
@@ -390,6 +406,10 @@
         <button class="export-choice" id="chooseUnlockedExport" type="button" hidden>
           <span class="choice-icon">STL</span><strong>Download STL</strong>
           <small>Your account has unlimited STL exports. Download this tray immediately.</small>
+        </button>
+        <button class="export-choice" id="chooseEmailExport" type="button" hidden>
+          <span class="choice-icon">@</span><strong>Send by email</strong>
+          <small>Download the STL and open your device's default email app ready to send it.</small>
         </button>
         <button class="export-choice" id="chooseAdExport" type="button">
           <span class="choice-icon">STL</span><strong>Watch sponsor message</strong>
@@ -411,7 +431,10 @@
           <p>This full-attention placement supports free STL exports.</p>
         </div>
         <p id="adCountdown">Download unlocks in 30 seconds</p>
-        <button class="button button-primary" id="completeAdExport" type="button" disabled>Download STL</button>
+        <div class="ad-export-actions">
+          <button class="button button-primary" id="completeAdExport" type="button" disabled>Download STL</button>
+          <button class="button button-primary" id="completeAdEmailExport" type="button" disabled>Send by email</button>
+        </div>
       </section>
       <section class="print-order" id="unlockExports" hidden>
         <div class="print-order-mark">STL</div>
@@ -436,6 +459,7 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="public-config.js"></script>
+    <script src="platform.js"></script>
     <script src="account.js"></script>
     <script src="catalogue.js"></script>
     <script src="app.js"></script>

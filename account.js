@@ -1,10 +1,12 @@
 (() => {
-  const sessionKey = "movement-tray-supabase-session";
+  const legacySessionKey = "movement-tray-supabase-session";
+  const sessionKey = "forget-about-supabase-session";
   let config = null;
   let session = null;
   let user = null;
   let authType = "";
   let authError = "";
+  let deviceHashPromise = null;
 
   function apiBase() {
     return document.querySelector('meta[name="checkout-api-url"]').content.trim().replace(/\/$/, "");
@@ -12,6 +14,26 @@
 
   function appUrl() {
     return `${window.location.origin}${window.location.pathname}`;
+  }
+
+  function brandKey() {
+    return window.platformService?.brandKey() || "tray";
+  }
+
+  function generatorType() {
+    return window.platformService?.generatorType() || "movement_tray";
+  }
+
+  async function deviceHash() {
+    if (deviceHashPromise) return deviceHashPromise;
+    deviceHashPromise = (async () => {
+      const key = "forget-about-device-id";
+      const deviceId = localStorage.getItem(key) || crypto.randomUUID();
+      localStorage.setItem(key, deviceId);
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(deviceId));
+      return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    })();
+    return deviceHashPromise;
   }
 
   async function responseJson(response) {
@@ -53,7 +75,10 @@
     session = nextSession || null;
     user = session?.user || null;
     if (session) localStorage.setItem(sessionKey, JSON.stringify(session));
-    else localStorage.removeItem(sessionKey);
+    else {
+      localStorage.removeItem(sessionKey);
+      localStorage.removeItem(legacySessionKey);
+    }
   }
 
   async function authRequest(path, options = {}) {
@@ -104,7 +129,7 @@
         });
         history.replaceState({}, "", window.location.pathname + window.location.search);
       } else {
-        storeSession(JSON.parse(localStorage.getItem(sessionKey) || "null"));
+        storeSession(JSON.parse(localStorage.getItem(sessionKey) || localStorage.getItem(legacySessionKey) || "null"));
       }
       if (!session) return null;
       await ensureSession();
@@ -130,7 +155,7 @@
   async function signUp(email, password) {
     const result = await authRequest("/signup", {
       method: "POST",
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password, data: { signup_brand_key: brandKey() } })
     });
     if (result.access_token) storeSession(result);
     return result;
@@ -198,6 +223,85 @@
     return restRequest("tray_designs?select=*&order=updated_at.desc");
   }
 
+  async function loadDesigns() {
+    try {
+      return await restRequest(`designs?select=*&brand_key=eq.${encodeURIComponent(brandKey())}&generator_type=eq.${encodeURIComponent(generatorType())}&order=updated_at.desc`);
+    } catch (error) {
+      if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
+      return (await loadTrayDesigns()).map((design) => ({ ...design, parameters: design.configuration }));
+    }
+  }
+
+  async function upsertDesign(design) {
+    try {
+      return await restRequest("designs?on_conflict=user_id,brand_key,generator_type,client_ref", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({
+          ...design,
+          user_id: user.id,
+          brand_key: design.brand_key || brandKey(),
+          generator_type: design.generator_type || generatorType(),
+          updated_at: new Date().toISOString()
+        })
+      });
+    } catch (error) {
+      if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
+      return upsertTrayDesign({ client_ref: design.client_ref, name: design.name, configuration: design.parameters });
+    }
+  }
+
+  async function deleteDesign(id) {
+    try {
+      return await restRequest(`designs?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+    } catch (error) {
+      if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
+      return deleteTrayDesign(id);
+    }
+  }
+
+  async function loadProjects() {
+    try {
+      return await restRequest(`projects?select=*&brand_key=eq.${encodeURIComponent(brandKey())}&generator_type=eq.${encodeURIComponent(generatorType())}&order=updated_at.desc`);
+    } catch (error) {
+      if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
+      return (await loadArmyLists()).map((project) => ({ ...project, source_text: project.original_list_text, items: project.parsed_units }));
+    }
+  }
+
+  async function upsertProject(project) {
+    try {
+      return await restRequest("projects?on_conflict=user_id,brand_key,generator_type,client_ref", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({
+          ...project,
+          user_id: user.id,
+          brand_key: project.brand_key || brandKey(),
+          generator_type: project.generator_type || generatorType(),
+          updated_at: new Date().toISOString()
+        })
+      });
+    } catch (error) {
+      if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
+      return upsertArmyList({
+        client_ref: project.client_ref,
+        name: project.name,
+        original_list_text: project.source_text || "",
+        parsed_units: project.items || []
+      });
+    }
+  }
+
+  async function deleteProject(id) {
+    try {
+      return await restRequest(`projects?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+    } catch (error) {
+      if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
+      return deleteArmyList(id);
+    }
+  }
+
   async function upsertTrayDesign(design) {
     return restRequest("tray_designs?on_conflict=user_id,client_ref", {
       method: "POST",
@@ -227,21 +331,33 @@
   }
 
   async function loadOrders() {
-    return restRequest("orders?select=id,invoice_number,order_type,status,currency,total_inc_vat,paid_at,created_at&order=created_at.desc");
+    try {
+      return await restRequest(`orders?select=id,invoice_number,order_type,status,currency,total_inc_vat,paid_at,created_at,brand_key,generator_type,order_items(*),order_customer_snapshots(*),print_jobs(*,print_job_events(*))&brand_key=eq.${encodeURIComponent(brandKey())}&order=created_at.desc`);
+    } catch {
+      return restRequest("orders?select=id,invoice_number,order_type,status,currency,total_inc_vat,paid_at,created_at&order=created_at.desc");
+    }
   }
 
   async function importLocalData(trays, armies) {
-    const marker = `movement-tray-cloud-imported-${user.id}`;
+    const marker = `forget-about-cloud-imported-${brandKey()}-${generatorType()}-${user.id}`;
     if (localStorage.getItem(marker) === "true") return;
     for (const tray of trays) {
-      await upsertTrayDesign({ client_ref: tray.id, name: tray.name, configuration: tray.state });
+      await upsertDesign({
+        client_ref: tray.id,
+        name: tray.name,
+        generator_version: 1,
+        parameters: tray.state,
+        metadata: { imported_from: "movement-tray-presets" }
+      });
     }
     for (const army of armies) {
-      await upsertArmyList({
+      await upsertProject({
         client_ref: army.id,
         name: army.name,
-        original_list_text: army.listText || "",
-        parsed_units: army.recommendations || []
+        project_type: "army_list",
+        source_text: army.listText || "",
+        items: army.recommendations || [],
+        metadata: { imported_from: "movement-tray-army-projects" }
       });
     }
     localStorage.setItem(marker, "true");
@@ -249,7 +365,11 @@
 
   async function authHeaders() {
     await ensureSession();
-    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+    return {
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      ...(window.platformService?.requestHeaders() || {}),
+      "X-Forget-About-Device": await deviceHash()
+    };
   }
 
   window.accountService = {
@@ -264,6 +384,12 @@
     loadProfile,
     saveProfile,
     loadTrayDesigns,
+    loadDesigns,
+    upsertDesign,
+    deleteDesign,
+    loadProjects,
+    upsertProject,
+    deleteProject,
     upsertTrayDesign,
     deleteTrayDesign,
     loadArmyLists,

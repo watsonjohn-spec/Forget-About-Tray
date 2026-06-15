@@ -13,6 +13,7 @@ const paidUserId = "00000000-0000-4000-8000-000000000002";
 const concurrentUserId = "00000000-0000-4000-8000-000000000003";
 const profiles = new Map([[freeUserId, false], [paidUserId, true], [concurrentUserId, false]]);
 const orderItems = [];
+const checkoutRequests = [];
 
 function userFromToken(header = "") {
   if (header === "Bearer free-token") return { id: freeUserId, email: "free@example.test" };
@@ -35,6 +36,9 @@ async function requestJson(request) {
 const mockSupabase = createServer(async (request, response) => {
   const url = new URL(request.url, `http://127.0.0.1:${mockPort}`);
   if (url.pathname === "/v1/checkout/sessions") {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    checkoutRequests.push(new URLSearchParams(body));
     return sendJson(response, 200, { id: `cs_test_${Date.now()}`, url: "https://checkout.stripe.test/session" });
   }
   if (url.pathname === "/auth/v1/user") {
@@ -74,11 +78,12 @@ const mockSupabase = createServer(async (request, response) => {
 
 let app;
 
-async function api(path, token, body) {
+async function api(path, token, body, extraHeaders = {}) {
   return fetch(`${baseUrl}${path}`, {
     method: body === undefined ? "GET" : "POST",
     headers: {
       Authorization: `Bearer ${token}`,
+      ...extraHeaders,
       ...(body === undefined ? {} : { "Content-Type": "application/json" })
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
@@ -171,6 +176,12 @@ test("download and physical print are both presented as fulfilment options", asy
   assert.doesNotMatch(appSource, /document\.getElementById\("choosePrintOrder"\)\.hidden/);
 });
 
+test("enabled brand route serves the shared app shell", async () => {
+  const response = await fetch(`${baseUrl}/tray`);
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /<script src="platform\.js"><\/script>/);
+});
+
 test("physical print checkout preserves the complete tray configuration", async () => {
   const config = {
     columns: 4,
@@ -184,12 +195,29 @@ test("physical print checkout preserves the complete tray configuration", async 
     wallHeight: 3,
     wallThickness: 1.6,
     notchesEnabled: true,
-    notchWidth: 7
+    notchWidth: 7,
+    includeBases: true
   };
   const response = await api("/api/checkout/session", "paid-token", { config, name: "Notched print order" });
   assert.equal(response.status, 200);
   assert.equal(orderItems.at(-1).tray_configuration.notchesEnabled, true);
   assert.equal(orderItems.at(-1).tray_configuration.notchWidth, 7);
+  assert.equal(orderItems.at(-1).tray_configuration.includeBases, true);
+});
+
+test("checkout returns to the originating brand path", async () => {
+  const config = {
+    columns: 2, rows: 2, baseSize: 25, baseDepth: 25, gap: 1, clearance: 1,
+    plateThickness: 2, lipEnabled: true, wallHeight: 3, wallThickness: 1.6,
+    notchesEnabled: false, notchWidth: 2
+  };
+  const response = await api("/api/checkout/session", "paid-token", { config, name: "Brand path tray" }, {
+    "X-Forget-About-Brand": "tray",
+    "X-Forget-About-Generator": "movement_tray",
+    "X-Forget-About-Path": "/tray"
+  });
+  assert.equal(response.status, 200);
+  assert.match(checkoutRequests.at(-1).get("success_url"), /^http:\/\/127\.0\.0\.1:4192\/tray\?checkout=success/);
 });
 
 test("only one simultaneous sponsored-download claim succeeds", async () => {

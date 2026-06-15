@@ -1,6 +1,8 @@
-# Movement Tray Studio
+# Forget About Tray
 
 A browser-based prototype for configuring and exporting printable miniature movement trays.
+
+Forget About Tray is now the first generator in the shared Forget About platform foundation. Brand routing, generator contracts, saved designs, projects, entitlements, orders, and the future cross-brand print factory are separated so additional parametric STL generators can reuse the same platform. See `platform/ARCHITECTURE.md`.
 
 ## Features
 
@@ -44,6 +46,10 @@ Paid unlimited-download access and the single sponsored download are recorded ag
 Set `DOWNLOAD_TOKEN_SECRET` to a long random value before deployment so sponsored-download permits cannot be forged.
 
 Before running the account-enabled app for the first time, open the Supabase SQL Editor and run `supabase/schema.sql`. This creates profiles, saved designs, army lists, entitlements, immutable order snapshots, VAT-ready order fields, and Row Level Security policies.
+
+Re-run `supabase/schema.sql` after pulling the multi-brand platform update. It migrates existing tray designs and army lists into the generic design/project model and adds the print marketplace foundation without deleting the legacy records.
+
+The marketplace is designed for UK-only fulfilment initially. It uses customer-selected printers and Stripe Connect separate charges and transfers: the printer share remains held until the print job reaches `complete`. The provider-selection and factory user interfaces are the next implementation phase.
 
 To enable Google and Apple sign-in, open **Supabase Dashboard → Authentication → Providers**, configure Google and Apple, then add the deployed app URL to **Authentication → URL Configuration → Redirect URLs**. Email and password sign-in remains available.
 

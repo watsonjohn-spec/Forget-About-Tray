@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-echo Publishing Movement Tray Studio to GitHub...
+echo Publishing Forget About Tray to GitHub...
 call npm.cmd run public-config
 if errorlevel 1 (
   echo.
@@ -10,7 +10,7 @@ if errorlevel 1 (
 )
 git --git-dir=.deploy-git --work-tree=. add -A
 git --git-dir=.deploy-git --work-tree=. diff --cached --quiet
-if errorlevel 1 git --git-dir=.deploy-git --work-tree=. commit -m "Update Movement Tray Studio"
+if errorlevel 1 git --git-dir=.deploy-git --work-tree=. commit -m "Update Forget About Tray"
 git --git-dir=.deploy-git --work-tree=. push -u origin main
 if errorlevel 1 (
   echo.

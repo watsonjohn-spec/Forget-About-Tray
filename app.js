@@ -11,16 +11,37 @@ const defaults = {
   wallHeight: 3,
   wallThickness: 1.6,
   notchesEnabled: true,
-  notchWidth: 2
+  notchWidth: 2,
+  includeBases: false,
+  filamentKey: "pla-bambu-green",
+  filamentMaterial: "pla",
+  filamentName: "Bambu Green",
+  filamentHex: "#00AE42"
 };
 
 const numericKeys = [
   "columns", "rows", "baseSize", "baseDepth", "gap", "clearance", "plateThickness",
   "wallHeight", "wallThickness", "notchWidth"
 ];
-const checkboxKeys = ["lipEnabled", "notchesEnabled"];
+const checkboxKeys = ["lipEnabled", "notchesEnabled", "includeBases"];
 const rectangleBaseLengths = [50, 60, 75, 100, 150];
+const filamentColours = [
+  ["pla", "Jade White", "#EBEEE9"], ["pla", "Beige", "#E8D5B5"], ["pla", "Yellow", "#F4D03F"],
+  ["pla", "Orange", "#F07C24"], ["pla", "Red", "#C73A3A"], ["pla", "Magenta", "#C04473"],
+  ["pla", "Purple", "#6E4B8B"], ["pla", "Blue", "#2F68A2"], ["pla", "Cyan", "#32AFC3"],
+  ["pla", "Bambu Green", "#00AE42"], ["pla", "Mistletoe Green", "#3F6B47"], ["pla", "Brown", "#6F4E37"],
+  ["pla", "Gray", "#8A8D8F"], ["pla", "Silver", "#A6A8A9"], ["pla", "Black", "#202223"],
+  ["petg", "White", "#F1F2EE"], ["petg", "Yellow", "#F3C623"], ["petg", "Orange", "#E87524"],
+  ["petg", "Red", "#B93636"], ["petg", "Blue", "#32658C"], ["petg", "Green", "#398052"],
+  ["petg", "Gray", "#777C7D"], ["petg", "Black", "#1C1E1F"]
+].map(([material, name, hex]) => ({ material, name, hex, key: `${material}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}` }));
 const inputs = Object.fromEntries([...numericKeys, ...checkboxKeys].map((key) => [key, document.getElementById(key)]));
+const filamentColourInput = document.getElementById("filamentColour");
+filamentColourInput.innerHTML = ["pla", "petg"].map((material) => `
+  <optgroup label="Bambu ${material.toUpperCase()}">
+    ${filamentColours.filter((colour) => colour.material === material).map((colour) => `<option value="${colour.key}" ${colour.key === defaults.filamentKey ? "selected" : ""}>${colour.name}</option>`).join("")}
+  </optgroup>
+`).join("");
 let state = { ...defaults };
 let armyRecommendations = [];
 let activeArmyRecommendationId = "";
@@ -36,6 +57,7 @@ let accountExportState = { freeExportUsed: false, unlimitedExports: false };
 let cloudPresets = [];
 let cloudArmyProjects = [];
 let catalogueContext = "army";
+let accountOrders = [];
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -53,6 +75,11 @@ function readState() {
     input.value = state[key];
   });
   checkboxKeys.forEach((key) => { state[key] = inputs[key].checked; });
+  const filament = filamentColours.find((colour) => colour.key === filamentColourInput.value) || filamentColours[0];
+  state.filamentKey = filament.key;
+  state.filamentMaterial = filament.material;
+  state.filamentName = filament.name;
+  state.filamentHex = filament.hex;
   state.baseShape = document.querySelector("[data-base-shape].active")?.dataset.baseShape || "square";
   if (state.baseShape === "square") {
     state.baseDepth = state.baseSize;
@@ -69,6 +96,7 @@ function writeState(nextState) {
   else state.baseDepth = rectangleDepth(state.baseSize, state.baseDepth);
   numericKeys.forEach((key) => { inputs[key].value = state[key]; });
   checkboxKeys.forEach((key) => { inputs[key].checked = state[key]; });
+  filamentColourInput.value = state.filamentKey || defaults.filamentKey;
   document.querySelectorAll("[data-base-shape]").forEach((button) => button.classList.toggle("active", button.dataset.baseShape === state.baseShape));
   render();
 }
@@ -82,7 +110,8 @@ function trayMetrics(config = state) {
   const outerDepth = innerDepth + wall * 2;
   const height = config.plateThickness + (config.lipEnabled ? config.wallHeight : 0);
   const boxes = buildBoxes(config);
-  const volume = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0);
+  const baseVolume = config.includeBases ? config.columns * config.rows * config.baseSize * config.baseDepth * config.plateThickness : 0;
+  const volume = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) + baseVolume;
   return { innerWidth, innerDepth, outerWidth, outerDepth, height, boxes, volume };
 }
 
@@ -147,8 +176,9 @@ function render() {
   document.getElementById("depthLabel").textContent = `${metrics.outerDepth.toFixed(1)} mm`;
   document.getElementById("outerSize").textContent = `${metrics.outerWidth.toFixed(1)} × ${metrics.outerDepth.toFixed(1)} mm`;
   document.getElementById("totalHeight").textContent = `${metrics.height.toFixed(1)} mm`;
-  document.getElementById("materialEstimate").textContent = `${(metrics.volume / 1000).toFixed(1)} cm³`;
-  document.getElementById("bodyCount").textContent = metrics.boxes.length;
+  const materialDensity = state.filamentMaterial === "petg" ? 1.27 : 1.24;
+  document.getElementById("materialEstimate").textContent = `${(metrics.volume / 1000 * materialDensity).toFixed(1)} g`;
+  document.getElementById("bodyCount").textContent = state.columns * state.rows;
   document.getElementById("exportFilename").textContent = fileName();
   document.getElementById("lipFields").classList.toggle("disabled", !state.lipEnabled);
   document.getElementById("baseDepthField").hidden = state.baseShape === "square";
@@ -157,6 +187,13 @@ function render() {
     button.classList.toggle("active", Number(button.dataset.base) === state.baseSize);
   });
   drawPreview(metrics);
+}
+
+function shadeHex(hex, amount) {
+  const value = hex.replace("#", "");
+  const number = Number.parseInt(value, 16);
+  const channel = (shift) => clamp((number >> shift & 255) + amount, 0, 255).toString(16).padStart(2, "0");
+  return `#${channel(16)}${channel(8)}${channel(0)}`;
 }
 
 function drawPreview(metrics) {
@@ -175,15 +212,19 @@ function drawPreview(metrics) {
   const d = metrics.outerDepth;
   const base = state.plateThickness;
   const top = metrics.height;
+  const filamentTop = shadeHex(state.filamentHex, 35);
+  const filamentMid = state.filamentHex;
+  const filamentSide = shadeHex(state.filamentHex, -35);
+  const filamentDark = shadeHex(state.filamentHex, -65);
   let markup = `
     <defs>
-      <linearGradient id="trayTop" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#b9d27e"/><stop offset="1" stop-color="#668b55"/></linearGradient>
-      <linearGradient id="traySide" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#507348"/><stop offset="1" stop-color="#345037"/></linearGradient>
-      <linearGradient id="trayFront" x1="0" x2="1"><stop offset="0" stop-color="#3f6042"/><stop offset="1" stop-color="#71945b"/></linearGradient>
+      <linearGradient id="trayTop" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="${filamentTop}"/><stop offset="1" stop-color="${filamentMid}"/></linearGradient>
+      <linearGradient id="traySide" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${filamentSide}"/><stop offset="1" stop-color="${filamentDark}"/></linearGradient>
+      <linearGradient id="trayFront" x1="0" x2="1"><stop offset="0" stop-color="${filamentDark}"/><stop offset="1" stop-color="${filamentSide}"/></linearGradient>
     </defs>
-    <polygon points="${points([[0,d,0],[w,d,0],[w,d,base],[0,d,base]])}" fill="url(#trayFront)" stroke="#42552a" stroke-width="1.2"/>
-    <polygon points="${points([[w,0,0],[w,d,0],[w,d,base],[w,0,base]])}" fill="url(#traySide)" stroke="#42552a" stroke-width="1.2"/>
-    <polygon points="${points([[0,0,base],[w,0,base],[w,d,base],[0,d,base]])}" fill="url(#trayTop)" stroke="#42552a" stroke-width="1.2"/>
+    <polygon points="${points([[0,d,0],[w,d,0],[w,d,base],[0,d,base]])}" fill="url(#trayFront)" stroke="${filamentDark}" stroke-width="1.2"/>
+    <polygon points="${points([[w,0,0],[w,d,0],[w,d,base],[w,0,base]])}" fill="url(#traySide)" stroke="${filamentDark}" stroke-width="1.2"/>
+    <polygon points="${points([[0,0,base],[w,0,base],[w,d,base],[0,d,base]])}" fill="url(#trayTop)" stroke="${filamentDark}" stroke-width="1.2"/>
   `;
 
   const wall = state.lipEnabled ? state.wallThickness : 0;
@@ -191,11 +232,24 @@ function drawPreview(metrics) {
   const yStart = wall + state.clearance;
   for (let column = 1; column < state.columns; column += 1) {
     const x = xStart + column * state.baseSize + (column - 0.5) * state.gap;
-    markup += `<line x1="${project(x, wall, base)[0]}" y1="${project(x, wall, base)[1]}" x2="${project(x, d-wall, base)[0]}" y2="${project(x, d-wall, base)[1]}" stroke="#456846" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
+    markup += `<line x1="${project(x, wall, base)[0]}" y1="${project(x, wall, base)[1]}" x2="${project(x, d-wall, base)[0]}" y2="${project(x, d-wall, base)[1]}" stroke="${filamentDark}" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
   }
   for (let row = 1; row < state.rows; row += 1) {
     const y = yStart + row * state.baseDepth + (row - 0.5) * state.gap;
-    markup += `<line x1="${project(wall, y, base)[0]}" y1="${project(wall, y, base)[1]}" x2="${project(w-wall, y, base)[0]}" y2="${project(w-wall, y, base)[1]}" stroke="#456846" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
+    markup += `<line x1="${project(wall, y, base)[0]}" y1="${project(wall, y, base)[1]}" x2="${project(w-wall, y, base)[0]}" y2="${project(w-wall, y, base)[1]}" stroke="${filamentDark}" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
+  }
+
+  if (state.includeBases) {
+    for (let column = 0; column < state.columns; column += 1) {
+      for (let row = 0; row < state.rows; row += 1) {
+        const x1 = wall + state.clearance + column * (state.baseSize + state.gap);
+        const y1 = wall + state.clearance + row * (state.baseDepth + state.gap);
+        const x2 = x1 + state.baseSize;
+        const y2 = y1 + state.baseDepth;
+        const z = base + 0.35;
+        markup += `<polygon points="${points([[x1,y1,z],[x2,y1,z],[x2,y2,z],[x1,y2,z]])}" fill="${filamentTop}" stroke="${filamentDark}" stroke-width=".7" opacity=".76"/>`;
+      }
+    }
   }
 
   if (state.lipEnabled) {
@@ -206,9 +260,9 @@ function drawPreview(metrics) {
       const x2 = box.x + box.w;
       const y2 = box.y + box.d;
       markup += `
-        <polygon points="${points([[x1,y1,top],[x2,y1,top],[x2,y2,top],[x1,y2,top]])}" fill="#89aa65" stroke="#2d4932" stroke-width="1"/>
-        <polygon points="${points([[x1,y2,base],[x2,y2,base],[x2,y2,top],[x1,y2,top]])}" fill="#5c7e50" stroke="#2d4932" stroke-width=".8"/>
-        <polygon points="${points([[x2,y1,base],[x2,y2,base],[x2,y2,top],[x2,y1,top]])}" fill="#496b48" stroke="#2d4932" stroke-width=".8"/>
+        <polygon points="${points([[x1,y1,top],[x2,y1,top],[x2,y2,top],[x1,y2,top]])}" fill="${filamentTop}" stroke="${filamentDark}" stroke-width="1"/>
+        <polygon points="${points([[x1,y2,base],[x2,y2,base],[x2,y2,top],[x1,y2,top]])}" fill="${filamentSide}" stroke="${filamentDark}" stroke-width=".8"/>
+        <polygon points="${points([[x2,y1,base],[x2,y2,base],[x2,y2,top],[x2,y1,top]])}" fill="${filamentDark}" stroke="${filamentDark}" stroke-width=".8"/>
       `;
     });
   }
@@ -230,7 +284,7 @@ function slugify(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "movement-tray";
 }
 
-async function exportStl(config = state, prefix = "movement-tray", downloadToken = "") {
+async function fetchStlFile(config = state, prefix = "movement-tray", downloadToken = "") {
   const response = await authorizedFetch("/api/account/export-stl", {
     method: "POST",
     body: JSON.stringify({ config, name: prefix, downloadToken })
@@ -240,12 +294,30 @@ async function exportStl(config = state, prefix = "movement-tray", downloadToken
     throw new Error(result.error || "The STL could not be downloaded.");
   }
   const blob = await response.blob();
+  return { blob, filename: fileName(config, prefix) };
+}
+
+function downloadBlob(blob, filename) {
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = fileName(config, prefix);
+  link.download = filename;
   link.click();
   URL.revokeObjectURL(link.href);
-  showToast(`${link.download} exported`);
+}
+
+async function exportStl(config = state, prefix = "movement-tray", downloadToken = "") {
+  const file = await fetchStlFile(config, prefix, downloadToken);
+  downloadBlob(file.blob, file.filename);
+  showToast(`${file.filename} exported`);
+}
+
+async function emailStl(config = state, prefix = "movement-tray", downloadToken = "") {
+  const file = await fetchStlFile(config, prefix, downloadToken);
+  downloadBlob(file.blob, file.filename);
+  const subject = encodeURIComponent(`STL file: ${file.filename}`);
+  const body = encodeURIComponent(`The STL file ${file.filename} has been downloaded to this device. Attach it to this email before sending.`);
+  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  showToast("STL downloaded and email app opened");
 }
 
 function freeExportUsed() {
@@ -261,6 +333,10 @@ async function authorizedFetch(path, options = {}) {
       ...(options.headers || {})
     }
   });
+}
+
+function platformHeaders() {
+  return window.platformService?.requestHeaders() || {};
 }
 
 async function refreshExportState() {
@@ -290,6 +366,7 @@ async function requestExport(config = state, prefix = "movement-tray") {
   document.getElementById("exportDialogTitle").textContent = fileName(config, prefix);
   document.getElementById("exportChoices").hidden = false;
   document.getElementById("chooseUnlockedExport").hidden = !unlimited;
+  document.getElementById("chooseEmailExport").hidden = !unlimited;
   document.getElementById("chooseAdExport").hidden = unlimited || freeExportUsed();
   document.getElementById("chooseUnlimitedExport").hidden = unlimited;
   document.getElementById("adGate").hidden = true;
@@ -302,9 +379,11 @@ function startAdGate() {
   let seconds = 30;
   const countdown = document.getElementById("adCountdown");
   const download = document.getElementById("completeAdExport");
+  const email = document.getElementById("completeAdEmailExport");
   document.getElementById("exportChoices").hidden = true;
   document.getElementById("adGate").hidden = false;
   download.disabled = true;
+  email.disabled = true;
   countdown.textContent = `Download unlocks in ${seconds} seconds`;
   clearInterval(adCountdownTimer);
   adCountdownTimer = setInterval(() => {
@@ -313,6 +392,7 @@ function startAdGate() {
     if (seconds <= 0) {
       clearInterval(adCountdownTimer);
       download.disabled = false;
+      email.disabled = false;
     }
   }, 1000);
 }
@@ -356,10 +436,10 @@ async function configureStripeCheckout() {
   status.textContent = "Checking Stripe configuration...";
   try {
     const [configResponse, quoteResponse] = await Promise.all([
-      fetch(checkoutApiUrl("/api/checkout/config")),
+      fetch(checkoutApiUrl("/api/checkout/config"), { headers: platformHeaders() }),
       fetch(checkoutApiUrl("/api/checkout/quote"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...platformHeaders() },
         body: JSON.stringify({ config: pendingExportConfig })
       })
     ]);
@@ -383,7 +463,7 @@ async function beginStripeCheckout() {
   try {
     const response = await authorizedFetch("/api/checkout/session", {
       method: "POST",
-      body: JSON.stringify({ config: pendingExportConfig, name: pendingExportPrefix || "Printed movement tray" })
+      body: JSON.stringify({ config: pendingExportConfig, name: pendingExportPrefix || "Printed design" })
     });
     const result = await response.json();
     if (!response.ok || !result.url) throw new Error(result.error || "Stripe Checkout could not be created.");
@@ -400,7 +480,7 @@ async function configureUnlockCheckout() {
   button.disabled = true;
   status.textContent = "Checking Stripe configuration...";
   try {
-    const response = await fetch(checkoutApiUrl("/api/checkout/config"));
+    const response = await fetch(checkoutApiUrl("/api/checkout/config"), { headers: platformHeaders() });
     if (!response.ok) throw new Error("Stripe checkout backend is not available.");
     const config = await response.json();
     document.getElementById("unlockExportsPrice").textContent = formatMoney(config.unlimitedExportsPrice, config.currency);
@@ -468,7 +548,7 @@ async function persistPreset(name, config, clientRef = `${Date.now()}`) {
     localStorage.setItem("movement-tray-presets", JSON.stringify(saved.slice(0, 12)));
     return;
   }
-  await accountService.upsertTrayDesign({ client_ref: clientRef, name, configuration: config });
+  await accountService.upsertDesign({ client_ref: clientRef, name, generator_version: 1, parameters: config });
   await refreshCloudData();
 }
 
@@ -627,11 +707,12 @@ async function saveArmyProject() {
   try {
     if (accountService.isSignedIn()) {
       const clientRef = existing >= 0 ? saved[existing].clientRef : project.id;
-      await accountService.upsertArmyList({
+      await accountService.upsertProject({
         client_ref: clientRef,
         name,
-        original_list_text: project.listText,
-        parsed_units: project.recommendations
+        project_type: "army_list",
+        source_text: project.listText,
+        items: project.recommendations
       });
       await refreshCloudData();
     } else {
@@ -985,21 +1066,45 @@ function switchMode(mode) {
   });
 }
 
+function activeArmyRecommendation() {
+  return armyRecommendations.find((recommendation) => recommendation.id === activeArmyRecommendationId);
+}
+
+async function saveFromHeader() {
+  if (document.body.dataset.activeMode !== "army") return savePreset();
+  const recommendation = activeArmyRecommendation();
+  if (!recommendation || recommendation.baseSize <= 0 || recommendation.baseDepth <= 0) return showToast("Select a tray with a confirmed base size first");
+  if (armyEditingId === recommendation.id) {
+    readState();
+    await persistPreset(`${recommendation.name} - ${state.columns} x ${state.rows}`, { ...state });
+    renderPresets();
+    return showToast(`${recommendation.name} preset saved`);
+  }
+  return saveRecommendation(recommendation);
+}
+
+function exportFromHeader() {
+  if (document.body.dataset.activeMode !== "army") return requestExport();
+  const recommendation = activeArmyRecommendation();
+  if (!recommendation || recommendation.baseSize <= 0 || recommendation.baseDepth <= 0) return showToast("Select a tray with a confirmed base size first");
+  return requestExport(armyEditingId === recommendation.id ? { ...state } : recommendationConfig(recommendation), recommendation.name);
+}
+
 async function refreshCloudData() {
   if (!accountService.isSignedIn()) return;
-  const [trays, armies] = await Promise.all([accountService.loadTrayDesigns(), accountService.loadArmyLists()]);
+  const [trays, armies] = await Promise.all([accountService.loadDesigns(), accountService.loadProjects()]);
   cloudPresets = trays.map((tray) => ({
     id: tray.id,
     clientRef: tray.client_ref,
     name: tray.name,
-    state: tray.configuration
+    state: tray.parameters
   }));
   cloudArmyProjects = armies.map((army) => ({
     id: army.id,
     clientRef: army.client_ref,
     name: army.name,
-    listText: army.original_list_text,
-    recommendations: army.parsed_units
+    listText: army.source_text,
+    recommendations: army.items
   }));
   renderPresets();
   renderSavedArmies();
@@ -1021,6 +1126,7 @@ function setAuthenticated(authenticated) {
 async function loadAccountDialog(view = "profile") {
   try {
     const [profile, orders] = await Promise.all([accountService.loadProfile(), accountService.loadOrders()]);
+    accountOrders = orders;
     const address = profile?.default_address || {};
     document.getElementById("accountEmail").value = accountService.currentUser()?.email || "";
     document.getElementById("accountDisplayName").value = profile?.display_name || "";
@@ -1033,17 +1139,56 @@ async function loadAccountDialog(view = "profile") {
     document.getElementById("accountMarketingConsent").checked = Boolean(profile?.marketing_consent);
     document.getElementById("accountOrdersList").innerHTML = orders.length ? orders.map((order) => `
       <article class="account-order">
-        <div><strong>${escapeHtml(order.invoice_number || "Pending invoice")}</strong><small>${order.order_type === "unlimited_stl" ? "Unlimited STL exports" : "Printed movement tray"} · ${escapeHtml(order.status)}</small></div>
+        <div><strong>${escapeHtml(order.invoice_number || "Pending invoice")}</strong><small>${order.order_type === "unlimited_stl" ? "Unlimited STL exports" : "Printed design"} · ${escapeHtml(order.status)}</small></div>
         <b>${formatMoney(order.total_inc_vat, order.currency)}</b>
         <small>${new Date(order.paid_at || order.created_at).toLocaleDateString()}</small>
+        <button type="button" data-order-detail="${escapeHtml(order.id)}">View details</button>
       </article>
     `).join("") : `<div class="dialog-empty">No purchases yet.</div>`;
+    document.getElementById("accountOrderDetail").hidden = true;
     document.getElementById("accountDialog").showModal();
-    const target = view === "password" ? document.getElementById("accountPasswordSection") : view === "orders" ? document.getElementById("accountOrdersSection") : document.getElementById("accountProfileForm");
-    setTimeout(() => target.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    setAccountPage(view);
   } catch (error) {
     showToast(error.message);
   }
+}
+
+function setAccountPage(view) {
+  const page = ["profile", "password", "orders"].includes(view) ? view : "profile";
+  document.querySelectorAll("[data-account-page]").forEach((section) => { section.hidden = section.dataset.accountPage !== page; });
+  document.querySelectorAll("[data-account-page-button]").forEach((button) => button.classList.toggle("active", button.dataset.accountPageButton === page));
+}
+
+function showOrderDetail(orderId) {
+  const order = accountOrders.find((candidate) => candidate.id === orderId);
+  if (!order) return;
+  const job = Array.isArray(order.print_jobs) ? order.print_jobs[0] : order.print_jobs;
+  const currentStatus = job?.status || order.status;
+  const statuses = ["order_made", "producing", "posted", "complete"];
+  const currentIndex = statuses.indexOf(currentStatus);
+  const items = Array.isArray(order.order_items) ? order.order_items : [];
+  const snapshot = Array.isArray(order.order_customer_snapshots) ? order.order_customer_snapshots[0] : order.order_customer_snapshots;
+  const events = Array.isArray(job?.print_job_events) ? job.print_job_events : [];
+  const statusTrack = job
+    ? `<div class="order-status-track">${statuses.map((status, index) => `<span class="${index <= currentIndex ? "done" : ""}">${status.replace("_", " ")}</span>`).join("")}</div>`
+    : `<p class="order-status-note">Order status: <strong>${escapeHtml(currentStatus.replaceAll("_", " "))}</strong></p>`;
+  const detail = document.getElementById("accountOrderDetail");
+  detail.innerHTML = `
+    <h4>${escapeHtml(order.invoice_number || "Pending invoice")}</h4>
+    ${statusTrack}
+    <div class="order-detail-grid">
+      <div><span>Status</span><strong>${escapeHtml(currentStatus)}</strong></div>
+      <div><span>Total</span><strong>${formatMoney(order.total_inc_vat, order.currency)}</strong></div>
+      <div><span>Ordered</span><strong>${new Date(order.paid_at || order.created_at).toLocaleString()}</strong></div>
+      <div><span>Delivery postcode</span><strong>${escapeHtml(snapshot?.delivery_address?.postal_code || snapshot?.delivery_address?.postcode || "Not recorded")}</strong></div>
+    </div>
+    <div class="order-detail-items">
+      ${items.length ? items.map((item) => `<p><strong>${escapeHtml(item.description || "Order item")}</strong><br><small>Quantity ${item.quantity || 1} · ${formatMoney(item.total_inc_vat || 0, order.currency)}</small></p>`).join("") : "<p>No line-item detail is available for this order.</p>"}
+    </div>
+    ${events.length ? `<div class="order-events"><h5>Status history</h5>${events.map((event) => `<p><strong>${escapeHtml(String(event.to_status || "").replaceAll("_", " "))}</strong><small>${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</div>` : ""}
+  `;
+  detail.hidden = false;
+  detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function processCheckoutResult() {
@@ -1098,6 +1243,7 @@ async function initializeAccount() {
 }
 
 Object.values(inputs).forEach((input) => input.addEventListener("input", render));
+filamentColourInput.addEventListener("change", render);
 document.querySelectorAll("[data-base-shape]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("[data-base-shape]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
@@ -1186,6 +1332,13 @@ document.querySelectorAll("[data-account-view]").forEach((button) => {
     loadAccountDialog(button.dataset.accountView);
   });
 });
+document.querySelectorAll("[data-account-page-button]").forEach((button) => {
+  button.addEventListener("click", () => setAccountPage(button.dataset.accountPageButton));
+});
+document.getElementById("accountOrdersList").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-order-detail]");
+  if (button) showOrderDetail(button.dataset.orderDetail);
+});
 document.addEventListener("click", (event) => {
   if (event.target.closest(".account-menu-wrap")) return;
   document.getElementById("accountMenu").hidden = true;
@@ -1232,7 +1385,7 @@ document.getElementById("downloadAccountData").addEventListener("click", async (
     if (!response.ok) throw new Error(data.error || "Account data could not be exported.");
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-    link.download = `movement-tray-account-data-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `forget-about-tray-account-data-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(link.href);
     showToast("Account data exported");
@@ -1265,8 +1418,10 @@ document.querySelectorAll("[data-base]").forEach((button) => {
     render();
   });
 });
-["exportButton", "exportTop"].forEach((id) => document.getElementById(id).addEventListener("click", () => requestExport()));
-["savePreset", "savePresetTop"].forEach((id) => document.getElementById(id).addEventListener("click", savePreset));
+document.getElementById("exportButton").addEventListener("click", () => requestExport());
+document.getElementById("savePreset").addEventListener("click", savePreset);
+document.getElementById("exportTop").addEventListener("click", exportFromHeader);
+document.getElementById("savePresetTop").addEventListener("click", saveFromHeader);
 document.getElementById("resetButton").addEventListener("click", () => {
   writeState(defaults);
   showToast("Tray reset to defaults");
@@ -1280,7 +1435,7 @@ document.getElementById("presets").addEventListener("click", async (event) => {
   }
   if (deleteId) {
     if (accountService.isSignedIn()) {
-      await accountService.deleteTrayDesign(deleteId);
+      await accountService.deleteDesign(deleteId);
       await refreshCloudData();
     } else {
       localStorage.setItem("movement-tray-presets", JSON.stringify(localPresets().filter((item) => item.id !== deleteId)));
@@ -1354,7 +1509,7 @@ document.getElementById("savedArmiesList").addEventListener("click", async (even
   }
   if (action === "delete") {
     if (accountService.isSignedIn()) {
-      await accountService.deleteArmyList(card.dataset.armyProject);
+      await accountService.deleteProject(card.dataset.armyProject);
       await refreshCloudData();
     } else {
       localStorage.setItem("movement-tray-army-projects", JSON.stringify(localArmyProjects().filter((item) => item.id !== card.dataset.armyProject)));
@@ -1374,11 +1529,19 @@ document.getElementById("chooseUnlockedExport").addEventListener("click", async 
     showToast(error.message);
   }
 });
+document.getElementById("chooseEmailExport").addEventListener("click", async () => {
+  try {
+    await emailStl(pendingExportConfig, pendingExportPrefix);
+    document.getElementById("exportDialog").close();
+  } catch (error) {
+    showToast(error.message);
+  }
+});
 document.getElementById("chooseUnlimitedExport").addEventListener("click", showUnlockExports);
 document.getElementById("choosePrintOrder").addEventListener("click", showPrintOrder);
 document.getElementById("stripeCheckoutButton").addEventListener("click", beginStripeCheckout);
 document.getElementById("unlockCheckoutButton").addEventListener("click", beginUnlockCheckout);
-document.getElementById("completeAdExport").addEventListener("click", async () => {
+async function completeSponsoredExport(delivery) {
   try {
     const response = await authorizedFetch("/api/account/use-free-export", {
       method: "POST",
@@ -1387,12 +1550,15 @@ document.getElementById("completeAdExport").addEventListener("click", async () =
     const result = await response.json();
     if (!response.ok || !result.allowed) throw new Error(result.error || "The sponsored download could not be unlocked.");
     accountExportState.freeExportUsed = true;
-    await exportStl(pendingExportConfig, pendingExportPrefix, result.downloadToken);
+    if (delivery === "email") await emailStl(pendingExportConfig, pendingExportPrefix, result.downloadToken);
+    else await exportStl(pendingExportConfig, pendingExportPrefix, result.downloadToken);
     document.getElementById("exportDialog").close();
   } catch (error) {
     showToast(error.message);
   }
-});
+}
+document.getElementById("completeAdExport").addEventListener("click", () => completeSponsoredExport("download"));
+document.getElementById("completeAdEmailExport").addEventListener("click", () => completeSponsoredExport("email"));
 document.getElementById("armyResults").addEventListener("input", (event) => {
   const field = event.target.dataset.armyField;
   const card = event.target.closest("[data-recommendation]");
