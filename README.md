@@ -87,4 +87,6 @@ Start the Render deployment from:
 
 `https://render.com/deploy?repo=https://github.com/watsonjohn-spec/Forget-About-Tray`
 
+On Windows, `Deploy Node Backend.cmd` opens the same deployment flow.
+
 GitHub Pages can display the frontend but cannot run the secure account, Stripe, webhook, or order-record endpoints.

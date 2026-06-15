@@ -191,6 +191,12 @@ test("factory route serves the dedicated provider login", async () => {
   assert.match(html, /src="\.\.\/account\.js"/);
 });
 
+test("node host exposes a deployment health check", async () => {
+  const response = await fetch(`${baseUrl}/api/health`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: "ok", service: "forget-about-platform" });
+});
+
 test("physical print checkout preserves the complete tray configuration", async () => {
   const config = {
     columns: 4,

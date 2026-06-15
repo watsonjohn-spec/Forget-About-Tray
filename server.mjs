@@ -14,7 +14,7 @@ const basePrice = Number(process.env.PRINT_BASE_PRICE_PENCE || 800);
 const pricePerCm3 = Number(process.env.PRINT_PRICE_PER_CM3_PENCE || 25);
 const unlimitedExportsPrice = Number(process.env.UNLIMITED_EXPORTS_PRICE_PENCE || 500);
 const stripeApiBase = process.env.STRIPE_API_BASE || "https://api.stripe.com";
-const stripeApiVersion = process.env.STRIPE_API_VERSION || "2026-02-25.clover";
+const stripeApiVersion = process.env.STRIPE_API_VERSION || "2026-05-27.dahlia";
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 const allowedCountries = (process.env.STRIPE_ALLOWED_COUNTRIES || "GB,US").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean);
 const allowedOrigin = process.env.CHECKOUT_ALLOWED_ORIGIN || "";
