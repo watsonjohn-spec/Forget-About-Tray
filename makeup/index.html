@@ -42,7 +42,7 @@
       <section class="hero">
         <p class="eyebrow">The dressing table</p>
         <h1>Build a makeup caddy around what you actually use.</h1>
-        <p>Choose products from the starter catalogue or enter your own measurements. Reorder every slot, tune the construction, and add a centre carrying handle.</p>
+        <p>Choose products from the starter catalogue or enter your own measurements. Reorder every slot and the caddy builds itself around a fixed centre handle spine.</p>
       </section>
 
       <nav class="makeup-mode-tabs" aria-label="Makeup holder type">
@@ -70,7 +70,7 @@
             <button class="button secondary" type="submit">Add custom slot</button>
           </form>
           <div class="control-block">
-            <div class="block-heading"><h3>Slot order</h3><small>Items flow left to right, then down.</small></div>
+            <div class="block-heading"><h3>Slot order</h3><small>Items alternate between each side of the handle spine and sit shoulder to shoulder on that side.</small></div>
             <div class="slot-list" id="slotList"></div>
           </div>
           <div class="control-block construction">
@@ -85,8 +85,8 @@
               <label>Wall thickness<input id="wallThickness" type="number" min="1" max="6" step="0.1" value="2"></label>
               <label>Staircase rise<input id="stepRise" type="number" min="10" max="60" value="22"></label>
             </div>
-            <label class="switch"><span><strong>Centre carrying handle</strong><small>Add two supports and a top grip.</small></span><input id="handleEnabled" type="checkbox"></label>
-            <div class="two-fields" id="handleFields" hidden>
+            <label class="switch locked-switch"><span><strong>Integrated handle spine</strong><small>Always included. Slot backs abut this spine and face outward.</small></span><input id="handleEnabled" type="checkbox" checked disabled></label>
+            <div class="two-fields" id="handleFields">
               <label>Handle height<input id="handleHeight" type="number" min="45" max="180" value="95"></label>
               <label>Handle width<input id="handleWidth" type="number" min="35" max="180" value="70"></label>
             </div>

@@ -9,7 +9,7 @@ const filamentColours = [
 const defaults = {
   items: catalogue.slice(0, 3).map((item, index) => ({ ...item, id: `${item.id}-${index}`, clearance: 1.5 })),
   layoutMode: "caddy", maxSpineLength: 220, gap: 6, edgeMargin: 8, baseThickness: 3, wallThickness: 2, stepRise: 22,
-  handleEnabled: false, handleHeight: 95, handleWidth: 70,
+  handleEnabled: true, handleHeight: 95, handleWidth: 70,
   filamentKey: "pla-rose-gold", filamentMaterial: "pla", filamentName: "Rose Gold", filamentHex: "#b76e79"
 };
 let state = structuredClone(defaults);
@@ -54,7 +54,8 @@ function readConstruction() {
   ["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "handleHeight", "handleWidth"].forEach((key) => {
     state[key] = Number(document.getElementById(key).value);
   });
-  state.handleEnabled = document.getElementById("handleEnabled").checked;
+  state.handleEnabled = true;
+  document.getElementById("handleEnabled").checked = true;
   const filament = filamentColours.find((candidate) => candidate.key === document.getElementById("filamentColour").value) || filamentColours[0];
   state.filamentKey = filament.key;
   state.filamentMaterial = filament.material;
@@ -63,11 +64,12 @@ function readConstruction() {
 }
 
 function writeConstruction() {
+  state = { ...defaults, ...state, handleEnabled: true };
   ["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "handleHeight", "handleWidth"].forEach((key) => {
     document.getElementById(key).value = state[key];
   });
-  document.getElementById("handleEnabled").checked = state.handleEnabled;
-  document.getElementById("handleFields").hidden = !state.handleEnabled || state.layoutMode !== "caddy";
+  document.getElementById("handleEnabled").checked = true;
+  document.getElementById("handleFields").hidden = state.layoutMode !== "caddy";
   document.getElementById("handleEnabled").closest(".switch").hidden = state.layoutMode !== "caddy";
   document.querySelectorAll("[data-layout-mode]").forEach((button) => button.classList.toggle("active", button.dataset.layoutMode === state.layoutMode));
   document.getElementById("filamentColour").value = state.filamentKey;
@@ -104,15 +106,16 @@ function geometry() {
     const sides = [[], []];
     items.forEach((item, index) => sides[index % 2].push(item));
     const sideDepths = sides.map((side) => Math.max(0, ...side.map((item) => item.slotDepth)));
+    spineWidth = Math.max(state.wallThickness * 4, 10);
     const sideLengths = sides.map((side) => side.reduce((sum, item) => sum + item.slotWidth, 0) + Math.max(0, side.length - 1) * state.gap);
-    outerWidth = Math.max(...sideLengths, 60) + state.edgeMargin * 2;
-    outerDepth = sideDepths[0] + spineWidth + sideDepths[1] + state.edgeMargin * 2;
-    spineY = state.edgeMargin + sideDepths[0];
+    outerWidth = Math.max(...sideLengths) + state.wallThickness * 2;
+    outerDepth = sideDepths[0] + spineWidth + sideDepths[1] + state.wallThickness * 2;
+    spineY = state.wallThickness + sideDepths[0];
     sides.forEach((side, sideIndex) => {
-      let x = state.edgeMargin;
+      let x = state.wallThickness;
       side.forEach((item, column) => {
         const y = sideIndex === 0 ? spineY - item.slotDepth : spineY + spineWidth;
-        positions.push({ ...item, x, y, z: 0, row: sideIndex, column });
+        positions.push({ ...item, x, y, z: 0, row: sideIndex, side: sideIndex, column });
         x += item.slotWidth + state.gap;
       });
     });
@@ -127,25 +130,40 @@ function geometry() {
       y += depth + state.gap;
     });
   } else {
-    boxes.push({ x: 0, y: spineY, z: state.baseThickness, w: outerWidth, d: spineWidth, h: state.wallThickness, kind: "spine" });
+    const holderHeights = positions.map((item) => Math.max(8, item.height * 2 / 3));
+    boxes.push({ x: 0, y: spineY, z: state.baseThickness, w: outerWidth, d: spineWidth, h: Math.max(...holderHeights), kind: "spine" });
   }
   positions.forEach((item) => {
     const t = state.wallThickness;
     const h = Math.max(8, item.height * 2 / 3);
     const z = state.baseThickness + item.z;
-    boxes.push(
-      { x: item.x - t, y: item.y - t, z, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
-      { x: item.x - t, y: item.y + item.slotDepth, z, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
-      { x: item.x - t, y: item.y, z, w: t, d: item.slotDepth, h, kind: "wall" },
-      { x: item.x + item.slotWidth, y: item.y, z, w: t, d: item.slotDepth, h, kind: "wall" }
-    );
+    if (state.layoutMode === "caddy") {
+      const frontY = item.side === 0 ? item.y - t : item.y + item.slotDepth;
+      boxes.push(
+        { x: item.x - t, y: frontY, z, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
+        { x: item.x - t, y: item.y, z, w: t, d: item.slotDepth, h, kind: "wall" },
+        { x: item.x + item.slotWidth, y: item.y, z, w: t, d: item.slotDepth, h, kind: "wall" }
+      );
+    } else {
+      boxes.push(
+        { x: item.x - t, y: item.y - t, z, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
+        { x: item.x - t, y: item.y + item.slotDepth, z, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
+        { x: item.x - t, y: item.y, z, w: t, d: item.slotDepth, h, kind: "wall" },
+        { x: item.x + item.slotWidth, y: item.y, z, w: t, d: item.slotDepth, h, kind: "wall" }
+      );
+    }
   });
-  if (state.handleEnabled && state.layoutMode === "caddy") {
+  if (state.layoutMode === "caddy") {
     const t = Math.max(state.wallThickness * 2, 4);
-    const width = Math.min(state.handleWidth, outerWidth - state.edgeMargin * 2);
+    const width = Math.min(Math.max(t * 2, state.handleWidth), outerWidth);
     const x = (outerWidth - width) / 2;
-    const y = spineY + (spineWidth - t) / 2;
-    boxes.push({ x, y, z: state.baseThickness, w: t, d: t, h: state.handleHeight, kind: "handle" }, { x: x + width - t, y, z: state.baseThickness, w: t, d: t, h: state.handleHeight, kind: "handle" }, { x, y, z: state.baseThickness + state.handleHeight, w: width, d: t, h: t, kind: "handle" });
+    const y = spineY;
+    const handleRise = Math.max(state.handleHeight, Math.max(...positions.map((item) => item.height * 2 / 3)) + t * 2);
+    boxes.push(
+      { x, y, z: state.baseThickness, w: t, d: spineWidth, h: handleRise, kind: "handle" },
+      { x: x + width - t, y, z: state.baseThickness, w: t, d: spineWidth, h: handleRise, kind: "handle" },
+      { x, y, z: state.baseThickness + handleRise, w: width, d: spineWidth, h: t, kind: "handle" }
+    );
   }
   const materialCm3 = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
   const height = Math.max(...boxes.map((box) => box.z + box.h));
@@ -441,7 +459,7 @@ document.querySelectorAll("[data-layout-mode]").forEach((button) => button.addEv
   writeConstruction();
   renderPreview();
 }));
-document.getElementById("handleEnabled").addEventListener("change", () => { document.getElementById("handleFields").hidden = !document.getElementById("handleEnabled").checked; renderPreview(); });
+document.getElementById("handleEnabled").addEventListener("change", () => { document.getElementById("handleEnabled").checked = true; renderPreview(); });
 document.querySelectorAll("[data-preview-turn]").forEach((button) => button.addEventListener("click", () => { previewYaw += Number(button.dataset.previewTurn) * Math.PI / 8; renderPreview(); }));
 document.querySelector("[data-preview-reset]").addEventListener("click", () => { previewYaw = -Math.PI / 4; previewPitch = Math.PI / 5; renderPreview(); });
 document.getElementById("caddyPreview").addEventListener("pointerdown", (event) => { previewDrag = { x: event.clientX, y: event.clientY, yaw: previewYaw, pitch: previewPitch }; event.currentTarget.setPointerCapture(event.pointerId); });

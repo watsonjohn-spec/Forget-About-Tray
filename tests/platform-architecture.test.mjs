@@ -31,6 +31,14 @@ test("makeup caddies are a separate enabled generator under the makeup brand", (
   const geometry = generator.buildGeometry(parameters);
   assert.equal(geometry.positions.length, 2);
   assert.ok(geometry.boxes.length > 10);
+  assert.equal(generator.normalizeParameters({ ...parameters, handleEnabled: false }).handleEnabled, true);
+  assert.equal(geometry.config.handleEnabled, true);
+  assert.equal(geometry.spineWidth, 10);
+  assert.equal(geometry.spineY, 27);
+  assert.equal(geometry.outerWidth, 45);
+  assert.equal(geometry.outerDepth, 72);
+  assert.equal(geometry.positions[0].y + geometry.positions[0].slotDepth, geometry.spineY);
+  assert.equal(geometry.positions[1].y, geometry.spineY + geometry.spineWidth);
   assert.match(generator.renderStl(parameters), /^solid makeup_caddy/);
   assert.match(generator.safeFileName(parameters, "Dressing table"), /2-slots-handle\.stl$/);
   const staircase = generator.buildGeometry({ ...parameters, items: [...parameters.items, { ...parameters.items[1], id: "foundation-two" }], layoutMode: "staircase", maxSpineLength: 100, stepRise: 22 });

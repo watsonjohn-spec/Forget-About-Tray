@@ -52,6 +52,8 @@ main { width:min(1420px,calc(100% - 40px)); margin:0 auto; }
 .switch strong,.switch small { display:block; }
 .switch small { margin-top:3px; color:var(--muted); font-size:8px; }
 .switch input { width:20px; height:20px; }
+.locked-switch { color:var(--ink) !important; }
+.locked-switch input { accent-color:var(--rose-dark); cursor:not-allowed; }
 .slot-list { display:grid; gap:7px; }
 .slot-card { padding:9px; display:grid; grid-template-columns:1fr auto; gap:7px; border:1px solid var(--line); border-radius:8px; background:white; }
 .slot-card strong,.slot-card small { display:block; }
