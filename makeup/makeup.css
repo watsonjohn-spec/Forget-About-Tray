@@ -33,7 +33,7 @@ main { width:min(1420px,calc(100% - 40px)); margin:0 auto; }
 .hero { max-width:740px; padding:42px 0 28px; }
 .hero h1 { max-width:700px; margin:0; font:600 clamp(34px,5vw,64px)/1 Georgia,serif; letter-spacing:-.045em; }
 .hero > p:last-child { max-width:650px; color:var(--muted); font-size:12px; line-height:1.7; }
-.makeup-mode-tabs { margin-bottom:16px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.makeup-mode-tabs { margin-bottom:16px; display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
 .makeup-mode-tabs button { padding:14px; display:grid; gap:4px; border:1px solid var(--line); border-radius:11px; color:var(--ink); background:rgba(255,250,248,.65); text-align:left; }
 .makeup-mode-tabs button.active { border-color:var(--rose-dark); background:var(--rose-dark); color:white; box-shadow:0 8px 22px rgba(111,65,72,.2); }
 .makeup-mode-tabs small { color:inherit; opacity:.72; font-size:9px; }

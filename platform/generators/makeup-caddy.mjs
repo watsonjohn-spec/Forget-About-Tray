@@ -24,9 +24,10 @@ function cleanItem(item, index) {
 function normalizeParameters(input = {}) {
   const items = Array.isArray(input.items) ? input.items.slice(0, 40).map(cleanItem) : [];
   if (!items.length) throw new Error("Add at least one makeup item before exporting.");
+  const layoutMode = ["caddy", "staircase", "pegboard"].includes(input.layoutMode) ? input.layoutMode : "caddy";
   return {
     items,
-    layoutMode: input.layoutMode === "staircase" ? "staircase" : "caddy",
+    layoutMode,
     columns: Math.round(numberInRange(input.columns ?? 3, 1, 6)),
     maxSpineLength: numberInRange(input.maxSpineLength ?? 220, 100, 400),
     gap: numberInRange(input.gap ?? 6, 2, 30),
@@ -35,6 +36,9 @@ function normalizeParameters(input = {}) {
     wallThickness: numberInRange(input.wallThickness ?? 2, 1, 6),
     holderHeight: numberInRange(input.holderHeight ?? 18, 5, 220),
     stepRise: numberInRange(input.stepRise ?? 22, 10, 60),
+    pegboardColumns: Math.round(numberInRange(input.pegboardColumns ?? 3, 1, 8)),
+    pegboardRows: Math.round(numberInRange(input.pegboardRows ?? 2, 1, 8)),
+    pegboardHookSpacing: numberInRange(input.pegboardHookSpacing ?? 40, 30, 60),
     handleEnabled: true,
     handleHeight: numberInRange(input.handleHeight ?? 95, 45, 180),
     handleWidth: numberInRange(input.handleWidth ?? 70, 35, 180),
@@ -42,6 +46,51 @@ function normalizeParameters(input = {}) {
     filamentMaterial: ["pla", "petg"].includes(input.filamentMaterial) ? input.filamentMaterial : "pla",
     filamentName: String(input.filamentName || "Rose Gold").slice(0, 80),
     filamentHex: /^#[0-9a-f]{6}$/i.test(input.filamentHex || "") ? input.filamentHex : "#b76e79"
+  };
+}
+
+function splitPegboardBoxes(boxes, sheetWidth, sheetDepth, hookDepth, baseThickness) {
+  const chunkSize = 250;
+  const chunkCols = Math.ceil(sheetWidth / chunkSize);
+  const chunkRows = Math.ceil(sheetDepth / chunkSize);
+  if (chunkCols === 1 && chunkRows === 1) {
+    return { boxes, outerWidth: sheetWidth, outerDepth: sheetDepth + hookDepth, chunkCount: 1 };
+  }
+
+  const spacing = 18;
+  const tab = 18;
+  const tabDepth = Math.max(4, baseThickness);
+  const chunkWidth = sheetWidth / chunkCols;
+  const chunkDepth = sheetDepth / chunkRows;
+  const output = [];
+
+  for (let row = 0; row < chunkRows; row += 1) {
+    for (let column = 0; column < chunkCols; column += 1) {
+      const outputX = column * (chunkWidth + spacing);
+      const outputY = row * (chunkDepth + hookDepth + spacing) + hookDepth;
+      output.push({ x: outputX, y: outputY, z: 0, w: chunkWidth, d: chunkDepth, h: baseThickness, kind: "base" });
+      if (column < chunkCols - 1) output.push({ x: outputX + chunkWidth - tabDepth / 2, y: outputY + chunkDepth / 2 - tab / 2, z: 0, w: tabDepth, d: tab, h: baseThickness, kind: "jigsaw" });
+      if (row < chunkRows - 1) output.push({ x: outputX + chunkWidth / 2 - tab / 2, y: outputY + chunkDepth - tabDepth / 2, z: 0, w: tab, d: tabDepth, h: baseThickness, kind: "jigsaw" });
+    }
+  }
+
+  boxes.filter((box) => box.kind !== "base").forEach((box) => {
+    const centreX = Math.max(0, Math.min(sheetWidth - 0.001, box.x + box.w / 2));
+    const centreY = Math.max(0, Math.min(sheetDepth - 0.001, box.y - hookDepth + box.d / 2));
+    const column = Math.max(0, Math.min(chunkCols - 1, Math.floor(centreX / chunkWidth)));
+    const row = Math.max(0, Math.min(chunkRows - 1, Math.floor(centreY / chunkDepth)));
+    const sourceX = column * chunkWidth;
+    const sourceY = hookDepth + row * chunkDepth;
+    const outputX = column * (chunkWidth + spacing);
+    const outputY = row * (chunkDepth + hookDepth + spacing) + hookDepth;
+    output.push({ ...box, x: outputX + box.x - sourceX, y: outputY + box.y - sourceY });
+  });
+
+  return {
+    boxes: output,
+    outerWidth: chunkCols * chunkWidth + (chunkCols - 1) * spacing,
+    outerDepth: chunkRows * (chunkDepth + hookDepth) + (chunkRows - 1) * spacing,
+    chunkCount: chunkCols * chunkRows
   };
 }
 
@@ -73,6 +122,45 @@ function itemLayout(config) {
     });
     return { positions, outerWidth, outerDepth, rowDepths };
   }
+  if (config.layoutMode === "pegboard") {
+    const columns = config.pegboardColumns;
+    const rows = Math.max(config.pegboardRows, Math.ceil(prepared.length / columns));
+    const t = config.wallThickness;
+    const cells = prepared.map((item, index) => ({
+      ...item,
+      column: index % columns,
+      row: Math.floor(index / columns),
+      cellWidth: item.slotWidth + t * 2,
+      cellDepth: item.slotDepth + t * 2
+    }));
+    const columnWidths = Array.from({ length: columns }, (_, column) => Math.max(24, ...cells.filter((cell) => cell.column === column).map((cell) => cell.cellWidth)));
+    const rowDepths = Array.from({ length: rows }, (_, row) => Math.max(24, ...cells.filter((cell) => cell.row === row).map((cell) => cell.cellDepth)));
+    const columnOffsets = columnWidths.map((_, column) => columnWidths.slice(0, column).reduce((sum, width) => sum + width, 0));
+    const rowOffsets = rowDepths.map((_, row) => rowDepths.slice(0, row).reduce((sum, depth) => sum + depth, 0));
+    const hookDepth = Math.max(10, t * 5);
+    const hookWidth = Math.max(10, t * 5);
+    const hookHeight = Math.max(18, t * 9);
+    const outerWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+    const sheetDepth = rowDepths.reduce((sum, depth) => sum + depth, 0);
+    const positions = cells.map((cell) => ({
+      ...cell,
+      x: columnOffsets[cell.column] + t,
+      y: hookDepth + rowOffsets[cell.row] + t,
+      z: 0
+    }));
+    const hookCount = Math.max(2, Math.min(10, Math.floor(outerWidth / config.pegboardHookSpacing) + 1));
+    return {
+      positions,
+      outerWidth,
+      outerDepth: sheetDepth + hookDepth,
+      sheetWidth: outerWidth,
+      sheetDepth,
+      hookDepth,
+      hookWidth,
+      hookHeight,
+      hookCount
+    };
+  }
   const sides = [[], []];
   prepared.forEach((item, index) => sides[index % 2].push(item));
   const sideDepths = sides.map((side) => Math.max(0, ...side.map((item) => item.slotDepth)));
@@ -97,6 +185,42 @@ function buildGeometry(parameters) {
   const config = normalizeParameters(parameters);
   const layout = itemLayout(config);
   const { positions, outerWidth, outerDepth } = layout;
+  if (config.layoutMode === "pegboard") {
+    const t = config.wallThickness;
+    const boxes = [{ x: 0, y: layout.hookDepth, z: 0, w: layout.sheetWidth, d: layout.sheetDepth, h: config.baseThickness, kind: "base" }];
+    positions.forEach((position) => {
+      const h = Math.max(8, position.height * 2 / 3);
+      boxes.push(
+        { x: position.x - t, y: position.y - t, z: config.baseThickness, w: position.slotWidth + t * 2, d: t, h, kind: "wall" },
+        { x: position.x - t, y: position.y + position.slotDepth, z: config.baseThickness, w: position.slotWidth + t * 2, d: t, h, kind: "wall" },
+        { x: position.x - t, y: position.y, z: config.baseThickness, w: t, d: position.slotDepth, h, kind: "wall" },
+        { x: position.x + position.slotWidth, y: position.y, z: config.baseThickness, w: t, d: position.slotDepth, h, kind: "wall" }
+      );
+    });
+    for (let hook = 0; hook < layout.hookCount; hook += 1) {
+      const hookX = layout.hookCount === 1 ? layout.sheetWidth / 2 - layout.hookWidth / 2 : (hook * (layout.sheetWidth - layout.hookWidth)) / (layout.hookCount - 1);
+      boxes.push(
+        { x: hookX, y: 0, z: config.baseThickness, w: layout.hookWidth, d: layout.hookDepth, h: layout.hookHeight, kind: "hook" },
+        { x: hookX, y: 0, z: config.baseThickness + layout.hookHeight, w: layout.hookWidth, d: layout.hookDepth + t * 2, h: Math.max(3, t), kind: "hook" }
+      );
+    }
+    const split = splitPegboardBoxes(boxes, layout.sheetWidth, layout.sheetDepth, layout.hookDepth, config.baseThickness);
+    const materialCm3 = split.boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
+    const height = Math.max(...split.boxes.map((box) => box.z + box.h));
+    return {
+      config,
+      boxes: split.boxes,
+      positions,
+      outerWidth: split.outerWidth,
+      outerDepth: split.outerDepth,
+      assembledWidth: layout.sheetWidth,
+      assembledDepth: layout.sheetDepth + layout.hookDepth,
+      height,
+      materialCm3,
+      hookCount: layout.hookCount,
+      chunkCount: split.chunkCount
+    };
+  }
   const boxes = [{ x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: config.baseThickness }];
   if (config.layoutMode === "staircase") {
     let y = config.edgeMargin;
@@ -108,7 +232,7 @@ function buildGeometry(parameters) {
     });
   } else {
     const holderHeights = positions.map((position) => Math.max(8, position.height * 2 / 3));
-    const spineHeight = Math.max(...holderHeights);
+    const spineHeight = Math.max(...holderHeights, config.handleHeight / 2);
     boxes.push({ x: 0, y: layout.spineY, z: config.baseThickness, w: outerWidth, d: layout.spineWidth, h: spineHeight });
   }
   positions.forEach((position) => {
@@ -180,11 +304,13 @@ function renderStl(parameters) {
 function safeFileName(parameters, name) {
   const config = normalizeParameters(parameters);
   const prefix = String(name || "makeup-caddy").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "makeup-caddy";
-  return `${prefix}-${config.items.length}-slots${config.layoutMode === "caddy" ? "-handle" : ""}.stl`;
+  const suffix = config.layoutMode === "caddy" ? "-handle" : `-${config.layoutMode}`;
+  return `${prefix}-${config.items.length}-slots${suffix}.stl`;
 }
 
 function describe(parameters) {
   const config = normalizeParameters(parameters);
+  if (config.layoutMode === "pegboard") return `${config.items.length}-slot SKADIS-style pegboard makeup sheet`;
   return `${config.items.length}-slot ${config.layoutMode === "staircase" ? "freestanding staircase case" : "makeup caddy with integrated carrying spine"}`;
 }
 

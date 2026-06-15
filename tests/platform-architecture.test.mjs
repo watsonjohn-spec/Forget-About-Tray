@@ -39,11 +39,28 @@ test("makeup caddies are a separate enabled generator under the makeup brand", (
   assert.equal(geometry.outerDepth, 72);
   assert.equal(geometry.positions[0].y + geometry.positions[0].slotDepth, geometry.spineY);
   assert.equal(geometry.positions[1].y, geometry.spineY + geometry.spineWidth);
+  const shortCaddy = generator.buildGeometry({ ...parameters, items: [{ id: "compact", brand: "Generic", name: "Tiny compact", category: "Compact", width: 20, depth: 20, height: 24, clearance: 1.5 }], handleHeight: 160 });
+  const spineWall = shortCaddy.boxes.find((box) => box.y === shortCaddy.spineY && box.d === shortCaddy.spineWidth && box.w === shortCaddy.outerWidth);
+  assert.ok(spineWall.h >= 80);
   assert.match(generator.renderStl(parameters), /^solid makeup_caddy/);
   assert.match(generator.safeFileName(parameters, "Dressing table"), /2-slots-handle\.stl$/);
   const staircase = generator.buildGeometry({ ...parameters, items: [...parameters.items, { ...parameters.items[1], id: "foundation-two" }], layoutMode: "staircase", maxSpineLength: 100, stepRise: 22 });
   assert.ok(staircase.positions.some((position) => position.z > 0));
   assert.ok(staircase.height > geometry.config.baseThickness);
+  const pegboard = generator.buildGeometry({
+    ...parameters,
+    items: Array.from({ length: 12 }, (_, index) => ({ id: `product-${index}`, brand: "Generic", name: `Product ${index + 1}`, category: "Cosmetic", width: 70, depth: 44, height: 96, clearance: 1.5 })),
+    layoutMode: "pegboard",
+    pegboardColumns: 4,
+    pegboardRows: 3,
+    pegboardHookSpacing: 40
+  });
+  assert.equal(pegboard.config.layoutMode, "pegboard");
+  assert.equal(pegboard.positions.length, 12);
+  assert.ok(pegboard.boxes.some((box) => box.kind === "hook"));
+  assert.ok(pegboard.chunkCount > 1);
+  assert.match(generator.safeFileName({ ...parameters, layoutMode: "pegboard" }, "Skadis makeup"), /pegboard\.stl$/);
+  assert.match(generator.describe({ ...parameters, layoutMode: "pegboard" }), /pegboard makeup sheet/);
 });
 
 test("generator contract validates parameters and renders an STL", () => {

@@ -124,10 +124,16 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(factoryApp, /status !== "pending_payment"/);
   assert.match(factoryApp, /data-job-label/);
   assert.match(makeupHtml, /data-layout-mode="staircase"/);
+  assert.match(makeupHtml, /data-layout-mode="pegboard"/);
   assert.match(makeupHtml, /id="handleEnabled" type="checkbox" checked disabled/);
+  assert.match(makeupHtml, /id="stepRiseField"/);
+  assert.match(makeupHtml, /id="pegboardFields"/);
   assert.match(makeupHtml, /data-account-tab="orders"/);
   assert.match(makeupApp, /state\.handleEnabled = true/);
   assert.match(makeupApp, /outerWidth = Math\.max\(\.\.\.sideLengths\) \+ state\.wallThickness \* 2/);
+  assert.match(makeupApp, /state\.layoutMode === "pegboard"/);
+  assert.match(makeupApp, /splitPegboardBoxes/);
+  assert.match(makeupApp, /Math\.max\(\.\.\.holderHeights, state\.handleHeight \/ 2\)/);
   assert.match(makeupApp, /data-complete-print-job/);
   assert.match(makeupApp, /data-send-job-message/);
   assert.match(makeupApp, /checkout\/print\/verify/);

@@ -9,6 +9,7 @@ const filamentColours = [
 const defaults = {
   items: catalogue.slice(0, 3).map((item, index) => ({ ...item, id: `${item.id}-${index}`, clearance: 1.5 })),
   layoutMode: "caddy", maxSpineLength: 220, gap: 6, edgeMargin: 8, baseThickness: 3, wallThickness: 2, stepRise: 22,
+  pegboardColumns: 3, pegboardRows: 2, pegboardHookSpacing: 40,
   handleEnabled: true, handleHeight: 95, handleWidth: 70,
   filamentKey: "pla-rose-gold", filamentMaterial: "pla", filamentName: "Rose Gold", filamentHex: "#b76e79"
 };
@@ -50,8 +51,51 @@ function money(pence, currency = "gbp") {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: currency.toUpperCase() }).format(Number(pence || 0) / 100);
 }
 
+function splitPegboardBoxes(boxes, sheetWidth, sheetDepth, hookDepth, baseThickness) {
+  const chunkSize = 250;
+  const chunkCols = Math.ceil(sheetWidth / chunkSize);
+  const chunkRows = Math.ceil(sheetDepth / chunkSize);
+  if (chunkCols === 1 && chunkRows === 1) return { boxes, outerWidth: sheetWidth, outerDepth: sheetDepth + hookDepth, chunkCount: 1 };
+
+  const spacing = 18;
+  const tab = 18;
+  const tabDepth = Math.max(4, baseThickness);
+  const chunkWidth = sheetWidth / chunkCols;
+  const chunkDepth = sheetDepth / chunkRows;
+  const output = [];
+
+  for (let row = 0; row < chunkRows; row += 1) {
+    for (let column = 0; column < chunkCols; column += 1) {
+      const outputX = column * (chunkWidth + spacing);
+      const outputY = row * (chunkDepth + hookDepth + spacing) + hookDepth;
+      output.push({ x: outputX, y: outputY, z: 0, w: chunkWidth, d: chunkDepth, h: baseThickness, kind: "base" });
+      if (column < chunkCols - 1) output.push({ x: outputX + chunkWidth - tabDepth / 2, y: outputY + chunkDepth / 2 - tab / 2, z: 0, w: tabDepth, d: tab, h: baseThickness, kind: "jigsaw" });
+      if (row < chunkRows - 1) output.push({ x: outputX + chunkWidth / 2 - tab / 2, y: outputY + chunkDepth - tabDepth / 2, z: 0, w: tab, d: tabDepth, h: baseThickness, kind: "jigsaw" });
+    }
+  }
+
+  boxes.filter((box) => box.kind !== "base").forEach((box) => {
+    const centreX = Math.max(0, Math.min(sheetWidth - 0.001, box.x + box.w / 2));
+    const centreY = Math.max(0, Math.min(sheetDepth - 0.001, box.y - hookDepth + box.d / 2));
+    const column = Math.max(0, Math.min(chunkCols - 1, Math.floor(centreX / chunkWidth)));
+    const row = Math.max(0, Math.min(chunkRows - 1, Math.floor(centreY / chunkDepth)));
+    const sourceX = column * chunkWidth;
+    const sourceY = hookDepth + row * chunkDepth;
+    const outputX = column * (chunkWidth + spacing);
+    const outputY = row * (chunkDepth + hookDepth + spacing) + hookDepth;
+    output.push({ ...box, x: outputX + box.x - sourceX, y: outputY + box.y - sourceY });
+  });
+
+  return {
+    boxes: output,
+    outerWidth: chunkCols * chunkWidth + (chunkCols - 1) * spacing,
+    outerDepth: chunkRows * (chunkDepth + hookDepth) + (chunkRows - 1) * spacing,
+    chunkCount: chunkCols * chunkRows
+  };
+}
+
 function readConstruction() {
-  ["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "handleHeight", "handleWidth"].forEach((key) => {
+  ["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "pegboardColumns", "pegboardRows", "pegboardHookSpacing", "handleHeight", "handleWidth"].forEach((key) => {
     state[key] = Number(document.getElementById(key).value);
   });
   state.handleEnabled = true;
@@ -65,12 +109,21 @@ function readConstruction() {
 
 function writeConstruction() {
   state = { ...defaults, ...state, handleEnabled: true };
-  ["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "handleHeight", "handleWidth"].forEach((key) => {
+  if (!["caddy", "staircase", "pegboard"].includes(state.layoutMode)) state.layoutMode = "caddy";
+  ["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "pegboardColumns", "pegboardRows", "pegboardHookSpacing", "handleHeight", "handleWidth"].forEach((key) => {
     document.getElementById(key).value = state[key];
   });
   document.getElementById("handleEnabled").checked = true;
-  document.getElementById("handleFields").hidden = state.layoutMode !== "caddy";
-  document.getElementById("handleEnabled").closest(".switch").hidden = state.layoutMode !== "caddy";
+  const isCaddy = state.layoutMode === "caddy";
+  const isStaircase = state.layoutMode === "staircase";
+  const isPegboard = state.layoutMode === "pegboard";
+  document.getElementById("maxSpineLengthField").hidden = !isStaircase;
+  document.getElementById("edgeMarginField").hidden = !isStaircase;
+  document.getElementById("stepRiseField").hidden = !isStaircase;
+  document.getElementById("pegboardFields").hidden = !isPegboard;
+  document.getElementById("pegboardNote").hidden = !isPegboard;
+  document.getElementById("handleFields").hidden = !isCaddy;
+  document.getElementById("handleEnabled").closest(".switch").hidden = !isCaddy;
   document.querySelectorAll("[data-layout-mode]").forEach((button) => button.classList.toggle("active", button.dataset.layoutMode === state.layoutMode));
   document.getElementById("filamentColour").value = state.filamentKey;
 }
@@ -102,6 +155,58 @@ function geometry() {
       row.forEach((item, column) => { positions.push({ ...item, x, y, z: rowIndex * state.stepRise, row: rowIndex, column }); x += item.slotWidth + state.gap; });
       y += rowDepths[rowIndex] + state.gap;
     });
+  } else if (state.layoutMode === "pegboard") {
+    const t = state.wallThickness;
+    const columns = Math.max(1, Math.round(state.pegboardColumns || 3));
+    const minimumRows = Math.max(1, Math.round(state.pegboardRows || 2));
+    const rows = Math.max(minimumRows, Math.ceil(items.length / columns));
+    const cells = items.map((item, index) => ({
+      ...item,
+      column: index % columns,
+      row: Math.floor(index / columns),
+      cellWidth: item.slotWidth + t * 2,
+      cellDepth: item.slotDepth + t * 2
+    }));
+    const columnWidths = Array.from({ length: columns }, (_, column) => Math.max(24, ...cells.filter((cell) => cell.column === column).map((cell) => cell.cellWidth)));
+    const rowDepthsForBoard = Array.from({ length: rows }, (_, row) => Math.max(24, ...cells.filter((cell) => cell.row === row).map((cell) => cell.cellDepth)));
+    const columnOffsets = columnWidths.map((_, column) => columnWidths.slice(0, column).reduce((sum, width) => sum + width, 0));
+    const rowOffsets = rowDepthsForBoard.map((_, row) => rowDepthsForBoard.slice(0, row).reduce((sum, depth) => sum + depth, 0));
+    const hookDepth = Math.max(10, t * 5);
+    const hookPitch = Math.max(30, Math.min(60, Number(state.pegboardHookSpacing || 40)));
+    const hookWidth = Math.max(10, t * 5);
+    const hookHeight = Math.max(18, t * 9);
+    const sheetWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+    const sheetDepth = rowDepthsForBoard.reduce((sum, depth) => sum + depth, 0);
+    outerWidth = sheetWidth;
+    outerDepth = sheetDepth + hookDepth;
+    positions = cells.map((cell) => ({
+      ...cell,
+      x: columnOffsets[cell.column] + t,
+      y: hookDepth + rowOffsets[cell.row] + t,
+      z: 0
+    }));
+    const pegboardBoxes = [{ x: 0, y: hookDepth, z: 0, w: sheetWidth, d: sheetDepth, h: state.baseThickness, kind: "base" }];
+    positions.forEach((item) => {
+      const h = Math.max(8, item.height * 2 / 3);
+      pegboardBoxes.push(
+        { x: item.x - t, y: item.y - t, z: state.baseThickness, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
+        { x: item.x - t, y: item.y + item.slotDepth, z: state.baseThickness, w: item.slotWidth + t * 2, d: t, h, kind: "wall" },
+        { x: item.x - t, y: item.y, z: state.baseThickness, w: t, d: item.slotDepth, h, kind: "wall" },
+        { x: item.x + item.slotWidth, y: item.y, z: state.baseThickness, w: t, d: item.slotDepth, h, kind: "wall" }
+      );
+    });
+    const hookCount = Math.max(2, Math.min(10, Math.floor(sheetWidth / hookPitch) + 1));
+    for (let hook = 0; hook < hookCount; hook += 1) {
+      const hookX = hookCount === 1 ? sheetWidth / 2 - hookWidth / 2 : (hook * (sheetWidth - hookWidth)) / (hookCount - 1);
+      pegboardBoxes.push(
+        { x: hookX, y: 0, z: state.baseThickness, w: hookWidth, d: hookDepth, h: hookHeight, kind: "hook" },
+        { x: hookX, y: 0, z: state.baseThickness + hookHeight, w: hookWidth, d: hookDepth + t * 2, h: Math.max(3, t), kind: "hook" }
+      );
+    }
+    const split = splitPegboardBoxes(pegboardBoxes, sheetWidth, sheetDepth, hookDepth, state.baseThickness);
+    const materialCm3 = split.boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
+    const height = Math.max(...split.boxes.map((box) => box.z + box.h));
+    return { positions, boxes: split.boxes, outerWidth: split.outerWidth, outerDepth: split.outerDepth, height, materialCm3, assembledWidth: sheetWidth, assembledDepth: sheetDepth + hookDepth, chunkCount: split.chunkCount };
   } else {
     const sides = [[], []];
     items.forEach((item, index) => sides[index % 2].push(item));
@@ -131,7 +236,7 @@ function geometry() {
     });
   } else {
     const holderHeights = positions.map((item) => Math.max(8, item.height * 2 / 3));
-    boxes.push({ x: 0, y: spineY, z: state.baseThickness, w: outerWidth, d: spineWidth, h: Math.max(...holderHeights), kind: "spine" });
+    boxes.push({ x: 0, y: spineY, z: state.baseThickness, w: outerWidth, d: spineWidth, h: Math.max(...holderHeights, state.handleHeight / 2), kind: "spine" });
   }
   positions.forEach((item) => {
     const t = state.wallThickness;
@@ -205,7 +310,9 @@ function renderPreview() {
       <polygon points="${points([[x2,box.y,box.z],[x2,y2,box.z],[x2,y2,z2],[x2,box.y,z2]])}" fill="${shade(-38)}" stroke="${shade(-55)}" stroke-width=".8"/>
     </g>`;
   }).join("")}`;
-  document.getElementById("outerSize").textContent = `${metric.outerWidth.toFixed(1)} × ${metric.outerDepth.toFixed(1)} mm`;
+  document.getElementById("outerSize").textContent = metric.assembledWidth
+    ? `${metric.assembledWidth.toFixed(1)} × ${metric.assembledDepth.toFixed(1)} mm${metric.chunkCount > 1 ? ` (${metric.chunkCount} plates)` : ""}`
+    : `${metric.outerWidth.toFixed(1)} × ${metric.outerDepth.toFixed(1)} mm`;
   document.getElementById("totalHeight").textContent = `${metric.height.toFixed(1)} mm`;
   document.getElementById("materialEstimate").textContent = `${(metric.materialCm3 * (state.filamentMaterial === "petg" ? 1.27 : 1.24)).toFixed(1)} g`;
   document.getElementById("slotCount").textContent = state.items.length;
@@ -453,7 +560,7 @@ document.getElementById("slotList").addEventListener("click", (event) => {
   }
   renderPreview();
 });
-["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "handleHeight", "handleWidth", "filamentColour"].forEach((id) => document.getElementById(id).addEventListener("input", renderPreview));
+["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "pegboardColumns", "pegboardRows", "pegboardHookSpacing", "handleHeight", "handleWidth", "filamentColour"].forEach((id) => document.getElementById(id).addEventListener("input", renderPreview));
 document.querySelectorAll("[data-layout-mode]").forEach((button) => button.addEventListener("click", () => {
   state.layoutMode = button.dataset.layoutMode;
   writeConstruction();

@@ -48,6 +48,7 @@
       <nav class="makeup-mode-tabs" aria-label="Makeup holder type">
         <button class="active" type="button" data-layout-mode="caddy"><strong>Caddy</strong><small>Products nest around a central carrying spine</small></button>
         <button type="button" data-layout-mode="staircase"><strong>Freestanding case</strong><small>Products sit against the back wall of stepped layers</small></button>
+        <button type="button" data-layout-mode="pegboard"><strong>Pegboard</strong><small>Abutting holders hang from an IKEA SKADIS-style board</small></button>
       </nav>
 
       <section class="builder">
@@ -76,15 +77,21 @@
           <div class="control-block construction">
             <h3>Construction</h3>
             <div class="three-fields">
-              <label>Maximum row length<input id="maxSpineLength" type="number" min="100" max="400" value="220"></label>
+              <label id="maxSpineLengthField">Maximum row length<input id="maxSpineLength" type="number" min="100" max="400" value="220"></label>
               <label>Gap<input id="gap" type="number" min="2" max="30" value="6"></label>
-              <label>Edge margin<input id="edgeMargin" type="number" min="3" max="30" value="8"></label>
+              <label id="edgeMarginField">Edge margin<input id="edgeMargin" type="number" min="3" max="30" value="8"></label>
             </div>
             <div class="three-fields">
               <label>Base thickness<input id="baseThickness" type="number" min="1.2" max="12" step="0.1" value="3"></label>
               <label>Wall thickness<input id="wallThickness" type="number" min="1" max="6" step="0.1" value="2"></label>
-              <label>Staircase rise<input id="stepRise" type="number" min="10" max="60" value="22"></label>
+              <label id="stepRiseField">Staircase rise<input id="stepRise" type="number" min="10" max="60" value="22"></label>
             </div>
+            <div class="three-fields" id="pegboardFields" hidden>
+              <label>Columns<input id="pegboardColumns" type="number" min="1" max="8" value="3"></label>
+              <label>Minimum rows<input id="pegboardRows" type="number" min="1" max="8" value="2"></label>
+              <label>Hook pitch<input id="pegboardHookSpacing" type="number" min="30" max="60" value="40"></label>
+            </div>
+            <p class="note" id="pegboardNote" hidden>Pegboard sheets automatically split into equal 250 mm print plates when they grow beyond a normal print bed.</p>
             <label class="switch locked-switch"><span><strong>Integrated handle spine</strong><small>Always included. Slot backs abut this spine and face outward.</small></span><input id="handleEnabled" type="checkbox" checked disabled></label>
             <div class="two-fields" id="handleFields">
               <label>Handle height<input id="handleHeight" type="number" min="45" max="180" value="95"></label>
