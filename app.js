@@ -1248,6 +1248,15 @@ function setAccountPage(view) {
   document.querySelectorAll("[data-account-page-button]").forEach((button) => button.classList.toggle("active", button.dataset.accountPageButton === page));
 }
 
+function orderEventTitle(event) {
+  const type = event.event_type || "status";
+  if (type === "provider_message") return "Message from printer";
+  if (type === "customer_message") return "Message to printer";
+  if (type === "decline") return "Declined and refunded";
+  if (type === "auto_complete") return "Automatically completed";
+  return String(event.to_status || "").replaceAll("_", " ");
+}
+
 function showOrderDetail(orderId) {
   const order = accountOrders.find((candidate) => candidate.id === orderId);
   if (!order) return;
@@ -1274,8 +1283,9 @@ function showOrderDetail(orderId) {
     <div class="order-detail-items">
       ${items.length ? items.map((item) => `<p><strong>${escapeHtml(item.description || "Order item")}</strong><br><small>Quantity ${item.quantity || 1} · ${formatMoney(item.total_inc_vat || 0, order.currency)}</small></p>`).join("") : "<p>No line-item detail is available for this order.</p>"}
     </div>
-    ${events.length ? `<div class="order-events"><h5>Status history</h5>${events.map((event) => `<p><strong>${escapeHtml(String(event.to_status || "").replaceAll("_", " "))}</strong><small>${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</div>` : ""}
-    ${job?.status === "posted" ? `<button class="button button-primary" type="button" data-complete-print-job="${escapeHtml(job.id)}">Confirm delivery and complete order</button>` : ""}
+    ${job && !["complete", "refunded", "cancelled"].includes(job.status) ? `<div class="order-message-form"><label>Message printer<textarea data-customer-job-message rows="3" placeholder="Ask a question or add order information before completion"></textarea></label><button class="button button-secondary" type="button" data-send-job-message="${escapeHtml(job.id)}">Send message</button></div>` : ""}
+    ${events.length ? `<div class="order-events"><h5>Messages and status history</h5>${events.map((event) => `<p class="event-${escapeHtml(event.event_type || "status")}"><strong>${escapeHtml(orderEventTitle(event))}</strong><span>${escapeHtml(event.note || "")}</span><small>${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</div>` : ""}
+    ${job?.status === "posted" ? `<div class="order-rating-form"><h5>Confirm receipt</h5><p>Rate this print before completing the order. Completion releases the printer payout.</p><label>Rating<select data-job-rating required><option value="">Choose rating</option><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Okay</option><option value="2">2 - Poor</option><option value="1">1 - Bad</option></select></label><label>Review note<textarea data-job-review rows="3" placeholder="Optional note about the print"></textarea></label><button class="button button-primary" type="button" data-complete-print-job="${escapeHtml(job.id)}">Confirm delivery and complete order</button></div>` : ""}
   `;
   detail.hidden = false;
   detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -1451,15 +1461,32 @@ document.getElementById("accountOrdersList").addEventListener("click", (event) =
   if (button) showOrderDetail(button.dataset.orderDetail);
 });
 document.getElementById("accountOrderDetail").addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-complete-print-job]");
-  if (!button || !window.confirm("Confirm that this printed order has arrived? This completes the order and releases the printer payout.")) return;
-  button.disabled = true;
+  const completeButton = event.target.closest("[data-complete-print-job]");
+  const messageButton = event.target.closest("[data-send-job-message]");
+  if (!completeButton && !messageButton) return;
+  const button = completeButton || messageButton;
   try {
-    const response = await authorizedFetch(`/api/account/print-jobs/${encodeURIComponent(button.dataset.completePrintJob)}/complete`, { method: "POST", body: "{}" });
+    button.disabled = true;
+    let response;
+    if (messageButton) {
+      const note = messageButton.closest(".order-message-form").querySelector("[data-customer-job-message]").value;
+      response = await authorizedFetch(`/api/account/print-jobs/${encodeURIComponent(messageButton.dataset.sendJobMessage)}/message`, { method: "POST", body: JSON.stringify({ note }) });
+    } else {
+      const form = completeButton.closest(".order-rating-form");
+      const rating = Number(form.querySelector("[data-job-rating]").value);
+      if (!rating || !window.confirm("Confirm that this printed order has arrived? This records your rating and releases the printer payout.")) {
+        button.disabled = false;
+        return;
+      }
+      response = await authorizedFetch(`/api/account/print-jobs/${encodeURIComponent(completeButton.dataset.completePrintJob)}/complete`, {
+        method: "POST",
+        body: JSON.stringify({ rating, reviewText: form.querySelector("[data-job-review]").value })
+      });
+    }
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Order could not be completed.");
+    if (!response.ok) throw new Error(result.error || "Order could not be updated.");
     await loadAccountDialog("orders");
-    showToast(result.transfer?.released ? "Order completed and printer payout released" : "Order completed; printer payout remains held for review");
+    showToast(messageButton ? "Message sent" : result.transfer?.released ? "Order completed and printer payout released" : "Order completed; printer payout remains held for review");
   } catch (error) {
     showToast(error.message);
     button.disabled = false;

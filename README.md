@@ -48,7 +48,7 @@ The server calculates the displayed quote and creates Stripe Checkout sessions. 
 Paid unlimited-download access and the single sponsored download are recorded against the signed-in Supabase account.
 Set `DOWNLOAD_TOKEN_SECRET` to a long random value before deployment so sponsored-download permits cannot be forged.
 
-For Print Factory onboarding and payouts, the Stripe key must also be allowed to create and read connected accounts, create Express login links, and create transfers. Keep the integration in test mode until the complete marketplace flow has been exercised.
+For Print Factory onboarding, payouts, and provider-decline refunds, the Stripe key must also be allowed to create and read connected accounts, create Express login links, create transfers, and create refunds. Keep the integration in test mode until the complete marketplace flow has been exercised.
 
 Before running the account-enabled app for the first time, open the Supabase SQL Editor and run `supabase/schema.sql`. This creates profiles, saved designs, army lists, entitlements, immutable order snapshots, VAT-ready order fields, and Row Level Security policies.
 
@@ -64,7 +64,9 @@ The shared provider portal is available at `/factory/`. Printers create a dedica
 
 For a confirmed prototype login, double-click `Create Factory Login.cmd`. It uses the private Supabase admin key already stored in `.env`, creates or resets `factory.prototype@forgetabout.im`, and displays a newly generated password locally. Change `FACTORY_PROTOTYPE_EMAIL` in `.env` if you want a different login address.
 
-The factory payout flow uses Stripe Connect Accounts v2 recipient accounts. A printer starts Stripe onboarding from the Payouts page. The platform uses separate charges and transfers, keeps the provider share held through `order_made`, `producing`, and `posted`, and creates the Stripe transfer only after the customer confirms delivery and completes the order.
+The factory payout flow uses Stripe Connect Accounts v2 recipient accounts. A printer starts Stripe onboarding from the Payouts page. The platform uses separate charges and transfers, keeps the provider share held through `order_made`, `producing`, and `posted`, and creates the Stripe transfer only after the customer confirms delivery and completes the order. Customers must leave a 1-5 rating before manually confirming receipt. Providers can decline an `order_made` job before production, which refunds the buyer and reverses the held payout record.
+
+Set `PRINT_AUTO_COMPLETE_DAYS` to control the buyer confirmation window for posted jobs. The default is 14 days. When a posted job is still awaiting buyer confirmation after that window, the server auto-completes it the next time the customer account or factory dashboard is loaded, then releases the provider payout if the connected account can receive transfers.
 
 To enable Google and Apple sign-in, open **Supabase Dashboard → Authentication → Providers**, configure Google and Apple, then add the deployed app URL to **Authentication → URL Configuration → Redirect URLs**. Email and password sign-in remains available.
 
@@ -78,7 +80,7 @@ Before fulfilling live orders, configure the Stripe webhook that verifies `check
 
 Set the Stripe webhook endpoint to `https://forget-about-tray.onrender.com/api/stripe/webhook`, subscribe to `checkout.session.completed` and `checkout.session.async_payment_succeeded`, and store that exact endpoint's signing secret as `STRIPE_WEBHOOK_SECRET`. The customer return route also verifies a paid print Checkout Session, so a delayed webhook does not leave a paid order hidden from the factory queue.
 
-After this UAT2 update, run `supabase/schema.sql` again. It adds print weight, speed, postage, commission, platform-fee, and payout-breakdown fields without deleting existing orders.
+After this UAT2 update, run `supabase/schema.sql` again. It adds print weight, speed, postage, commission, platform-fee, payout-breakdown, and typed print-job event fields without deleting existing orders.
 
 The account page lets users download their stored data and submit an account-deletion request. Deletion requests require an administrative review because legally required order and VAT records must remain restricted until their retention period expires.
 

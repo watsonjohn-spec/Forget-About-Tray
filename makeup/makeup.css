@@ -107,6 +107,13 @@ dialog::backdrop { background:rgba(56,39,43,.66); backdrop-filter:blur(4px); }
 .order-detail-grid span { color:var(--muted); font-size:7px; text-transform:uppercase; }
 .order-events { display:grid; gap:5px; }
 .order-events p { padding:7px; display:flex; justify-content:space-between; border-bottom:1px solid var(--line); }
+.order-message-form,.order-rating-form { padding:12px; display:grid; gap:9px; border:1px solid var(--line); border-radius:8px; background:var(--white); }
+.order-message-form label,.order-rating-form label { display:grid; gap:5px; color:var(--muted); font-size:8px; font-weight:850; text-transform:uppercase; }
+.order-message-form textarea,.order-rating-form textarea,.order-rating-form select { width:100%; padding:9px; border:1px solid var(--line); border-radius:7px; background:white; }
+.order-rating-form h3,.order-rating-form p { margin:0; }
+.order-rating-form p { color:var(--muted); font-size:9px; line-height:1.5; }
+.order-events .event-provider_message,.order-events .event-customer_message { background:#fff7f5; }
+.order-events .event-decline { color:#8f3d38; background:#fff0ed; }
 .export-choices { padding:18px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
 .export-choice { min-height:180px; padding:16px; display:grid; place-items:center; align-content:center; gap:8px; border:1px solid var(--line); border-radius:11px; color:var(--ink); background:white; text-align:center; }
 .export-choice strong { font:600 18px Georgia,serif; }

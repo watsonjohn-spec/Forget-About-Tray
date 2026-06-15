@@ -364,6 +364,9 @@ create table if not exists public.print_job_events (
   created_at timestamptz not null default now()
 );
 
+alter table public.print_job_events add column if not exists event_type text not null default 'status'
+  check (event_type in ('status', 'provider_message', 'customer_message', 'decline', 'auto_complete'));
+
 create table if not exists public.provider_transfers (
   id uuid primary key default gen_random_uuid(),
   print_job_id uuid not null unique references public.print_jobs(id) on delete restrict,

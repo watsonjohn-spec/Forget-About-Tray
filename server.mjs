@@ -18,6 +18,7 @@ const marketplaceVatPercent = Number(process.env.MARKETPLACE_VAT_PERCENT || 20);
 const marketplaceQuoteMinutes = Number(process.env.MARKETPLACE_QUOTE_MINUTES || 30);
 const marketplaceIncludePending = process.env.MARKETPLACE_INCLUDE_PENDING !== "false";
 const plaCostPerGramPence = Number(process.env.PLA_COST_PER_GRAM_PENCE || 2);
+const printAutoCompleteDays = Number(process.env.PRINT_AUTO_COMPLETE_DAYS || 14);
 const unlimitedExportsPrice = Number(process.env.UNLIMITED_EXPORTS_PRICE_PENCE || 500);
 const stripeApiBase = process.env.STRIPE_API_BASE || "https://api.stripe.com";
 const stripeApiVersion = process.env.STRIPE_API_VERSION || "2026-05-27.dahlia";
@@ -283,6 +284,7 @@ async function loadPrinterProfile(userId) {
 async function factoryDashboard(request, response) {
   const origin = checkoutOrigin(request);
   try {
+    await autoCompleteStalePostedJobs();
     const user = await authenticateUser(request);
     const profile = await loadPrinterProfile(user.id);
     if (!profile) return sendJson(response, 200, { account: { email: user.email }, profile: null, capabilities: [], jobs: [], transfers: [], paymentAccount: null }, origin);
@@ -309,6 +311,7 @@ async function factoryDashboard(request, response) {
 async function accountOrders(request, response) {
   const origin = checkoutOrigin(request);
   try {
+    await autoCompleteStalePostedJobs();
     const user = await authenticateUser(request);
     const { brand } = requestPlatformContext(request);
     const rows = await supabaseAdmin(`orders?select=*,order_items(*),order_customer_snapshots(*),print_jobs(*,print_job_events(*),print_quotes(*))&user_id=eq.${encodeURIComponent(user.id)}&brand_key=eq.${encodeURIComponent(brand.key)}&order=created_at.desc`);
@@ -487,27 +490,116 @@ async function releaseProviderTransfer(job) {
   }
 }
 
+async function createPrintJobEvent(event) {
+  const payload = {
+    print_job_id: event.printJobId,
+    actor_user_id: event.actorUserId || null,
+    from_status: event.fromStatus || null,
+    to_status: event.toStatus,
+    note: event.note || null,
+    event_type: event.eventType || "status"
+  };
+  try {
+    await supabaseAdmin("print_job_events", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(payload)
+    });
+  } catch {
+    const { event_type, ...legacyPayload } = payload;
+    await supabaseAdmin("print_job_events", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(legacyPayload)
+    });
+  }
+}
+
+async function updateProviderRating(printerProfileId) {
+  const rows = await supabaseAdmin(`provider_reviews?select=rating&printer_profile_id=eq.${encodeURIComponent(printerProfileId)}`);
+  const count = rows?.length || 0;
+  const average = count ? rows.reduce((sum, review) => sum + Number(review.rating || 0), 0) / count : 0;
+  await supabaseAdmin(`printer_profiles?id=eq.${encodeURIComponent(printerProfileId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ rating_average: Number(average.toFixed(2)), rating_count: count, updated_at: new Date().toISOString() })
+  });
+}
+
+async function completePrintJob(job, { actorUserId = null, note = "Customer confirmed delivery.", rating = null, reviewText = "", automatic = false } = {}) {
+  assertPrintJobTransition(job.status, "complete");
+  if (!automatic) {
+    const numericRating = Number(rating);
+    if (!Number.isInteger(numericRating) || numericRating < 1 || numericRating > 5) {
+      throw new Error("Choose a rating from 1 to 5 before confirming delivery.");
+    }
+  }
+  const completedAt = new Date().toISOString();
+  const saved = await supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ status: "complete", completed_at: completedAt, updated_at: completedAt })
+  });
+  if (!automatic) {
+    await supabaseAdmin("provider_reviews?on_conflict=print_job_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({
+        print_job_id: job.id,
+        customer_user_id: job.customer_user_id,
+        printer_profile_id: job.printer_profile_id,
+        rating: Number(rating),
+        review_text: cleanText(reviewText, 800) || null
+      })
+    });
+    await updateProviderRating(job.printer_profile_id);
+  }
+  await createPrintJobEvent({
+    printJobId: job.id,
+    actorUserId,
+    fromStatus: job.status,
+    toStatus: "complete",
+    note,
+    eventType: automatic ? "auto_complete" : "status"
+  });
+  const completedJob = saved?.[0] || { ...job, status: "complete", completed_at: completedAt };
+  const transfer = await releaseProviderTransfer(completedJob);
+  return { job: completedJob, transfer };
+}
+
+async function autoCompleteStalePostedJobs() {
+  if (!Number.isFinite(printAutoCompleteDays) || printAutoCompleteDays <= 0) return [];
+  const cutoff = new Date(Date.now() - printAutoCompleteDays * 24 * 60 * 60 * 1000).toISOString();
+  const jobs = await optionalSupabaseAdmin(`print_jobs?select=*&status=eq.posted&payout_status=eq.held&posted_at=lt.${encodeURIComponent(cutoff)}&order=posted_at.asc&limit=25`);
+  const completed = [];
+  for (const job of jobs || []) {
+    try {
+      completed.push(await completePrintJob(job, {
+        automatic: true,
+        note: `Automatically completed after ${printAutoCompleteDays} days without buyer confirmation.`
+      }));
+    } catch {
+      // A failed auto-release should not break ordinary dashboard or account loading.
+    }
+  }
+  return completed;
+}
+
 async function completeCustomerPrintJob(request, response, jobId) {
   const origin = checkoutOrigin(request);
   try {
     const user = await authenticateUser(request);
+    const body = await readJson(request);
     const jobs = await supabaseAdmin(`print_jobs?select=*&id=eq.${encodeURIComponent(jobId)}&customer_user_id=eq.${encodeURIComponent(user.id)}&limit=1`);
     const job = jobs?.[0];
     if (!job) throw new Error("Print job not found.");
-    assertPrintJobTransition(job.status, "complete");
-    const completedAt = new Date().toISOString();
-    const saved = await supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(job.id)}`, {
-      method: "PATCH",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ status: "complete", completed_at: completedAt, updated_at: completedAt })
+    const result = await completePrintJob(job, {
+      actorUserId: user.id,
+      rating: body.rating,
+      reviewText: body.reviewText,
+      note: `Customer confirmed delivery with a ${Number(body.rating)} / 5 rating.`
     });
-    await supabaseAdmin("print_job_events", {
-      method: "POST",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ print_job_id: job.id, actor_user_id: user.id, from_status: job.status, to_status: "complete", note: "Customer confirmed delivery." })
-    });
-    const transfer = await releaseProviderTransfer(saved?.[0] || { ...job, status: "complete", completed_at: completedAt });
-    sendJson(response, 200, { job: saved?.[0] || null, transfer }, origin);
+    sendJson(response, 200, result, origin);
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Print job could not be completed." }, origin);
   }
@@ -622,22 +714,27 @@ async function updateFactoryJob(request, response, jobId) {
     const body = await readJson(request);
     const nextStatus = cleanText(body.status, 30);
     if (!["producing", "posted"].includes(nextStatus)) throw new Error("Printers can only mark jobs as producing or posted.");
+    const trackingReference = cleanText(body.trackingReference, 120);
+    if (nextStatus === "posted" && !trackingReference) throw new Error("Add a tracking reference before marking the job as posted.");
     assertPrintJobTransition(job.status, nextStatus);
     const update = {
       status: nextStatus,
       updated_at: new Date().toISOString(),
       ...(nextStatus === "producing" ? { producing_at: new Date().toISOString() } : {}),
-      ...(nextStatus === "posted" ? { posted_at: new Date().toISOString(), tracking_reference: cleanText(body.trackingReference, 120) || null } : {})
+      ...(nextStatus === "posted" ? { posted_at: new Date().toISOString(), tracking_reference: trackingReference } : {})
     };
     const saved = await supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(job.id)}`, {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify(update)
     });
-    await supabaseAdmin("print_job_events", {
-      method: "POST",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ print_job_id: job.id, actor_user_id: user.id, from_status: job.status, to_status: nextStatus, note: cleanText(body.note, 500) || null })
+    await createPrintJobEvent({
+      printJobId: job.id,
+      actorUserId: user.id,
+      fromStatus: job.status,
+      toStatus: nextStatus,
+      note: cleanText(body.note, 500) || null,
+      eventType: "status"
     });
     if (nextStatus === "producing") {
       await supabaseAdmin(`orders?id=eq.${encodeURIComponent(job.order_id)}`, {
@@ -649,6 +746,58 @@ async function updateFactoryJob(request, response, jobId) {
     sendJson(response, 200, { job: saved?.[0] || null }, origin);
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Print job could not be updated." }, origin);
+  }
+}
+
+async function declineFactoryJob(request, response, jobId) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const profile = await loadPrinterProfile(user.id);
+    if (!profile) throw new Error("Printer profile not found.");
+    const jobs = await supabaseAdmin(`print_jobs?select=*,orders(*)&id=eq.${encodeURIComponent(jobId)}&printer_profile_id=eq.${encodeURIComponent(profile.id)}&limit=1`);
+    const job = jobs?.[0];
+    if (!job) throw new Error("Print job not found.");
+    if (job.status !== "order_made") throw new Error("Jobs can only be declined before production starts.");
+    const order = Array.isArray(job.orders) ? job.orders[0] : job.orders;
+    if (!order?.stripe_payment_intent_id) throw new Error("The original payment could not be found for refund.");
+    const body = await readJson(request);
+    const reason = cleanText(body.reason, 500) || "Provider declined the job before production.";
+    const refund = await stripeForm("/v1/refunds", new URLSearchParams({
+      payment_intent: order.stripe_payment_intent_id,
+      "metadata[print_job_id]": job.id,
+      "metadata[order_id]": job.order_id,
+      "metadata[declined_by_printer_profile_id]": profile.id
+    }), { headers: { "Idempotency-Key": `print-job-decline-refund-${job.id}` } });
+    const updatedAt = new Date().toISOString();
+    await Promise.all([
+      supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ status: "refunded", payout_status: "reversed", cancelled_at: updatedAt, updated_at: updatedAt })
+      }),
+      supabaseAdmin(`orders?id=eq.${encodeURIComponent(job.order_id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ status: "refunded", updated_at: updatedAt })
+      }),
+      supabaseAdmin(`provider_transfers?print_job_id=eq.${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ status: "reversed", updated_at: updatedAt })
+      }),
+      createPrintJobEvent({
+        printJobId: job.id,
+        actorUserId: user.id,
+        fromStatus: job.status,
+        toStatus: "refunded",
+        note: `${reason} Refund ${refund.id || "created"} has been issued to the buyer.`,
+        eventType: "decline"
+      })
+    ]);
+    sendJson(response, 200, { declined: true, refundId: refund.id || null }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Print job could not be declined." }, origin);
   }
 }
 
@@ -669,14 +818,29 @@ async function addFactoryJobNote(request, response, jobId) {
     const body = await readJson(request);
     const note = cleanText(body.note, 500);
     if (!note) throw new Error("Enter a note first.");
-    await supabaseAdmin("print_job_events", {
-      method: "POST",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ print_job_id: job.id, actor_user_id: user.id, from_status: job.status, to_status: job.status, note })
-    });
+    if (["complete", "refunded", "cancelled"].includes(job.status)) throw new Error("Messages are closed for this job.");
+    await createPrintJobEvent({ printJobId: job.id, actorUserId: user.id, fromStatus: job.status, toStatus: job.status, note, eventType: "provider_message" });
     sendJson(response, 200, { saved: true }, origin);
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Job note could not be saved." }, origin);
+  }
+}
+
+async function addCustomerJobMessage(request, response, jobId) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const jobs = await supabaseAdmin(`print_jobs?select=*&id=eq.${encodeURIComponent(jobId)}&customer_user_id=eq.${encodeURIComponent(user.id)}&limit=1`);
+    const job = jobs?.[0];
+    if (!job) throw new Error("Print job not found.");
+    if (["complete", "refunded", "cancelled"].includes(job.status)) throw new Error("Messages are closed for this job.");
+    const body = await readJson(request);
+    const note = cleanText(body.note, 500);
+    if (!note) throw new Error("Enter a message first.");
+    await createPrintJobEvent({ printJobId: job.id, actorUserId: user.id, fromStatus: job.status, toStatus: job.status, note, eventType: "customer_message" });
+    sendJson(response, 200, { saved: true }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Message could not be sent." }, origin);
   }
 }
 
@@ -1658,6 +1822,11 @@ createServer(async (request, response) => {
     await updateFactoryJob(request, response, factoryJobStatusRoute[1]);
     return;
   }
+  const factoryJobDeclineRoute = pathname.match(/^\/api\/factory\/jobs\/([0-9a-f-]+)\/decline$/i);
+  if (request.method === "POST" && factoryJobDeclineRoute) {
+    await declineFactoryJob(request, response, factoryJobDeclineRoute[1]);
+    return;
+  }
   const factoryJobNoteRoute = pathname.match(/^\/api\/factory\/jobs\/([0-9a-f-]+)\/note$/i);
   if (request.method === "POST" && factoryJobNoteRoute) {
     await addFactoryJobNote(request, response, factoryJobNoteRoute[1]);
@@ -1676,6 +1845,11 @@ createServer(async (request, response) => {
   const customerCompleteJobRoute = pathname.match(/^\/api\/account\/print-jobs\/([0-9a-f-]+)\/complete$/i);
   if (request.method === "POST" && customerCompleteJobRoute) {
     await completeCustomerPrintJob(request, response, customerCompleteJobRoute[1]);
+    return;
+  }
+  const customerMessageJobRoute = pathname.match(/^\/api\/account\/print-jobs\/([0-9a-f-]+)\/message$/i);
+  if (request.method === "POST" && customerMessageJobRoute) {
+    await addCustomerJobMessage(request, response, customerMessageJobRoute[1]);
     return;
   }
 

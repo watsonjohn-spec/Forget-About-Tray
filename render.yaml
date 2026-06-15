@@ -27,6 +27,8 @@ services:
         value: "20"
       - key: PLA_COST_PER_GRAM_PENCE
         value: "2"
+      - key: PRINT_AUTO_COMPLETE_DAYS
+        value: "14"
       - key: MARKETPLACE_QUOTE_MINUTES
         value: "30"
       - key: MARKETPLACE_INCLUDE_PENDING

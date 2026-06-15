@@ -337,6 +337,15 @@ async function refreshOrdersLegacy() {
   document.getElementById("ordersList").innerHTML = orders.length ? orders.map((order) => `<article class="order-card"><span>${escapeHtml(order.invoice_number || "Pending")} · ${escapeHtml(order.status)}</span><strong>${money(order.total_inc_vat, order.currency)}</strong></article>`).join("") : `<div class="empty">No Makeup orders yet.</div>`;
 }
 
+function orderEventTitle(event) {
+  const type = event.event_type || "status";
+  if (type === "provider_message") return "Message from printer";
+  if (type === "customer_message") return "Message to printer";
+  if (type === "decline") return "Declined and refunded";
+  if (type === "auto_complete") return "Automatically completed";
+  return String(event.to_status || "").replaceAll("_", " ");
+}
+
 async function refreshOrders() {
   accountOrders = await accountService.loadOrders();
   document.getElementById("ordersList").innerHTML = accountOrders.length ? accountOrders.map((order) => `
@@ -360,8 +369,9 @@ function showOrderDetail(orderId) {
       ${job ? `<div class="order-status-track">${statuses.map((status, index) => `<span class="${index <= currentIndex ? "done" : ""}">${status.replaceAll("_", " ")}</span>`).join("")}</div>` : ""}
       <div class="order-detail-grid"><div><span>Status</span><strong>${escapeHtml(currentStatus.replaceAll("_", " "))}</strong></div><div><span>Total</span><strong>${money(order.total_inc_vat, order.currency)}</strong></div><div><span>Ordered</span><strong>${new Date(order.paid_at || order.created_at).toLocaleString()}</strong></div><div><span>Tracking</span><strong>${escapeHtml(job?.tracking_reference || "Not posted")}</strong></div></div>
       ${items.map((item) => `<p><strong>${escapeHtml(item.description || "Printed design")}</strong> | quantity ${item.quantity || 1}</p>`).join("")}
-      ${events.length ? `<div class="order-events">${events.map((event) => `<p><strong>${escapeHtml(String(event.to_status || "").replaceAll("_", " "))}</strong><small>${escapeHtml(event.note || "")} ${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</div>` : ""}
-      ${job?.status === "posted" ? `<button class="button primary" data-complete-print-job="${escapeHtml(job.id)}" type="button">Confirm delivery and complete order</button>` : ""}
+      ${job && !["complete", "refunded", "cancelled"].includes(job.status) ? `<div class="order-message-form"><label>Message printer<textarea data-customer-job-message rows="3" placeholder="Ask a question or add order information before completion"></textarea></label><button class="button secondary" type="button" data-send-job-message="${escapeHtml(job.id)}">Send message</button></div>` : ""}
+      ${events.length ? `<div class="order-events">${events.map((event) => `<p class="event-${escapeHtml(event.event_type || "status")}"><strong>${escapeHtml(orderEventTitle(event))}</strong><small>${escapeHtml(event.note || "")} ${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</div>` : ""}
+      ${job?.status === "posted" ? `<div class="order-rating-form"><h3>Confirm receipt</h3><p>Rate this print before completing the order. Completion releases the printer payout.</p><label>Rating<select data-job-rating required><option value="">Choose rating</option><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Okay</option><option value="2">2 - Poor</option><option value="1">1 - Bad</option></select></label><label>Review note<textarea data-job-review rows="3" placeholder="Optional note about the print"></textarea></label><button class="button primary" data-complete-print-job="${escapeHtml(job.id)}" type="button">Confirm delivery and complete order</button></div>` : ""}
     </article>`;
 }
 
@@ -497,14 +507,24 @@ document.getElementById("changePassword").addEventListener("click", async () => 
 document.getElementById("viewOrders").addEventListener("click", () => refreshOrders().catch((error) => toast(error.message)));
 document.getElementById("ordersList").addEventListener("click", (event) => { const button = event.target.closest("[data-order-detail]"); if (button) showOrderDetail(button.dataset.orderDetail); });
 document.getElementById("orderDetail").addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-complete-print-job]");
-  if (!button || !window.confirm("Confirm this printed order has arrived? This completes the order and releases the printer payout.")) return;
+  const completeButton = event.target.closest("[data-complete-print-job]");
+  const messageButton = event.target.closest("[data-send-job-message]");
+  if (!completeButton && !messageButton) return;
   try {
-    const response = await api(`/api/account/print-jobs/${encodeURIComponent(button.dataset.completePrintJob)}/complete`, { method: "POST", body: "{}" });
+    let response;
+    if (messageButton) {
+      const note = messageButton.closest(".order-message-form").querySelector("[data-customer-job-message]").value;
+      response = await api(`/api/account/print-jobs/${encodeURIComponent(messageButton.dataset.sendJobMessage)}/message`, { method: "POST", body: JSON.stringify({ note }) });
+    } else {
+      const form = completeButton.closest(".order-rating-form");
+      const rating = Number(form.querySelector("[data-job-rating]").value);
+      if (!rating || !window.confirm("Confirm this printed order has arrived? This records your rating and releases the printer payout.")) return;
+      response = await api(`/api/account/print-jobs/${encodeURIComponent(completeButton.dataset.completePrintJob)}/complete`, { method: "POST", body: JSON.stringify({ rating, reviewText: form.querySelector("[data-job-review]").value }) });
+    }
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Order could not be completed");
+    if (!response.ok) throw new Error(result.error || "Order could not be updated");
     await refreshOrders();
-    toast(result.transfer?.released ? "Order completed and printer payout released" : "Order completed");
+    toast(messageButton ? "Message sent" : result.transfer?.released ? "Order completed and printer payout released" : "Order completed");
   } catch (error) { toast(error.message); }
 });
 document.getElementById("logoutButton").addEventListener("click", async () => { await accountService.signOut(); document.getElementById("accountDialog").close(); setAuthenticated(false); });

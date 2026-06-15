@@ -382,6 +382,14 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .order-detail-items p, .order-events p { margin: 0; padding: 9px; border: 1px solid var(--line); border-radius: 7px; background: #f8f8f3; }
 .order-events h5 { margin: 2px 0; font-size: 11px; }
 .order-events small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
+.order-events span { display: block; margin-top: 3px; color: var(--ink); font-size: 9px; }
+.order-events .event-provider_message, .order-events .event-customer_message { background: #eef3e8; }
+.order-events .event-decline { color: #803b2f; background: #fff0ed; }
+.order-message-form, .order-rating-form { padding: 12px; display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 8px; background: #f8f8f3; }
+.order-message-form label, .order-rating-form label { display: grid; gap: 5px; color: var(--muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.order-message-form textarea, .order-rating-form textarea, .order-rating-form select { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: white; }
+.order-rating-form h5, .order-rating-form p { margin: 0; }
+.order-rating-form p { color: var(--muted); font-size: 9px; line-height: 1.5; }
 .privacy-panel { margin-top: 24px; padding-top: 20px; display: grid; gap: 12px; border-top: 1px solid var(--line); }
 .privacy-panel h3 { font-size: 17px; }
 .button-danger { color: white; border-color: #7c3932; background: #98463d; }

@@ -118,5 +118,9 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(makeupHtml, /data-layout-mode="staircase"/);
   assert.match(makeupHtml, /data-account-tab="orders"/);
   assert.match(makeupApp, /data-complete-print-job/);
+  assert.match(makeupApp, /data-send-job-message/);
   assert.match(makeupApp, /checkout\/print\/verify/);
+  assert.match(trayApp, /data-job-rating/);
+  assert.match(trayApp, /data-send-job-message/);
+  assert.match(factoryApp, /Decline job and refund buyer/);
 });

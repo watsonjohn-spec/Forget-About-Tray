@@ -113,6 +113,19 @@ function renderJobs() {
   `).join("") : '<div class="empty-state">No assigned jobs yet. Approved profiles with active capabilities become selectable by customers.</div>';
 }
 
+function eventTitle(event) {
+  const type = event.event_type || "status";
+  if (type === "provider_message") return "Message to buyer";
+  if (type === "customer_message") return "Message from buyer";
+  if (type === "decline") return "Declined and refunded";
+  if (type === "auto_complete") return "Automatically completed";
+  return escapeHtml(String(event.to_status || "").replaceAll("_", " "));
+}
+
+function renderJobEvents(events) {
+  return events.length ? `<section class="job-events"><h3>Messages and history</h3>${events.map((event) => `<p class="event-${escapeHtml(event.event_type || "status")}"><strong>${eventTitle(event)}</strong><span>${escapeHtml(event.note || "")}</span><small>${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</section>` : "";
+}
+
 function showJobDetail(jobId) {
   const job = factoryDashboardState.jobs.find((candidate) => candidate.id === jobId);
   if (!job) return;
@@ -121,7 +134,21 @@ function showJobDetail(jobId) {
   const address = snapshot?.delivery_address || {};
   const events = Array.isArray(job.print_job_events) ? job.print_job_events : [];
   const quote = Array.isArray(job.print_quotes) ? job.print_quotes[0] : job.print_quotes;
-  const nextStatuses = job.status === "order_made" ? ["producing"] : job.status === "producing" ? ["posted"] : [];
+  const actionPanel = job.status === "order_made" ? `
+    <section class="job-action-panel">
+      <h3>Accept or decline this job</h3>
+      <p>Accepting starts production and locks the buyer refund route. Declining now refunds the buyer and removes the held payout.</p>
+      <div class="job-action-row"><button class="button button-primary" data-start-job="${escapeHtml(job.id)}" type="button">Accept job and start production</button></div>
+      <label>Decline reason<textarea data-decline-reason rows="3" placeholder="Tell the buyer why the job cannot be fulfilled"></textarea></label>
+      <button class="button button-danger" data-decline-job="${escapeHtml(job.id)}" type="button">Decline job and refund buyer</button>
+    </section>` : "";
+  const productionPanel = job.status === "producing" ? `
+    <section class="job-action-panel">
+      <h3>Mark as posted</h3>
+      <p>Add the tracking number before moving this job to posted. The buyer can then confirm receipt and rate the transaction.</p>
+      <div class="job-status-form"><label>Tracking number<input data-job-tracking value="${escapeHtml(job.tracking_reference || "")}" placeholder="e.g. EVRI123456"></label><label>Update note<textarea data-job-status-note rows="2" placeholder="Optional note for the buyer"></textarea></label><button class="button button-primary" data-mark-posted="${escapeHtml(job.id)}" type="button">Mark posted</button></div>
+    </section>` : "";
+  const postedPanel = job.status === "posted" ? `<section class="job-action-panel"><h3>Awaiting buyer confirmation</h3><p>The buyer must rate the transaction before confirming receipt. If they do not respond, the platform auto-completes the order after the configured confirmation window.</p></section>` : "";
   document.getElementById("jobDialogTitle").textContent = job.design_snapshot?.name || `${job.brand_key} order`;
   document.getElementById("jobDialogContent").innerHTML = `
     <div class="job-detail-hero brand-${escapeHtml(job.brand_key)}"><strong>${job.brand_key === "makeup" ? "MAKEUP" : "TRAY"}</strong><span>${escapeHtml(job.status.replaceAll("_", " "))}</span></div>
@@ -141,9 +168,9 @@ function showJobDetail(jobId) {
     </section>
     <section class="job-address"><h3>Delivery address</h3><p>${[snapshot?.customer_name, address.line1, address.line2, address.city || address.town, address.county, address.postal_code || address.postcode, address.country].filter(Boolean).map(escapeHtml).join("<br>") || "Address pending payment confirmation."}</p></section>
     <div class="job-downloads"><button class="button button-secondary" data-job-label="${escapeHtml(job.id)}">Open postage label</button><button class="button button-secondary" data-job-stl="${escapeHtml(job.id)}">Download STL</button></div>
-    ${nextStatuses.length ? `<div class="job-status-form"><label>Change status<select data-job-next-status>${nextStatuses.map((status) => `<option value="${status}">${status.replaceAll("_", " ")}</option>`).join("")}</select></label><label>Tracking number<input data-job-tracking value="${escapeHtml(job.tracking_reference || "")}"></label><button class="button button-primary" data-save-job-status="${escapeHtml(job.id)}">Update order</button></div>` : ""}
-    <div class="job-note-form"><label>Order note<textarea data-job-note rows="3" placeholder="Add a note visible in the order history"></textarea></label><button class="button button-secondary" data-save-job-note="${escapeHtml(job.id)}">Add note</button></div>
-    ${events.length ? `<section class="job-events"><h3>Order history</h3>${events.map((event) => `<p><strong>${escapeHtml(event.to_status.replaceAll("_", " "))}</strong><span>${escapeHtml(event.note || "")}</span><small>${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</section>` : ""}
+    ${actionPanel}${productionPanel}${postedPanel}
+    ${["complete", "refunded", "cancelled"].includes(job.status) ? "" : `<div class="job-note-form"><label>Message buyer<textarea data-job-message rows="3" placeholder="Send a message to the buyer before the order completes"></textarea></label><button class="button button-secondary" data-save-job-note="${escapeHtml(job.id)}">Send message</button></div>`}
+    ${renderJobEvents(events)}
   `;
   const dialog = document.getElementById("factoryJobDialog");
   if (!dialog.open) dialog.showModal();
@@ -311,32 +338,45 @@ document.getElementById("factoryJobs").addEventListener("click", (event) => {
 document.getElementById("closeJobDialog").addEventListener("click", () => document.getElementById("factoryJobDialog").close());
 document.getElementById("jobDialogContent").addEventListener("click", async (event) => {
   try {
-    const statusButton = event.target.closest("[data-save-job-status]");
+    const startButton = event.target.closest("[data-start-job]");
+    const postedButton = event.target.closest("[data-mark-posted]");
+    const declineButton = event.target.closest("[data-decline-job]");
     const noteButton = event.target.closest("[data-save-job-note]");
     const stlButton = event.target.closest("[data-job-stl]");
     const labelButton = event.target.closest("[data-job-label]");
     if (stlButton) return factoryDownload(`/api/factory/jobs/${encodeURIComponent(stlButton.dataset.jobStl)}/stl`, `print-job-${stlButton.dataset.jobStl}.stl`);
     if (labelButton) return factoryDownload(`/api/factory/jobs/${encodeURIComponent(labelButton.dataset.jobLabel)}/label`, "", true);
-    if (statusButton) {
-      await factoryFetch(`/api/factory/jobs/${encodeURIComponent(statusButton.dataset.saveJobStatus)}/status`, {
+    if (startButton) {
+      await factoryFetch(`/api/factory/jobs/${encodeURIComponent(startButton.dataset.startJob)}/status`, {
         method: "POST",
-        body: JSON.stringify({
-          status: document.querySelector("[data-job-next-status]").value,
-          trackingReference: document.querySelector("[data-job-tracking]").value,
-          note: document.querySelector("[data-job-note]").value
-        })
+        body: JSON.stringify({ status: "producing", note: "Provider accepted the job and started production." })
+      });
+    }
+    if (postedButton) {
+      const panel = postedButton.closest(".job-action-panel");
+      await factoryFetch(`/api/factory/jobs/${encodeURIComponent(postedButton.dataset.markPosted)}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status: "posted", trackingReference: panel.querySelector("[data-job-tracking]").value, note: panel.querySelector("[data-job-status-note]").value })
+      });
+    }
+    if (declineButton) {
+      const reason = declineButton.closest(".job-action-panel").querySelector("[data-decline-reason]").value;
+      if (!window.confirm("Decline this job and refund the buyer? This cannot be undone.")) return;
+      await factoryFetch(`/api/factory/jobs/${encodeURIComponent(declineButton.dataset.declineJob)}/decline`, {
+        method: "POST",
+        body: JSON.stringify({ reason })
       });
     }
     if (noteButton) {
       await factoryFetch(`/api/factory/jobs/${encodeURIComponent(noteButton.dataset.saveJobNote)}/note`, {
         method: "POST",
-        body: JSON.stringify({ note: document.querySelector("[data-job-note]").value })
+        body: JSON.stringify({ note: noteButton.closest(".job-note-form").querySelector("[data-job-message]").value })
       });
     }
-    if (statusButton || noteButton) {
+    if (startButton || postedButton || declineButton || noteButton) {
       await loadDashboard();
-      showJobDetail(statusButton?.dataset.saveJobStatus || noteButton.dataset.saveJobNote);
-      toast("Order updated");
+      showJobDetail(startButton?.dataset.startJob || postedButton?.dataset.markPosted || declineButton?.dataset.declineJob || noteButton.dataset.saveJobNote);
+      toast(declineButton ? "Job declined and buyer refund started" : noteButton ? "Message sent" : "Job status updated");
     }
   } catch (error) {
     toast(error.message);
