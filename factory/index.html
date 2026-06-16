@@ -19,8 +19,17 @@
         <label>Password<input id="factoryPassword" type="password" autocomplete="current-password" minlength="8" required></label>
         <p class="login-message" id="factoryLoginMessage" role="alert"></p>
         <button class="button button-primary" type="submit">Sign in</button>
-        <button class="button button-secondary" id="createFactoryAccount" type="button">Create printer account</button>
-        <small>New accounts may require email confirmation before the first sign in.</small>
+        <div class="login-divider"><span>or continue with</span></div>
+        <div class="oauth-actions">
+          <button class="button button-secondary oauth-button" data-oauth-provider="google" type="button"><b>G</b> Google</button>
+          <button class="button button-secondary oauth-button" data-oauth-provider="apple" type="button"><b>A</b> Apple</button>
+        </div>
+        <small id="oauthStatus">Checking social sign-in providers...</small>
+        <div class="login-secondary-actions">
+          <button class="button button-ghost" id="createFactoryAccount" type="button">Create account</button>
+          <button class="button button-ghost" id="forgotFactoryPassword" type="button">Forgot password</button>
+        </div>
+        <small>Email confirmation is required when creating an account.</small>
       </form>
     </section>
 

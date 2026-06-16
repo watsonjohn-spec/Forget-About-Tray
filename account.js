@@ -2,6 +2,7 @@
   const legacySessionKey = "movement-tray-supabase-session";
   const sessionKey = "forget-about-supabase-session";
   const activeSessionKey = "forget-about-active-session";
+  const pendingAuthReturnKey = "forget-about-pending-auth-return";
   let config = null;
   let session = null;
   let user = null;
@@ -14,7 +15,16 @@
   }
 
   function appUrl() {
-    return `${window.location.origin}${window.location.pathname}`;
+    const url = new URL(window.location.pathname, window.location.origin);
+    const path = url.pathname.toLowerCase();
+    if (brandKey() === "makeup" || path === "/makeup" || path === "/makeup/index.html") {
+      url.pathname = url.pathname.replace(/\/index\.html$/i, "/");
+      if (!url.pathname.endsWith("/")) url.pathname = `${url.pathname}/`;
+    }
+    if (path === "/factory" || path === "/factory/index.html") {
+      url.pathname = "/factory/";
+    }
+    return url.toString();
   }
 
   function brandKey() {
@@ -23,6 +33,26 @@
 
   function generatorType() {
     return window.platformService?.generatorType() || "movement_tray";
+  }
+
+  function appPath() {
+    const url = new URL(appUrl());
+    return `${url.pathname}${url.search}`;
+  }
+
+  function pendingAuthReturnPath() {
+    const path = sessionStorage.getItem(pendingAuthReturnKey) || "";
+    if (!path.startsWith("/") || path.startsWith("//")) return "";
+    return path;
+  }
+
+  function reroutePendingAuthCallback(hash) {
+    const pendingPath = pendingAuthReturnPath();
+    if (!pendingPath || pendingPath === `${window.location.pathname}${window.location.search}`) return false;
+    if (!hash.get("access_token") && !hash.get("error") && !hash.get("error_description")) return false;
+    sessionStorage.removeItem(pendingAuthReturnKey);
+    window.location.replace(`${window.location.origin}${pendingPath}${window.location.hash}`);
+    return true;
   }
 
   async function deviceHash() {
@@ -120,8 +150,10 @@
     await loadConfig();
     try {
       const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      if (reroutePendingAuthCallback(hash)) return null;
       authType = hash.get("type") || "";
       authError = hash.get("error_description") || "";
+      if (hash.get("access_token") || hash.get("error") || authError) sessionStorage.removeItem(pendingAuthReturnKey);
       if (authError) {
         history.replaceState({}, "", window.location.pathname + window.location.search);
         return null;
@@ -178,8 +210,10 @@
   async function signInWithProvider(provider) {
     await loadConfig();
     const url = new URL(`${config.supabaseUrl}/auth/v1/authorize`);
+    const returnUrl = appUrl();
+    sessionStorage.setItem(pendingAuthReturnKey, appPath());
     url.searchParams.set("provider", provider);
-    url.searchParams.set("redirect_to", appUrl());
+    url.searchParams.set("redirect_to", returnUrl);
     window.location.assign(url.toString());
   }
 

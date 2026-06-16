@@ -15,6 +15,8 @@ The active brand is derived from the URL. It is not selected from inside a brand
 
 Authentication and checkout return URLs preserve the entry path, so the same brand remains active for the complete customer session and payment journey.
 
+Login surfaces must stay functionally and structurally identical across customer generators and the shared print factory. Email/password sign-in, Google and Apple OAuth, account creation, password reset, provider-status messaging, and recovery handling are shared account behavior; only palette, surface name, and logo mark should vary.
+
 ## Generator Contract
 
 Each server-side generator module must provide:

@@ -5,6 +5,15 @@ import vm from "node:vm";
 
 const root = new URL("../", import.meta.url);
 
+function storageMock(initial = {}) {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem: (key) => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key)
+  };
+}
+
 test("catalogue covers main and legacy armies with square and rectangular bases", async () => {
   const source = await readFile(new URL("catalogue.js", root), "utf8");
   const context = { window: {} };
@@ -63,6 +72,113 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   vm.runInNewContext(publicConfigSource, context);
   assert.deepEqual(Object.keys(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG).sort(), ["supabasePublishableKey", "supabaseUrl"]);
   assert.doesNotMatch(publicConfigSource, /sb_secret_|sk_(?:test|live)_|rk_(?:test|live)_|whsec_/);
+});
+
+test("login surfaces keep shared account actions across brands and factory", async () => {
+  const [trayHtml, trayApp, makeupHtml, makeupApp, factoryHtml, factoryApp, architecture] = await Promise.all([
+    readFile(new URL("index.html", root), "utf8"),
+    readFile(new URL("app.js", root), "utf8"),
+    readFile(new URL("makeup/index.html", root), "utf8"),
+    readFile(new URL("makeup/makeup.js", root), "utf8"),
+    readFile(new URL("factory/index.html", root), "utf8"),
+    readFile(new URL("factory/factory.js", root), "utf8"),
+    readFile(new URL("platform/ARCHITECTURE.md", root), "utf8")
+  ]);
+  const surfaces = [trayHtml, makeupHtml, factoryHtml];
+  for (const html of surfaces) {
+    assert.match(html, /class="login-divider"/);
+    assert.match(html, /data-oauth-provider="google"/);
+    assert.match(html, /data-oauth-provider="apple"/);
+    assert.match(html, /id="oauthStatus"/);
+    assert.match(html, />Create account</);
+    assert.match(html, />Forgot password</);
+    assert.match(html, /Email confirmation is required/);
+  }
+  for (const source of [trayApp, makeupApp, factoryApp]) {
+    assert.match(source, /accountService\.providerAvailability\(\)/);
+    assert.match(source, /accountService\.signInWithProvider\(button\.dataset\.oauthProvider\)/);
+    assert.match(source, /accountService\.resetPassword\(email\)/);
+    assert.match(source, /accountService\.authType\(\) === "recovery"/);
+  }
+  assert.match(architecture, /Login surfaces must stay functionally and structurally identical/);
+});
+
+test("makeup and factory OAuth keep users on the originating app after provider sign-in", async () => {
+  const account = await readFile(new URL("account.js", root), "utf8");
+  const sessionStorage = storageMock();
+  const assigned = [];
+  const context = {
+    URL,
+    URLSearchParams,
+    window: {
+      MOVEMENT_TRAY_PUBLIC_CONFIG: { supabaseUrl: "https://supabase.test", supabasePublishableKey: "anon-key" },
+      platformService: { brandKey: () => "makeup", generatorType: () => "makeup_caddy" },
+      location: {
+        origin: "https://app.test",
+        pathname: "/makeup",
+        search: "",
+        hash: "",
+        assign: (url) => assigned.push(url)
+      }
+    },
+    sessionStorage,
+    localStorage: storageMock(),
+    history: { replaceState: () => {} }
+  };
+
+  vm.runInNewContext(account, context);
+  await context.window.accountService.signInWithProvider("google");
+
+  const authUrl = new URL(assigned[0]);
+  assert.equal(authUrl.searchParams.get("redirect_to"), "https://app.test/makeup/");
+  assert.equal(sessionStorage.getItem("forget-about-pending-auth-return"), "/makeup/");
+
+  let replaced = "";
+  context.window.location.pathname = "/tray";
+  context.window.location.hash = "#access_token=abc&refresh_token=def&expires_in=3600";
+  context.window.location.replace = (url) => { replaced = url; };
+
+  await context.window.accountService.init();
+
+  assert.equal(replaced, "https://app.test/makeup/#access_token=abc&refresh_token=def&expires_in=3600");
+  assert.equal(sessionStorage.getItem("forget-about-pending-auth-return"), null);
+
+  const factorySessionStorage = storageMock();
+  const factoryAssigned = [];
+  const factoryContext = {
+    URL,
+    URLSearchParams,
+    window: {
+      MOVEMENT_TRAY_PUBLIC_CONFIG: { supabaseUrl: "https://supabase.test", supabasePublishableKey: "anon-key" },
+      location: {
+        origin: "https://app.test",
+        pathname: "/factory",
+        search: "",
+        hash: "",
+        assign: (url) => factoryAssigned.push(url)
+      }
+    },
+    sessionStorage: factorySessionStorage,
+    localStorage: storageMock(),
+    history: { replaceState: () => {} }
+  };
+
+  vm.runInNewContext(account, factoryContext);
+  await factoryContext.window.accountService.signInWithProvider("apple");
+
+  const factoryAuthUrl = new URL(factoryAssigned[0]);
+  assert.equal(factoryAuthUrl.searchParams.get("redirect_to"), "https://app.test/factory/");
+  assert.equal(factorySessionStorage.getItem("forget-about-pending-auth-return"), "/factory/");
+
+  let factoryReplaced = "";
+  factoryContext.window.location.pathname = "/";
+  factoryContext.window.location.hash = "#access_token=abc&refresh_token=def&expires_in=3600";
+  factoryContext.window.location.replace = (url) => { factoryReplaced = url; };
+
+  await factoryContext.window.accountService.init();
+
+  assert.equal(factoryReplaced, "https://app.test/factory/#access_token=abc&refresh_token=def&expires_in=3600");
+  assert.equal(factorySessionStorage.getItem("forget-about-pending-auth-return"), null);
 });
 
 test("UAT shell keeps primary actions visible and separates account pages", async () => {

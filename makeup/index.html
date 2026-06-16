@@ -16,13 +16,19 @@
         <p>Sign in to keep caddies, downloads, and print orders together.</p>
         <label>Email<input id="loginEmail" autocomplete="email" required type="email"></label>
         <label>Password<input id="loginPassword" autocomplete="current-password" required type="password"></label>
-        <p class="login-error" id="loginError"></p>
+        <p class="login-error" id="loginError" role="alert"></p>
         <button class="button primary" type="submit">Sign in</button>
+        <div class="login-divider"><span>or continue with</span></div>
         <div class="oauth-actions">
-          <button class="button secondary" data-oauth-provider="google" type="button">Google</button>
-          <button class="button secondary" data-oauth-provider="apple" type="button">Apple</button>
+          <button class="button secondary oauth-button" data-oauth-provider="google" type="button"><b>G</b> Google</button>
+          <button class="button secondary oauth-button" data-oauth-provider="apple" type="button"><b>A</b> Apple</button>
         </div>
-        <button class="button text" id="createAccount" type="button">Create an account</button>
+        <small id="oauthStatus">Checking social sign-in providers...</small>
+        <div class="login-secondary-actions">
+          <button class="button text" id="createAccount" type="button">Create account</button>
+          <button class="button text" id="forgotPassword" type="button">Forgot password</button>
+        </div>
+        <small>Email confirmation is required when creating an account.</small>
       </form>
     </div>
 

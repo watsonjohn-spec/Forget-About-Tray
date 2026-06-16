@@ -66,6 +66,22 @@ function setAuthenticated(authenticated) {
   document.getElementById("factoryAccountEmail").textContent = accountService.currentUser()?.email || "";
 }
 
+async function configureProviderButtons() {
+  const providers = await accountService.providerAvailability();
+  document.querySelectorAll("[data-oauth-provider]").forEach((button) => {
+    const configured = providers[button.dataset.oauthProvider];
+    button.disabled = configured === false;
+    button.title = configured === false ? `${button.textContent.trim()} sign-in is not configured in Supabase yet.` : "";
+  });
+  const configured = Object.entries(providers).filter(([, enabled]) => enabled === true).map(([provider]) => provider);
+  const unknown = Object.values(providers).some((enabled) => enabled === null);
+  document.getElementById("oauthStatus").textContent = unknown
+    ? "Social sign-in status could not be checked. Email sign-in remains available."
+    : configured.length
+      ? `${configured.map((provider) => provider[0].toUpperCase() + provider.slice(1)).join(" and ")} sign-in ready.`
+      : "Google and Apple require provider credentials in Supabase. Email sign-in remains available.";
+}
+
 function setTab(tab) {
   document.querySelectorAll("[data-factory-tab]").forEach((button) => button.classList.toggle("active", button.dataset.factoryTab === tab));
   document.querySelectorAll("[data-factory-panel]").forEach((panel) => {
@@ -206,8 +222,20 @@ async function initializeFactory() {
   updateColourSample();
   try {
     const session = await accountService.init();
+    await configureProviderButtons();
     setAuthenticated(Boolean(session));
-    if (session) await loadDashboard();
+    if (session) {
+      if (accountService.authType() === "recovery") {
+        const password = window.prompt("Enter your new password");
+        if (password) {
+          await accountService.updatePassword(password);
+          toast("Password updated");
+        }
+      }
+      await loadDashboard();
+    } else {
+      document.getElementById("factoryLoginMessage").textContent = accountService.authError();
+    }
   } catch (error) {
     setAuthenticated(false);
     document.getElementById("factoryLoginMessage").textContent = error.message;
@@ -250,6 +278,29 @@ document.getElementById("createFactoryAccount").addEventListener("click", async 
   } catch (error) {
     message.textContent = error.message;
   }
+});
+
+document.getElementById("forgotFactoryPassword").addEventListener("click", async () => {
+  const email = document.getElementById("factoryEmail").value;
+  const message = document.getElementById("factoryLoginMessage");
+  if (!email) return message.textContent = "Enter your email first.";
+  try {
+    await accountService.resetPassword(email);
+    message.textContent = "Password reset email sent.";
+  } catch (error) {
+    message.textContent = error.message;
+  }
+});
+
+document.querySelectorAll("[data-oauth-provider]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    try {
+      document.getElementById("factoryLoginMessage").textContent = `Opening ${button.textContent.trim()} sign in...`;
+      await accountService.signInWithProvider(button.dataset.oauthProvider);
+    } catch (error) {
+      document.getElementById("factoryLoginMessage").textContent = error.message;
+    }
+  });
 });
 
 document.getElementById("factoryLogout").addEventListener("click", async () => { await accountService.signOut(); setAuthenticated(false); });
