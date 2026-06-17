@@ -290,7 +290,165 @@ function renderSlotList() {
   `).join("") : `<div class="empty">Add a product to begin the caddy.</div>`;
 }
 
+function previewRgb(hex) {
+  const value = String(hex || "").trim();
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(value);
+  if (!match) return [183, 110, 121];
+  return match.slice(1).map((channel) => Number.parseInt(channel, 16));
+}
+
+function previewHex(rgb) {
+  return `#${rgb.map((channel) => Math.max(0, Math.min(255, Math.round(channel))).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function mixPreviewColour(source, target, amount) {
+  const ratio = Math.max(0, Math.min(1, amount));
+  const from = previewRgb(source);
+  const to = previewRgb(target);
+  return previewHex(from.map((channel, index) => channel + (to[index] - channel) * ratio));
+}
+
+function shadePreviewColour(hex, amount) {
+  const target = amount >= 0 ? "#ffffff" : "#000000";
+  return mixPreviewColour(hex, target, Math.abs(amount) / 100);
+}
+
+function previewTransform(metric) {
+  const boxes = metric.boxes.length ? metric.boxes : [{ x: 0, y: 0, z: 0, w: metric.outerWidth, d: metric.outerDepth, h: metric.height }];
+  const yawCos = Math.cos(previewYaw);
+  const yawSin = Math.sin(previewYaw);
+  const pitchCos = Math.cos(previewPitch);
+  const pitchSin = Math.sin(previewPitch);
+  const rawPoint = (x, y, z) => {
+    const dx = x - metric.outerWidth / 2;
+    const dy = y - metric.outerDepth / 2;
+    const rx = yawCos * dx - yawSin * dy;
+    const ry = yawSin * dx + yawCos * dy;
+    return { x: rx, y: ry * pitchSin - z * pitchCos, depth: ry * pitchCos + z * pitchSin };
+  };
+  const corners = boxes.flatMap((box) => {
+    const x2 = box.x + box.w;
+    const y2 = box.y + box.d;
+    const z2 = box.z + box.h;
+    return [
+      rawPoint(box.x, box.y, box.z), rawPoint(x2, box.y, box.z), rawPoint(x2, y2, box.z), rawPoint(box.x, y2, box.z),
+      rawPoint(box.x, box.y, z2), rawPoint(x2, box.y, z2), rawPoint(x2, y2, z2), rawPoint(box.x, y2, z2)
+    ];
+  });
+  const minX = Math.min(...corners.map((point) => point.x));
+  const maxX = Math.max(...corners.map((point) => point.x));
+  const minY = Math.min(...corners.map((point) => point.y));
+  const maxY = Math.max(...corners.map((point) => point.y));
+  const scale = Math.min(650 / Math.max(1, maxX - minX), 430 / Math.max(1, maxY - minY));
+  const offsetX = 380 - ((minX + maxX) / 2) * scale;
+  const offsetY = 270 - ((minY + maxY) / 2) * scale;
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+    scale,
+    offsetX,
+    offsetY,
+    projectPoint(x, y, z) {
+      const point = rawPoint(x, y, z);
+      return { x: offsetX + point.x * scale, y: offsetY + point.y * scale, depth: point.depth };
+    },
+    normalDepth([x, y, z]) {
+      const ry = yawSin * x + yawCos * y;
+      return ry * pitchCos + z * pitchSin;
+    }
+  };
+}
+
+function previewFaceShade(normal) {
+  const light = [-.35, -.5, .8];
+  const lightLevel = normal[0] * light[0] + normal[1] * light[1] + normal[2] * light[2];
+  return Math.round(-12 + Math.max(-.25, lightLevel) * 42 + (normal[2] > 0 ? 18 : 0));
+}
+
+function visibleBoxFaces(box, transform, colour, opacity, boxIndex) {
+  const x2 = box.x + box.w;
+  const y2 = box.y + box.d;
+  const z2 = box.z + box.h;
+  const faceDefinitions = [
+    { normal: [0, 0, 1], vertices: [[box.x, box.y, z2], [x2, box.y, z2], [x2, y2, z2], [box.x, y2, z2]] },
+    { normal: [0, 1, 0], vertices: [[box.x, y2, box.z], [x2, y2, box.z], [x2, y2, z2], [box.x, y2, z2]] },
+    { normal: [0, -1, 0], vertices: [[x2, box.y, box.z], [box.x, box.y, box.z], [box.x, box.y, z2], [x2, box.y, z2]] },
+    { normal: [1, 0, 0], vertices: [[x2, box.y, box.z], [x2, y2, box.z], [x2, y2, z2], [x2, box.y, z2]] },
+    { normal: [-1, 0, 0], vertices: [[box.x, y2, box.z], [box.x, box.y, box.z], [box.x, box.y, z2], [box.x, y2, z2]] }
+  ];
+  return faceDefinitions
+    .map((face) => ({ ...face, visibility: transform.normalDepth(face.normal) }))
+    .filter((face) => face.visibility > .015)
+    .map((face) => {
+      const projected = face.vertices.map((vertex) => transform.projectPoint(...vertex));
+      const depth = projected.reduce((sum, point) => sum + point.depth, 0) / projected.length + boxIndex * .0001;
+      const points = projected.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+      return {
+        depth,
+        points,
+        fill: shadePreviewColour(colour, previewFaceShade(face.normal)),
+        stroke: shadePreviewColour(colour, -45),
+        opacity,
+        className: box.previewClass || ""
+      };
+    });
+}
+
+function previewProductBoxes(metric) {
+  const colour = mixPreviewColour(state.filamentHex, "#ffffff", 34);
+  const inset = Math.max(.8, state.wallThickness * .45);
+  return metric.positions.map((position, index) => ({
+    x: position.x + inset,
+    y: position.y + inset,
+    z: state.baseThickness + Number(position.z || 0) + .4,
+    w: Math.max(4, position.slotWidth - inset * 2),
+    d: Math.max(4, position.slotDepth - inset * 2),
+    h: Math.max(12, Math.min(position.height, state.layoutMode === "pegboard" ? 42 : position.height * .92)),
+    previewClass: "preview-product",
+    previewColour: colour,
+    previewOpacity: state.filamentMaterial === "petg" ? ".32" : ".24",
+    previewIndex: index
+  }));
+}
+
+function renderPreviewModel() {
+  const metric = geometry();
+  const svg = document.getElementById("caddyPreview");
+  const colour = state.filamentHex;
+  const transform = previewTransform(metric);
+  const fillOpacity = state.filamentMaterial === "petg" ? ".78" : "1";
+  const holderFaces = metric.boxes
+    .flatMap((box, index) => visibleBoxFaces(box, transform, colour, fillOpacity, index));
+  const productFaces = previewProductBoxes(metric)
+    .flatMap((box, index) => visibleBoxFaces(box, transform, box.previewColour, box.previewOpacity, metric.boxes.length + index));
+  const faces = [...holderFaces, ...productFaces]
+    .sort((a, b) => a.depth - b.depth);
+  const shadowWidth = Math.max(90, Math.min(330, (transform.maxX - transform.minX) * transform.scale * .42));
+  const shadowHeight = Math.max(16, Math.min(48, (transform.maxY - transform.minY) * transform.scale * .09));
+  const shadowY = Math.max(350, Math.min(488, transform.offsetY + transform.maxY * transform.scale + 18));
+  svg.innerHTML = `
+    <ellipse class="preview-shadow" cx="380" cy="${shadowY.toFixed(1)}" rx="${shadowWidth.toFixed(1)}" ry="${shadowHeight.toFixed(1)}"/>
+    <g class="preview-model">
+      ${faces.map((face) => `<polygon class="preview-face ${face.className}" points="${face.points}" fill="${face.fill}" fill-opacity="${face.opacity}" stroke="${face.stroke}" stroke-width=".75" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`).join("")}
+    </g>`;
+  /*
+  document.getElementById("outerSize").textContent = metric.assembledWidth
+    ? `${metric.assembledWidth.toFixed(1)} Ã— ${metric.assembledDepth.toFixed(1)} mm${metric.chunkCount > 1 ? ` (${metric.chunkCount} plates)` : ""}`
+    : `${metric.outerWidth.toFixed(1)} Ã— ${metric.outerDepth.toFixed(1)} mm`;
+  */
+  document.getElementById("totalHeight").textContent = `${metric.height.toFixed(1)} mm`;
+  document.getElementById("materialEstimate").textContent = `${(metric.materialCm3 * (state.filamentMaterial === "petg" ? 1.27 : 1.24)).toFixed(1)} g`;
+  document.getElementById("slotCount").textContent = state.items.length;
+  document.getElementById("outerSize").textContent = metric.assembledWidth
+    ? `${metric.assembledWidth.toFixed(1)} x ${metric.assembledDepth.toFixed(1)} mm${metric.chunkCount > 1 ? ` (${metric.chunkCount} plates)` : ""}`
+    : `${metric.outerWidth.toFixed(1)} x ${metric.outerDepth.toFixed(1)} mm`;
+  renderSlotList();
+}
+
 function renderPreview() {
+  return renderPreviewModel();
   const metric = geometry();
   const svg = document.getElementById("caddyPreview");
   const colour = state.filamentHex;
@@ -448,7 +606,7 @@ function renderQuotes() {
       <span class="colour-chip" style="background:${escapeHtml(quote.colourHex || "#ccc")}"></span>
       <div><strong>${escapeHtml(quote.providerName)}</strong><small>${escapeHtml(quote.basedIn)} | ${quote.ratingCount ? `${quote.ratingAverage.toFixed(1)} / 5` : "New"} | ${quote.leadTimeDays} days</small><small>${escapeHtml(quote.colourName)} | ${Number(quote.estimatedWeightGrams || 0).toFixed(1)} g</small></div>
       <strong>${money(quote.totalIncVatPence, quote.currency)}</strong>
-      <details class="quote-breakdown"><summary>Price breakdown</summary><p>Material ${money(quote.materialCostPence, quote.currency)} | Printer fee ${money(quote.printerFeePence, quote.currency)} | Postage ${money(quote.postagePence, quote.currency)} | Commission ${money(quote.commissionPence, quote.currency)} | Platform ${money(quote.platformFeePence, quote.currency)} | VAT ${money(quote.vatPence, quote.currency)}</p></details>
+      <details class="quote-breakdown"><summary>Price breakdown</summary><p>Material ${money(quote.materialCostPence, quote.currency)} | Printer fee ${money(quote.printerFeePence, quote.currency)} | Postage ${money(quote.postagePence, quote.currency)} | Commission ${money(quote.commissionPence, quote.currency)} | Platform ${money(quote.platformFeePence, quote.currency)} | VAT ${money(quote.vatAmountPence, quote.currency)}</p></details>
       <button data-quote="${escapeHtml(quote.id)}">${quote.id === selectedQuoteId ? "Selected" : "Select printer"}</button>
     </article>
   `).join("") : `<div class="empty">No providers match these filters.</div>`;

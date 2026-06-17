@@ -75,6 +75,9 @@ main { width:min(1420px,calc(100% - 40px)); margin:0 auto; }
 .preview-angle-controls button { min-height:32px; padding:0 10px; border:1px solid var(--line); border-radius:7px; color:var(--ink); background:rgba(255,250,248,.9); font-size:9px; font-weight:800; }
 #caddyPreview { width:100%; height:auto; max-height:510px; cursor:grab; touch-action:none; }
 #caddyPreview:active { cursor:grabbing; }
+#caddyPreview .preview-face { shape-rendering:geometricPrecision; }
+#caddyPreview .preview-product { stroke-dasharray:3 2; mix-blend-mode:multiply; }
+#caddyPreview .preview-shadow { fill:var(--ink); opacity:.14; }
 .stats { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
 .stats div { padding:13px; border-right:1px solid var(--line); }
 .stats div:last-child { border-right:0; }

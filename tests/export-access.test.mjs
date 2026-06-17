@@ -276,6 +276,18 @@ test("enabled brand route serves the shared app shell", async () => {
   assert.match(await response.text(), /<script src="platform\.js"><\/script>/);
 });
 
+test("corporate landing page links to active generators", async () => {
+  const landing = await fetch(`${baseUrl}/`);
+  assert.equal(landing.status, 200);
+  const html = await landing.text();
+  assert.match(html, /Forget About/);
+  for (const route of ["/tray", "/makeup/", "/print/", "/paint/", "/stitch/", "/factory/"]) {
+    assert.match(html, new RegExp(`href="${route.replace("/", "\\/")}`));
+    const response = await fetch(`${baseUrl}${route}`);
+    assert.equal(response.status, 200);
+  }
+});
+
 test("makeup route serves the rose-gold caddy generator", async () => {
   const response = await fetch(`${baseUrl}/makeup`);
   assert.equal(response.status, 200);

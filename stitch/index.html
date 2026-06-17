@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#5a4368" />
+    <meta name="checkout-api-url" content="https://forget-about-tray.onrender.com" />
+    <title>Forget About Stitch</title>
+    <link rel="stylesheet" href="../prototype.css" />
+    <link rel="stylesheet" href="../site-wide.css" />
+  </head>
+  <body>
+    <div class="auth-gate" id="authGate">
+      <form class="login-card" id="loginForm"><div><p class="eyebrow" data-brand-name>Forget About Stitch</p><h1>Enter the project tray</h1></div><p>Sign in to build thread organisers and request prints.</p><label>Email<input id="loginEmail" autocomplete="email" required type="email"></label><label>Password<input id="loginPassword" autocomplete="current-password" required type="password"></label><p class="login-error" id="loginError" role="alert"></p><button class="button button-primary" type="submit">Sign in</button><div class="login-divider"><span>or continue with</span></div><div class="oauth-actions"><button class="button button-secondary oauth-button" data-oauth-provider="google" type="button"><b>G</b> Google</button><button class="button button-secondary oauth-button" data-oauth-provider="apple" type="button" hidden><b>A</b> Apple</button></div><small id="oauthStatus">Checking social sign-in providers...</small><div class="login-secondary-actions"><button class="button button-secondary" id="createAccount" type="button">Create account</button><button class="button button-secondary" id="forgotPassword" type="button">Forgot password</button></div></form>
+    </div>
+    <header class="topbar"><a class="brand" href="/stitch/"><span class="brand-mark"></span><strong data-brand-name>Forget About Stitch</strong></a><div class="top-actions"><span id="accountEmail"></span><button class="button button-secondary" id="logoutButton" type="button">Log out</button></div></header>
+    <main>
+      <section class="hero"><p class="eyebrow">Thread project tray</p><h1>Lay out thread slots with the reference number visible underneath.</h1><p>Paste one thread per line using a number and optional name. The page previews the labels and sends the tray geometry to the print factory.</p></section>
+      <section class="generator-workspace">
+        <section class="control-card"><div class="card-heading"><h2>Threads</h2></div><div class="control-body">
+          <label>Project name<input id="projectName" value="Stitch project tray"></label>
+          <label>Thread references<textarea id="threads" rows="10">310 Black&#10;321 Red&#10;Blanc White&#10;742 Tangerine&#10;820 Royal Blue&#10;906 Green</textarea></label>
+          <div class="field-grid"><label>Columns<input id="columns" type="number" min="1" max="16" value="6"></label><label>Slot width<input id="slotWidth" type="number" min="8" max="40" value="16"></label><label>Slot depth<input id="slotDepth" type="number" min="20" max="80" value="34"></label></div>
+          <button class="button button-primary" id="quoteButton" type="button">Request print quotes</button>
+        </div></section>
+        <section class="preview-card"><div class="card-heading"><h2>Preview</h2></div><div class="preview-stage"><svg id="preview" viewBox="0 0 760 420"></svg></div><div class="stats"><div><span>Threads</span><strong id="threadStat">6</strong></div><div><span>Rows</span><strong id="rowStat">1</strong></div><div><span>Material</span><strong id="materialStat">-</strong></div><div><span>Labels</span><strong>Visible</strong></div></div></section>
+      </section>
+      <section class="quote-card"><div class="card-heading"><h2>Factory quotes</h2></div><div class="quote-body"><div class="quote-list" id="quotes"><p>No quotes requested yet.</p></div><button class="button button-primary" id="checkoutButton" type="button" disabled>Pay for selected printer</button></div></section>
+    </main>
+    <div class="toast" id="toast"></div>
+    <script src="../public-config.js"></script><script src="../platform.js"></script><script src="../account.js"></script><script src="../generator-auth.js"></script><script src="../generator-quotes.js"></script><script src="stitch.js"></script><script src="../site-wide.js"></script>
+  </body>
+</html>

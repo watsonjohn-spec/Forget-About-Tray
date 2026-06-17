@@ -341,11 +341,14 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .storage-stats span { color: var(--muted); font-size: 8px; font-weight: 850; text-transform: uppercase; }
 .storage-stats strong { margin-top: 4px; font-size: 11px; }
 .storage-results { min-height: 220px; }
-.storage-unit { padding: 12px; display: grid; grid-template-columns: minmax(180px, 1fr) repeat(5, 74px) auto; align-items: end; gap: 8px; border: 1px solid var(--line); border-radius: 9px; background: white; }
+.storage-unit { padding: 12px; display: grid; grid-template-columns: minmax(180px, 1fr) repeat(5, 74px) minmax(86px, auto); align-items: end; gap: 8px; border: 1px solid var(--line); border-radius: 9px; background: white; }
 .storage-unit.needs-base { border-color: #b67a47; }
 .storage-unit strong, .storage-unit small { display: block; }
 .storage-unit small { margin-top: 4px; color: var(--muted); font-size: 9px; }
 .storage-unit button { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: #fbfbf7; font-size: 9px; font-weight: 800; }
+.storage-unit button:disabled { opacity: .42; cursor: not-allowed; }
+.storage-unit-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.storage-unit-actions button:last-child { grid-column: 1 / -1; }
 
 .app-dialog { width: min(920px, calc(100% - 28px)); max-height: min(760px, calc(100vh - 28px)); padding: 0; overflow: auto; border: 1px solid var(--line); border-radius: 16px; color: var(--ink); background: var(--panel); box-shadow: 0 35px 90px rgba(24, 43, 28, .3); }
 .app-dialog::backdrop { background: rgba(20, 35, 24, .65); backdrop-filter: blur(4px); }
@@ -354,7 +357,7 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .dialog-heading .eyebrow { margin-bottom: 5px; }
 .dialog-close { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: var(--white); font-size: 22px; }
 .catalogue-layout { padding: 18px; display: grid; grid-template-columns: 1.3fr .7fr; gap: 18px; }
-.catalogue-filters { display: grid; grid-template-columns: minmax(170px, .8fr) minmax(200px, 1.2fr); gap: 7px; }
+.catalogue-filters { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(170px, .9fr) minmax(200px, 1.2fr); gap: 7px; }
 .catalogue-note { margin: 8px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .dialog-label { display: block; margin-bottom: 8px; font-size: 11px; font-weight: 800; }
 .dialog-input { width: 100%; height: 40px; padding: 0 11px; border: 1px solid var(--line); border-radius: 7px; background: white; outline: 0; }
@@ -362,6 +365,7 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .catalogue-entry, .saved-armies-list article { padding: 10px; display: grid; grid-template-columns: 1fr 70px auto; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; background: white; }
 .catalogue-entry strong, .catalogue-entry small, .saved-armies-list strong, .saved-armies-list small { display: block; }
 .catalogue-entry small, .saved-armies-list small { margin-top: 3px; color: var(--muted); font-size: 9px; }
+.catalogue-system { display: inline-block; margin-top: 5px; padding: 3px 6px; border-radius: 5px; color: #314a35; background: #e6ead9; font-size: 8px; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
 .catalogue-entry input { min-width: 0; width: 100%; height: 34px; border: 1px solid var(--line); border-radius: 6px; text-align: center; }
 .catalogue-entry.single-catalogue-entry { grid-template-columns: 1fr auto; }
 .catalogue-entry button, .saved-armies-list button { height: 34px; padding: 0 10px; border: 1px solid #78936a; border-radius: 6px; color: white; background: var(--forest); font-size: 9px; font-weight: 800; }
@@ -551,7 +555,7 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
   .storage-stats { grid-template-columns: 1fr 1fr; }
   .storage-unit { grid-template-columns: 1fr 1fr; }
   .storage-unit > div { grid-column: 1 / -1; }
-  .storage-unit button { grid-column: 1 / -1; }
+  .storage-unit > button, .storage-unit-actions { grid-column: 1 / -1; }
   .army-edit-bar { grid-template-columns: 1fr 1fr; }
   .army-edit-bar div { grid-column: 1 / -1; }
   .army-edit-shell .controls-panel { display: block; }

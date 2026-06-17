@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#315a4e" />
+    <meta name="checkout-api-url" content="https://forget-about-tray.onrender.com" />
+    <title>Forget About Paint</title>
+    <link rel="stylesheet" href="../prototype.css" />
+    <link rel="stylesheet" href="../site-wide.css" />
+  </head>
+  <body>
+    <div class="auth-gate" id="authGate">
+      <form class="login-card" id="loginForm"><div><p class="eyebrow" data-brand-name>Forget About Paint</p><h1>Enter the paint desk</h1></div><p>Sign in to save paint stations and request prints.</p><label>Email<input id="loginEmail" autocomplete="email" required type="email"></label><label>Password<input id="loginPassword" autocomplete="current-password" required type="password"></label><p class="login-error" id="loginError" role="alert"></p><button class="button button-primary" type="submit">Sign in</button><div class="login-divider"><span>or continue with</span></div><div class="oauth-actions"><button class="button button-secondary oauth-button" data-oauth-provider="google" type="button"><b>G</b> Google</button><button class="button button-secondary oauth-button" data-oauth-provider="apple" type="button" hidden><b>A</b> Apple</button></div><small id="oauthStatus">Checking social sign-in providers...</small><div class="login-secondary-actions"><button class="button button-secondary" id="createAccount" type="button">Create account</button><button class="button button-secondary" id="forgotPassword" type="button">Forgot password</button></div></form>
+    </div>
+    <header class="topbar"><a class="brand" href="/paint/"><span class="brand-mark"></span><strong data-brand-name>Forget About Paint</strong></a><div class="top-actions"><span id="accountEmail"></span><button class="button button-secondary" id="logoutButton" type="button">Log out</button></div></header>
+    <main>
+      <section class="hero"><p class="eyebrow">Paint and brush station</p><h1>Build a caddy for Citadel, Vallejo, generic paints, and brushes.</h1><p>Choose the bottle family, paint count, and brush slots. The generator produces a printable rack that can be sent to the factory.</p></section>
+      <section class="generator-workspace">
+        <section class="control-card"><div class="card-heading"><h2>Station setup</h2></div><div class="control-body">
+          <label>Project name<input id="projectName" value="Paint station"></label>
+          <div class="field-grid"><label>Paint type<select id="paintType"><option value="citadel">Citadel paint pots</option><option value="vallejo">Vallejo dropper bottles</option><option value="generic">Generic bottles</option></select></label><label>Paints<input id="paintCount" type="number" min="1" max="80" value="18"></label><label>Columns<input id="columns" type="number" min="1" max="12" value="6"></label></div>
+          <div class="field-grid"><label>Generic diameter<input id="paintDiameter" type="number" min="12" max="70" value="30"></label><label>Brush slots<input id="brushSlots" type="number" min="0" max="40" value="8"></label><label>Wall height<input id="wallHeight" type="number" min="5" max="50" value="18"></label></div>
+          <button class="button button-primary" id="quoteButton" type="button">Request print quotes</button>
+        </div></section>
+        <section class="preview-card"><div class="card-heading"><h2>Preview</h2></div><div class="preview-stage"><svg id="preview" viewBox="0 0 760 420"></svg></div><div class="stats"><div><span>Paints</span><strong id="paintStat">18</strong></div><div><span>Rows</span><strong id="rowStat">3</strong></div><div><span>Material</span><strong id="materialStat">-</strong></div><div><span>Brushes</span><strong id="brushStat">8</strong></div></div></section>
+      </section>
+      <section class="quote-card"><div class="card-heading"><h2>Factory quotes</h2></div><div class="quote-body"><div class="quote-list" id="quotes"><p>No quotes requested yet.</p></div><button class="button button-primary" id="checkoutButton" type="button" disabled>Pay for selected printer</button></div></section>
+    </main>
+    <div class="toast" id="toast"></div>
+    <script src="../public-config.js"></script><script src="../platform.js"></script><script src="../account.js"></script><script src="../generator-auth.js"></script><script src="../generator-quotes.js"></script><script src="paint.js"></script><script src="../site-wide.js"></script>
+  </body>
+</html>

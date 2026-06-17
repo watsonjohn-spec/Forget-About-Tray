@@ -7,6 +7,7 @@
     <meta name="checkout-api-url" content="https://forget-about-tray.onrender.com" />
     <title>Forget About Tray</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="site-wide.css" />
   </head>
   <body data-active-mode="single">
     <div class="auth-gate" id="authGate">
@@ -341,6 +342,18 @@
                 <label>Internal width<input id="storageBoxWidth" type="number" min="80" max="700" value="220"></label>
                 <label>Internal depth<input id="storageBoxDepth" type="number" min="20" max="500" value="68"></label>
               </div>
+              <div class="dialog-field-grid">
+                <label>Printed insert depth
+                  <select id="storageWallHeightPreset">
+                    <option value="3">Shallow - 3mm</option>
+                    <option value="4" selected>Standard - 4mm</option>
+                    <option value="6">Deep - 6mm</option>
+                    <option value="8">Extra deep - 8mm</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </label>
+                <label>Custom wall height<input id="storageWallHeight" type="number" min="2" max="18" step="0.5" value="4"></label>
+              </div>
             </div>
 
             <div class="storage-options">
@@ -406,6 +419,7 @@
         <section>
           <label class="dialog-label" for="catalogueSearch">Add an existing unit</label>
           <div class="catalogue-filters">
+            <select class="dialog-input" id="catalogueSystemFilter" aria-label="Filter catalogue by game system"></select>
             <select class="dialog-input" id="catalogueArmyFilter" aria-label="Filter catalogue by army"></select>
             <input class="dialog-input" id="catalogueSearch" type="search" placeholder="Search units..." />
           </div>
@@ -554,5 +568,6 @@
     <script src="account.js"></script>
     <script src="catalogue.js"></script>
     <script src="app.js"></script>
+    <script src="site-wide.js"></script>
   </body>
 </html>

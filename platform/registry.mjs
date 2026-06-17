@@ -1,5 +1,8 @@
 import { movementTrayGenerator } from "./generators/movement-tray.mjs";
 import { makeupCaddyGenerator } from "./generators/makeup-caddy.mjs";
+import { uploadedPrintGenerator } from "./generators/uploaded-print.mjs";
+import { paintStationGenerator } from "./generators/paint-station.mjs";
+import { stitchOrganizerGenerator } from "./generators/stitch-organizer.mjs";
 
 const brands = [
   {
@@ -45,6 +48,72 @@ const brands = [
       accent: "#b76e79",
       accentDark: "#75474e",
       highlight: "#d7a69f"
+    }
+  },
+  {
+    key: "print",
+    path: "print",
+    name: "Forget About Print",
+    studioName: "Forget About Print",
+    defaultGeneratorType: "uploaded_print",
+    generatorTypes: ["uploaded_print"],
+    enabled: true,
+    entitlementScope: "brand",
+    theme: {
+      themeColor: "#253642",
+      ink: "#1e2b33",
+      muted: "#677781",
+      line: "#bdc9ce",
+      paper: "#d8dddc",
+      panel: "#eef0ed",
+      white: "#fafaf5",
+      accent: "#45555b",
+      accentDark: "#222d31",
+      highlight: "#d08a32"
+    }
+  },
+  {
+    key: "paint",
+    path: "paint",
+    name: "Forget About Paint",
+    studioName: "Forget About Paint",
+    defaultGeneratorType: "paint_station",
+    generatorTypes: ["paint_station"],
+    enabled: true,
+    entitlementScope: "brand",
+    theme: {
+      themeColor: "#315a4e",
+      ink: "#1f302d",
+      muted: "#647771",
+      line: "#b8cbc3",
+      paper: "#e4ece7",
+      panel: "#f2f7f3",
+      white: "#fbfdf9",
+      accent: "#4f7b6f",
+      accentDark: "#294f45",
+      highlight: "#8fb9a3"
+    }
+  },
+  {
+    key: "stitch",
+    path: "stitch",
+    name: "Forget About Stitch",
+    studioName: "Forget About Stitch",
+    defaultGeneratorType: "stitch_organizer",
+    generatorTypes: ["stitch_organizer"],
+    enabled: true,
+    entitlementScope: "brand",
+    theme: {
+      themeColor: "#5a4368",
+      ink: "#30273a",
+      muted: "#756981",
+      line: "#c9bdd3",
+      paper: "#ece7ef",
+      panel: "#f7f2f8",
+      white: "#fffaff",
+      accent: "#8d6aa9",
+      accentDark: "#563868",
+      highlight: "#b99cd0"
     }
   },
   {
@@ -95,7 +164,10 @@ const brands = [
 
 const generators = new Map([
   [movementTrayGenerator.type, movementTrayGenerator],
-  [makeupCaddyGenerator.type, makeupCaddyGenerator]
+  [makeupCaddyGenerator.type, makeupCaddyGenerator],
+  [uploadedPrintGenerator.type, uploadedPrintGenerator],
+  [paintStationGenerator.type, paintStationGenerator],
+  [stitchOrganizerGenerator.type, stitchOrganizerGenerator]
 ]);
 
 export const marketplacePolicy = {

@@ -67,6 +67,9 @@ insert into public.brands (key, name, path, enabled, entitlement_scope)
 values
   ('tray', 'Forget About Tray', 'tray', true, 'brand'),
   ('makeup', 'Forget About Makeup', 'makeup', true, 'brand'),
+  ('print', 'Forget About Print', 'print', true, 'brand'),
+  ('paint', 'Forget About Paint', 'paint', true, 'brand'),
+  ('stitch', 'Forget About Stitch', 'stitch', true, 'brand'),
   ('crosstitch', 'Forget About Crosstitch', 'crosstitch', false, 'brand'),
   ('board-games', 'Forget About Board Games', 'board-games', false, 'brand')
 on conflict (key) do update set name = excluded.name, path = excluded.path, enabled = excluded.enabled, entitlement_scope = excluded.entitlement_scope;
@@ -74,13 +77,19 @@ on conflict (key) do update set name = excluded.name, path = excluded.path, enab
 insert into public.generator_definitions (type, name, current_version, parameter_catalogue_type, enabled)
 values
   ('movement_tray', 'Movement tray', 1, 'old_world_units', true),
-  ('makeup_caddy', 'Makeup caddy', 1, 'makeup_products', true)
+  ('makeup_caddy', 'Makeup caddy', 1, 'makeup_products', true),
+  ('uploaded_print', 'Uploaded STL print', 1, 'uploaded_stl', true),
+  ('paint_station', 'Paint station', 1, 'paint_bottles', true),
+  ('stitch_organizer', 'Stitch organizer', 1, 'thread_references', true)
 on conflict (type) do update set name = excluded.name, current_version = excluded.current_version, parameter_catalogue_type = excluded.parameter_catalogue_type, enabled = excluded.enabled;
 
 insert into public.brand_generators (brand_key, generator_type, enabled)
 values
   ('tray', 'movement_tray', true),
-  ('makeup', 'makeup_caddy', true)
+  ('makeup', 'makeup_caddy', true),
+  ('print', 'uploaded_print', true),
+  ('paint', 'paint_station', true),
+  ('stitch', 'stitch_organizer', true)
 on conflict (brand_key, generator_type) do update set enabled = excluded.enabled;
 
 create table if not exists public.designs (
@@ -415,6 +424,8 @@ create trigger enforce_print_job_financial_state
   before update on public.print_jobs
   for each row execute procedure public.enforce_print_job_financial_state();
 
+revoke execute on function public.enforce_print_job_financial_state() from anon, authenticated, public;
+
 create or replace function public.enforce_provider_transfer_completion()
 returns trigger
 language plpgsql
@@ -434,6 +445,8 @@ drop trigger if exists enforce_provider_transfer_completion on public.provider_t
 create trigger enforce_provider_transfer_completion
   before insert or update on public.provider_transfers
   for each row execute procedure public.enforce_provider_transfer_completion();
+
+revoke execute on function public.enforce_provider_transfer_completion() from anon, authenticated, public;
 
 create table if not exists public.stripe_events (
   stripe_event_id text primary key,
@@ -463,6 +476,32 @@ create index if not exists print_jobs_customer_idx on public.print_jobs(customer
 create index if not exists print_jobs_printer_idx on public.print_jobs(printer_profile_id, status, created_at desc);
 create index if not exists printer_capabilities_filter_idx on public.printer_capabilities(active, material, colour_key);
 create index if not exists account_devices_user_idx on public.account_devices(user_id, revoked_at);
+create index if not exists brand_generators_generator_type_idx on public.brand_generators(generator_type);
+create index if not exists designs_brand_key_idx on public.designs(brand_key);
+create index if not exists designs_generator_type_idx on public.designs(generator_type);
+create index if not exists entitlements_brand_key_idx on public.entitlements(brand_key);
+create index if not exists entitlements_generator_type_idx on public.entitlements(generator_type);
+create index if not exists entitlements_source_order_id_idx on public.entitlements(source_order_id);
+create index if not exists generator_catalogues_brand_key_idx on public.generator_catalogues(brand_key);
+create index if not exists orders_brand_key_idx on public.orders(brand_key);
+create index if not exists orders_generator_type_idx on public.orders(generator_type);
+create index if not exists print_job_events_actor_user_id_idx on public.print_job_events(actor_user_id);
+create index if not exists print_job_events_print_job_id_idx on public.print_job_events(print_job_id);
+create index if not exists print_jobs_brand_key_idx on public.print_jobs(brand_key);
+create index if not exists print_jobs_generator_type_idx on public.print_jobs(generator_type);
+create index if not exists print_jobs_quote_id_idx on public.print_jobs(quote_id);
+create index if not exists print_quotes_brand_key_idx on public.print_quotes(brand_key);
+create index if not exists print_quotes_customer_user_id_idx on public.print_quotes(customer_user_id);
+create index if not exists print_quotes_generator_type_idx on public.print_quotes(generator_type);
+create index if not exists print_quotes_printer_profile_id_idx on public.print_quotes(printer_profile_id);
+create index if not exists privacy_requests_user_id_idx on public.privacy_requests(user_id);
+create index if not exists projects_brand_key_idx on public.projects(brand_key);
+create index if not exists projects_generator_type_idx on public.projects(generator_type);
+create index if not exists provider_reviews_customer_user_id_idx on public.provider_reviews(customer_user_id);
+create index if not exists provider_reviews_printer_profile_id_idx on public.provider_reviews(printer_profile_id);
+create index if not exists provider_transfers_printer_profile_id_idx on public.provider_transfers(printer_profile_id);
+create index if not exists usage_allowances_brand_key_idx on public.usage_allowances(brand_key);
+create index if not exists usage_allowances_generator_type_idx on public.usage_allowances(generator_type);
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -481,6 +520,8 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+revoke execute on function public.handle_new_user() from anon, authenticated, public;
 
 insert into public.profiles (user_id, email)
 select id, coalesce(email, '') from auth.users

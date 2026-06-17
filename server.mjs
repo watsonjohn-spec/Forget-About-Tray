@@ -69,8 +69,19 @@ function materialDensity(material = "pla") {
   return material === "petg" ? 1.27 : 1.24;
 }
 
+function effectivePrintVolumeCm3(geometry) {
+  const rawVolume = Number(geometry.printMaterialCm3 ?? geometry.materialCm3 ?? 0);
+  if (!Number.isFinite(rawVolume) || rawVolume <= 0) return 0;
+  if (Number.isFinite(Number(geometry.printMaterialCm3))) return rawVolume;
+  if (geometry.config?.stlBase64) return rawVolume;
+  if (geometry.config?.mode === "storage_insert") return rawVolume * 0.46;
+  if (geometry.config?.paintType || geometry.config?.brushSlots || geometry.config?.threadRefs) return rawVolume * 0.5;
+  if (geometry.config?.caddyType) return rawVolume * 0.54;
+  return rawVolume * 0.56;
+}
+
 function estimatedWeightGrams(geometry, material = "pla") {
-  return Math.max(1, Math.round(Number(geometry.materialCm3 || 0) * materialDensity(material)));
+  return Math.max(1, Math.round(effectivePrintVolumeCm3(geometry) * materialDensity(material)));
 }
 
 function requestPlatformContext(request, body = {}) {
@@ -1859,7 +1870,12 @@ createServer(async (request, response) => {
     response.end();
     return;
   }
-  if (brandRoute && brandRoute.key !== "makeup" && pathname.endsWith("/")) {
+  if (brandRoute && ["print", "paint", "stitch"].includes(brandRoute.key) && !pathname.endsWith("/")) {
+    response.writeHead(308, { Location: `/${brandRoute.path}/${requestUrl.search}` });
+    response.end();
+    return;
+  }
+  if (brandRoute && brandRoute.key === "tray" && pathname.endsWith("/")) {
     response.writeHead(308, { Location: `/${brandRoute.path}${requestUrl.search}` });
     response.end();
     return;
@@ -1869,8 +1885,14 @@ createServer(async (request, response) => {
     response.end();
     return;
   }
-  const brandEntry = brandRoute?.key === "makeup" ? "makeup/index.html" : "index.html";
-  const relativePath = pathname === "/" ? "index.html" : brandRoute ? brandEntry : pathname === "/factory/" ? "factory/index.html" : pathname.slice(1);
+  const brandEntries = {
+    makeup: "makeup/index.html",
+    print: "print/index.html",
+    paint: "paint/index.html",
+    stitch: "stitch/index.html"
+  };
+  const brandEntry = brandEntries[brandRoute?.key] || "index.html";
+  const relativePath = pathname === "/" ? "home.html" : brandRoute ? brandEntry : pathname === "/factory/" ? "factory/index.html" : pathname.slice(1);
   const filePath = normalize(join(root, relativePath));
 
   if (!filePath.startsWith(normalize(root)) || !existsSync(filePath) || !statSync(filePath).isFile()) {

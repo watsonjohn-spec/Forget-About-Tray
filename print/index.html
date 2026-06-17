@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#253642" />
+    <meta name="checkout-api-url" content="https://forget-about-tray.onrender.com" />
+    <title>Forget About Print</title>
+    <link rel="stylesheet" href="../prototype.css" />
+    <link rel="stylesheet" href="../site-wide.css" />
+  </head>
+  <body>
+    <div class="auth-gate" id="authGate">
+      <form class="login-card" id="loginForm">
+        <div><p class="eyebrow" data-brand-name>Forget About Print</p><h1>Enter the print desk</h1></div>
+        <p>Sign in to upload an STL and request quotes from print providers.</p>
+        <label>Email<input id="loginEmail" autocomplete="email" required type="email"></label>
+        <label>Password<input id="loginPassword" autocomplete="current-password" required type="password"></label>
+        <p class="login-error" id="loginError" role="alert"></p>
+        <button class="button button-primary" type="submit">Sign in</button>
+        <div class="login-divider"><span>or continue with</span></div>
+        <div class="oauth-actions"><button class="button button-secondary oauth-button" data-oauth-provider="google" type="button"><b>G</b> Google</button><button class="button button-secondary oauth-button" data-oauth-provider="apple" type="button" hidden><b>A</b> Apple</button></div>
+        <small id="oauthStatus">Checking social sign-in providers...</small>
+        <div class="login-secondary-actions"><button class="button button-secondary" id="createAccount" type="button">Create account</button><button class="button button-secondary" id="forgotPassword" type="button">Forgot password</button></div>
+      </form>
+    </div>
+    <header class="topbar">
+      <a class="brand" href="/print/"><span class="brand-mark"></span><strong data-brand-name>Forget About Print</strong></a>
+      <div class="top-actions"><span id="accountEmail"></span><button class="button button-secondary" id="logoutButton" type="button">Log out</button></div>
+    </header>
+    <main>
+      <section class="hero"><p class="eyebrow">Uploaded STL quotes</p><h1>Upload your own STL and send it to the print factory.</h1><p>This prototype accepts small STL files, estimates the print envelope, and requests marketplace quotes. Larger-file storage should move to Supabase Storage before launch.</p></section>
+      <section class="generator-workspace">
+        <section class="control-card">
+          <div class="card-heading"><h2>Upload STL</h2></div>
+          <div class="control-body">
+            <label>Project name<input id="printName" value="Uploaded print"></label>
+            <label>STL file<input id="stlFile" type="file" accept=".stl,model/stl"></label>
+            <div class="field-grid">
+              <label>Width mm<input id="outerWidth" type="number" min="1" max="1000" value="100"></label>
+              <label>Depth mm<input id="outerDepth" type="number" min="1" max="1000" value="100"></label>
+              <label>Height mm<input id="height" type="number" min="1" max="1000" value="30"></label>
+            </div>
+            <div class="field-grid">
+              <label>Estimated grams<input id="estimatedWeightGrams" type="number" min="1" max="5000" value="25"></label>
+              <label>Material<select id="filamentMaterial"><option value="pla">PLA</option><option value="petg">PETG</option></select></label>
+              <label>Colour name<input id="filamentName" value="Any standard colour"></label>
+            </div>
+            <button class="button button-primary" id="quoteButton" type="button">Request print quotes</button>
+            <small id="uploadStatus">No STL loaded yet.</small>
+          </div>
+        </section>
+        <section class="preview-card">
+          <div class="card-heading"><h2>Print envelope</h2></div>
+          <div class="preview-stage"><svg id="preview" viewBox="0 0 760 420" role="img" aria-label="Uploaded print envelope preview"></svg></div>
+          <div class="stats">
+            <div><span>Size</span><strong id="sizeStat">100 x 100 mm</strong></div>
+            <div><span>Height</span><strong id="heightStat">30 mm</strong></div>
+            <div><span>Estimate</span><strong id="weightStat">25 g</strong></div>
+            <div><span>Route</span><strong>Factory</strong></div>
+          </div>
+        </section>
+      </section>
+      <section class="quote-card"><div class="card-heading"><h2>Factory quotes</h2></div><div class="quote-body"><div class="quote-list" id="quotes"><p>No quotes requested yet.</p></div><button class="button button-primary" id="checkoutButton" type="button" disabled>Pay for selected printer</button></div></section>
+    </main>
+    <div class="toast" id="toast"></div>
+    <script src="../public-config.js"></script>
+    <script src="../platform.js"></script>
+    <script src="../account.js"></script>
+    <script src="../generator-auth.js"></script>
+    <script src="../generator-quotes.js"></script>
+    <script src="print.js"></script>
+    <script src="../site-wide.js"></script>
+  </body>
+</html>

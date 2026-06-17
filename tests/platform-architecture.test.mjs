@@ -67,6 +67,34 @@ test("makeup caddies are a separate enabled generator under the makeup brand", (
   assert.match(generator.describe({ ...parameters, layoutMode: "pegboard" }), /pegboard makeup sheet/);
 });
 
+test("uploaded print, paint, and stitch generators are registered brands", () => {
+  const printContext = resolvePlatformContext({ brandKey: "print" });
+  assert.equal(printContext.brand.defaultGeneratorType, "uploaded_print");
+  assert.equal(printContext.generator.type, "uploaded_print");
+  const uploadedStl = "solid uploaded\nendsolid uploaded\n";
+  const uploadedConfig = {
+    uploadedFileName: "sample-token.stl",
+    stlBase64: Buffer.from(uploadedStl).toString("base64"),
+    outerWidth: 40,
+    outerDepth: 35,
+    height: 12,
+    estimatedWeightGrams: 18
+  };
+  assert.equal(printContext.generator.renderStl(uploadedConfig).toString(), uploadedStl);
+
+  const paintContext = resolvePlatformContext({ brandKey: "paint" });
+  assert.equal(paintContext.brand.defaultGeneratorType, "paint_station");
+  assert.match(paintContext.generator.renderStl({ paintType: "citadel", paintCount: 12, columns: 4, brushSlots: 4 }), /^solid paint_station/);
+
+  const stitchContext = resolvePlatformContext({ brandKey: "stitch" });
+  assert.equal(stitchContext.brand.defaultGeneratorType, "stitch_organizer");
+  assert.match(stitchContext.generator.renderStl({ threadRefs: ["310", "B5200", "666"], columns: 3 }), /^solid stitch_organizer/);
+
+  assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "print"));
+  assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "paint"));
+  assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "stitch"));
+});
+
 test("generator contract validates parameters and renders an STL", () => {
   const { generator } = resolvePlatformContext({ brandKey: "tray" });
   const source = {

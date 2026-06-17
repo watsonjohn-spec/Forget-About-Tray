@@ -115,6 +115,44 @@ function renderCapabilities() {
   `).join("") : '<div class="empty-state">Add at least one material and colour before the profile can receive marketplace jobs.</div>';
 }
 
+function jobOrder(job) {
+  return Array.isArray(job.orders) ? job.orders[0] : job.orders;
+}
+
+function jobQuote(job) {
+  return Array.isArray(job.print_quotes) ? job.print_quotes[0] : job.print_quotes;
+}
+
+function jobVatPence(job) {
+  const order = jobOrder(job);
+  const quote = jobQuote(job);
+  return Number(order?.vat_amount ?? quote?.vat_amount_pence ?? 0);
+}
+
+function jobCustomerTotalPence(job) {
+  const order = jobOrder(job);
+  const quote = jobQuote(job);
+  return Number(order?.total_inc_vat ?? quote?.total_inc_vat_pence ?? 0);
+}
+
+function jobStatusFinancials(jobs) {
+  return ["order_made", "producing", "posted", "complete", "cancelled", "refunded"].map((status) => {
+    const statusJobs = jobs.filter((job) => job.status === status);
+    return {
+      status,
+      count: statusJobs.length,
+      providerShare: statusJobs.reduce((total, job) => total + Number(job.provider_share_pence || 0), 0),
+      customerTotal: statusJobs.reduce((total, job) => total + jobCustomerTotalPence(job), 0)
+    };
+  });
+}
+
+function billingStatusMarkup(jobs) {
+  return `<section class="billing-status-grid">${jobStatusFinancials(jobs).map((item) => `
+    <article><span>${escapeHtml(item.status.replaceAll("_", " "))}</span><strong>${money(item.providerShare)}</strong><small>${item.count} job${item.count === 1 ? "" : "s"} | customer total ${money(item.customerTotal)}</small></article>
+  `).join("")}</section>`;
+}
+
 function renderJobs() {
   const jobs = factoryDashboardState.jobs.filter((job) => job.status !== "pending_payment");
   const active = jobs.filter((job) => ["order_made", "producing", "posted"].includes(job.status));
@@ -128,6 +166,7 @@ function renderJobs() {
       <button class="button button-primary" data-open-job="${escapeHtml(job.id)}" type="button">Open order</button>
     </article>
   `).join("") : '<div class="empty-state">No assigned jobs yet. Approved profiles with active capabilities become selectable by customers.</div>';
+  if (jobs.length) document.getElementById("factoryJobs").insertAdjacentHTML("afterbegin", billingStatusMarkup(jobs));
 }
 
 function eventTitle(event) {
@@ -146,11 +185,11 @@ function renderJobEvents(events) {
 function showJobDetail(jobId) {
   const job = factoryDashboardState.jobs.find((candidate) => candidate.id === jobId);
   if (!job) return;
-  const order = Array.isArray(job.orders) ? job.orders[0] : job.orders;
+  const order = jobOrder(job);
   const snapshot = Array.isArray(order?.order_customer_snapshots) ? order.order_customer_snapshots[0] : order?.order_customer_snapshots;
   const address = snapshot?.delivery_address || {};
   const events = Array.isArray(job.print_job_events) ? job.print_job_events : [];
-  const quote = Array.isArray(job.print_quotes) ? job.print_quotes[0] : job.print_quotes;
+  const quote = jobQuote(job);
   const actionPanel = job.status === "order_made" ? `
     <section class="job-action-panel">
       <h3>Accept or decline this job</h3>
@@ -182,6 +221,8 @@ function showJobDetail(jobId) {
       <p><span>Your payout</span><strong>${money(job.provider_share_pence)}</strong></p>
       <p><span>Forget About commission (10%)</span><strong>${money(job.commission_pence)}</strong></p>
       <p><span>Platform fee</span><strong>${money(job.platform_fee_pence)}</strong></p>
+      <p><span>VAT charged to customer</span><strong>${money(jobVatPence(job))}</strong></p>
+      <p><span>Customer total inc VAT</span><strong>${money(jobCustomerTotalPence(job))}</strong></p>
     </section>
     <section class="job-address"><h3>Delivery address</h3><p>${[snapshot?.customer_name, address.line1, address.line2, address.city || address.town, address.county, address.postal_code || address.postcode, address.country].filter(Boolean).map(escapeHtml).join("<br>") || "Address pending payment confirmation."}</p></section>
     <div class="job-downloads"><button class="button button-secondary" data-job-label="${escapeHtml(job.id)}">Open postage label</button><button class="button button-secondary" data-job-stl="${escapeHtml(job.id)}">Download STL</button></div>
@@ -210,6 +251,10 @@ function renderDashboard() {
   renderCapabilities();
   renderJobs();
   renderPayouts();
+  const payoutPanel = document.getElementById("factoryPayouts");
+  if (payoutPanel && factoryDashboardState.jobs.length) {
+    payoutPanel.insertAdjacentHTML("afterbegin", billingStatusMarkup(factoryDashboardState.jobs));
+  }
 }
 
 async function loadDashboard() {

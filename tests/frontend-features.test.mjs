@@ -203,8 +203,10 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(html, /id="includeBases"/);
   assert.match(html, /data-mode="storage"/);
   assert.match(html, /id="storageBoxSelect"/);
+  assert.match(html, /id="storageWallHeightPreset"/);
   assert.match(html, /name="storageInsertMagnets"/);
   assert.match(html, /id="storageIncludeBases"/);
+  assert.match(html, /id="catalogueSystemFilter"/);
   assert.match(html, /id="chooseEmailExport"/);
   assert.match(html, /meta name="checkout-api-url" content="https:\/\/forget-about-tray\.onrender\.com"/);
   assert.match(html, /data-account-page="profile"/);
@@ -243,6 +245,12 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(trayApp, /openStorageCatalogue/);
   assert.match(trayApp, /baseMagnetHoles/);
   assert.match(trayApp, /data-storage-field="baseShape"/);
+  assert.match(trayApp, /warhammer40000Catalogue/);
+  assert.match(trayApp, /Warhammer 40,000/);
+  assert.match(trayApp, /storageDepthPresets/);
+  assert.match(trayApp, /data-storage-move/);
+  assert.match(trayApp, /storageValidationMessages/);
+  assert.match(trayApp, /effectiveStoragePrintVolumeMm3/);
   assert.match(trayApp, /<ellipse cx="\$\{cx\}" cy="\$\{cy\}"/);
   assert.match(trayApp, /checkout\/print\/verify/);
   assert.match(factoryHtml, /id="capabilityGramsPerHour"/);
@@ -259,6 +267,9 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(makeupApp, /outerWidth = Math\.max\(\.\.\.sideLengths\) \+ state\.wallThickness \* 2/);
   assert.match(makeupApp, /state\.layoutMode === "pegboard"/);
   assert.match(makeupApp, /splitPegboardBoxes/);
+  assert.match(makeupApp, /function previewTransform\(metric\)/);
+  assert.match(makeupApp, /function visibleBoxFaces\(box, transform, colour, opacity, boxIndex\)/);
+  assert.match(makeupApp, /\.sort\(\(a, b\) => a\.depth - b\.depth\)/);
   assert.match(makeupApp, /Math\.max\(\.\.\.holderHeights, state\.handleHeight \/ 2\)/);
   assert.match(makeupApp, /data-complete-print-job/);
   assert.match(makeupApp, /data-send-job-message/);
@@ -266,4 +277,34 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(trayApp, /data-job-rating/);
   assert.match(trayApp, /data-send-job-message/);
   assert.match(factoryApp, /Decline job and refund buyer/);
+});
+
+test("site shell, footer, and prototype generators are present", async () => {
+  const [homeHtml, footerCss, footerJs, printHtml, paintHtml, stitchHtml, printJs, paintJs, stitchJs] = await Promise.all([
+    readFile(new URL("home.html", root), "utf8"),
+    readFile(new URL("site-wide.css", root), "utf8"),
+    readFile(new URL("site-wide.js", root), "utf8"),
+    readFile(new URL("print/index.html", root), "utf8"),
+    readFile(new URL("paint/index.html", root), "utf8"),
+    readFile(new URL("stitch/index.html", root), "utf8"),
+    readFile(new URL("print/print.js", root), "utf8"),
+    readFile(new URL("paint/paint.js", root), "utf8"),
+    readFile(new URL("stitch/stitch.js", root), "utf8")
+  ]);
+  assert.match(homeHtml, /href="\/tray"/);
+  assert.match(homeHtml, /href="\/print\/"/);
+  assert.match(homeHtml, /href="\/paint\/"/);
+  assert.match(homeHtml, /href="\/stitch\/"/);
+  assert.match(footerJs, /help@forget\.im/);
+  assert.match(footerJs, /Modern slavery statement/);
+  assert.match(footerCss, /\.site-footer/);
+  assert.match(printHtml, /Forget About Print/);
+  assert.match(printJs, /stlBase64/);
+  assert.match(printJs, /parseBinaryBounds/);
+  assert.match(paintHtml, /Forget About Paint/);
+  assert.match(paintJs, /paintConfig/);
+  assert.match(paintJs, /brushSlots/);
+  assert.match(stitchHtml, /Forget About Stitch/);
+  assert.match(stitchJs, /stitchConfig/);
+  assert.match(stitchJs, /threads: parseThreads/);
 });

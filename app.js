@@ -38,6 +38,12 @@ const reallyUsefulBoxes = [
   { key: "rub-84l", name: "84 litre Really Useful Box", internalLength: 605, internalWidth: 370, internalDepth: 355 },
   { key: "custom", name: "Custom box", internalLength: 348, internalWidth: 220, internalDepth: 68 }
 ];
+const storageDepthPresets = [
+  { key: "3", label: "Shallow - 3mm", wallHeight: 3 },
+  { key: "4", label: "Standard - 4mm", wallHeight: 4 },
+  { key: "6", label: "Deep - 6mm", wallHeight: 6 },
+  { key: "8", label: "Extra deep - 8mm", wallHeight: 8 }
+];
 const filamentColours = [
   ["pla", "Jade White", "#EBEEE9"], ["pla", "Beige", "#E8D5B5"], ["pla", "Yellow", "#F4D03F"],
   ["pla", "Orange", "#F07C24"], ["pla", "Red", "#C73A3A"], ["pla", "Magenta", "#C04473"],
@@ -188,6 +194,10 @@ function readStorageState() {
   storageState.boxInternalLength = custom ? Number(document.getElementById("storageBoxLength").value || selected.internalLength) : selected.internalLength;
   storageState.boxInternalWidth = custom ? Number(document.getElementById("storageBoxWidth").value || selected.internalWidth) : selected.internalWidth;
   storageState.boxInternalDepth = custom ? Number(document.getElementById("storageBoxDepth").value || selected.internalDepth) : selected.internalDepth;
+  const depthPreset = document.getElementById("storageWallHeightPreset").value;
+  storageState.wallHeight = depthPreset === "custom"
+    ? Number(document.getElementById("storageWallHeight").value || storageState.wallHeight)
+    : Number(depthPreset);
   storageState.insertMagnetHoles = document.querySelector('input[name="storageInsertMagnets"]:checked')?.value === "yes";
   storageState.includeBases = document.getElementById("storageIncludeBases").checked;
   storageState.baseMagnetHoles = document.querySelector('input[name="storageBaseMagnets"]:checked')?.value === "yes";
@@ -197,6 +207,7 @@ function readStorageState() {
   storageState.filamentName = filament.name;
   storageState.filamentHex = filament.hex;
   document.getElementById("storageCustomBoxFields").hidden = !custom;
+  document.getElementById("storageWallHeight").disabled = depthPreset !== "custom";
 }
 
 function storageInsertUnits() {
@@ -249,6 +260,10 @@ function populateStorageBoxes() {
   document.getElementById("storageBoxLength").value = storageState.boxInternalLength;
   document.getElementById("storageBoxWidth").value = storageState.boxInternalWidth;
   document.getElementById("storageBoxDepth").value = storageState.boxInternalDepth;
+  const preset = storageDepthPresets.find((item) => item.wallHeight === storageState.wallHeight);
+  document.getElementById("storageWallHeightPreset").value = preset?.key || "custom";
+  document.getElementById("storageWallHeight").value = storageState.wallHeight;
+  document.getElementById("storageWallHeight").disabled = Boolean(preset);
 }
 
 function loadStorageConfig(config) {
@@ -261,7 +276,8 @@ function loadStorageConfig(config) {
     boxInternalDepth: config.boxInternalDepth || 68,
     insertMagnetHoles: Boolean(config.insertMagnetHoles),
     includeBases: Boolean(config.includeBases),
-    baseMagnetHoles: Boolean(config.baseMagnetHoles)
+    baseMagnetHoles: Boolean(config.baseMagnetHoles),
+    wallHeight: Number(config.wallHeight || storageState.wallHeight || 4)
   };
   storageRecommendations = (config.insertUnits || []).map((unit, index) => ({
     id: unit.id || `stored-${index}`,
@@ -280,6 +296,10 @@ function loadStorageConfig(config) {
   document.getElementById("storageBoxLength").value = storageState.boxInternalLength;
   document.getElementById("storageBoxWidth").value = storageState.boxInternalWidth;
   document.getElementById("storageBoxDepth").value = storageState.boxInternalDepth;
+  const depthPreset = storageDepthPresets.find((item) => item.wallHeight === storageState.wallHeight);
+  document.getElementById("storageWallHeightPreset").value = depthPreset?.key || "custom";
+  document.getElementById("storageWallHeight").value = storageState.wallHeight;
+  document.getElementById("storageWallHeight").disabled = Boolean(depthPreset);
   document.querySelector(`input[name="storageInsertMagnets"][value="${storageState.insertMagnetHoles ? "yes" : "no"}"]`).checked = true;
   document.getElementById("storageIncludeBases").checked = storageState.includeBases;
   document.querySelector(`input[name="storageBaseMagnets"][value="${storageState.baseMagnetHoles ? "yes" : "no"}"]`).checked = true;
@@ -341,6 +361,19 @@ function storageInsertMetrics(config = storageInsertConfig()) {
     plateCount: split ? 4 : 1,
     volume: baseVolume + wallVolume + basesVolume
   };
+}
+
+function effectiveStoragePrintVolumeMm3(volume) {
+  return volume * 0.46;
+}
+
+function storageValidationMessages(config, metrics) {
+  const messages = [];
+  if (metrics.unplaced) messages.push(`${metrics.unplaced} slots do not fit this box`);
+  if (metrics.split) messages.push("prints as 4 jigsaw plates");
+  if (config.includeBases && metrics.slots.length) messages.push(`${metrics.slots.length} matching bases added`);
+  if (config.plateThickness + config.wallHeight > config.boxInternalDepth) messages.push("insert depth exceeds box depth");
+  return messages;
 }
 
 function buildBoxes(config = state) {
@@ -903,6 +936,49 @@ function renderPresets() {
 }
 
 const baseCatalogue = window.baseCatalogue || [];
+const warhammer40000Catalogue = [
+  ["Adeptus Astartes", "Intercessor Squad", 32, 32, "circle"],
+  ["Adeptus Astartes", "Tactical Squad", 32, 32, "circle"],
+  ["Adeptus Astartes", "Terminator Squad", 40, 40, "circle"],
+  ["Adeptus Astartes", "Jump Pack Intercessors", 32, 32, "circle"],
+  ["Adeptus Astartes", "Outriders", 90, 52, "oval"],
+  ["Adeptus Astartes", "Redemptor Dreadnought", 90, 90, "circle"],
+  ["Astra Militarum", "Infantry Squad", 25, 25, "circle"],
+  ["Astra Militarum", "Heavy Weapons Squad", 60, 60, "circle"],
+  ["Astra Militarum", "Sentinel", 80, 80, "circle"],
+  ["Tyranids", "Termagants", 28, 28, "circle"],
+  ["Tyranids", "Hormagaunts", 28, 28, "circle"],
+  ["Tyranids", "Genestealers", 32, 32, "circle"],
+  ["Tyranids", "Tyranid Warriors", 50, 50, "circle"],
+  ["Tyranids", "Carnifex", 105, 70, "oval"],
+  ["Orks", "Boyz", 32, 32, "circle"],
+  ["Orks", "Gretchin", 25, 25, "circle"],
+  ["Orks", "Nobz", 32, 32, "circle"],
+  ["Orks", "Deff Dread", 60, 60, "circle"],
+  ["Aeldari", "Guardian Defenders", 28, 28, "circle"],
+  ["Aeldari", "Wraithguard", 40, 40, "circle"],
+  ["Aeldari", "Wraithlord", 60, 60, "circle"],
+  ["Chaos Space Marines", "Legionaries", 32, 32, "circle"],
+  ["Chaos Space Marines", "Raptors", 32, 32, "circle"],
+  ["Chaos Space Marines", "Chaos Terminator Squad", 40, 40, "circle"]
+].map(([army, name, width, depth, baseShape]) => ({
+  id: `warhammer-40000-${normalizeText(`${army}-${name}`).replace(/\s+/g, "-")}`,
+  gameSystem: "Warhammer 40,000",
+  army,
+  name,
+  width,
+  depth,
+  baseShape,
+  aliases: [normalizeText(name)]
+}));
+
+function normaliseCatalogueEntry(entry, fallbackSystem) {
+  return {
+    ...entry,
+    gameSystem: entry.gameSystem || fallbackSystem,
+    baseShape: normalizeStorageBaseShape(entry.baseShape, entry.width, entry.depth)
+  };
+}
 
 function customCatalogue() {
   try {
@@ -916,15 +992,22 @@ function allCatalogueEntries() {
   const learned = Object.entries(learnedBases()).map(([key, entry]) => ({
     id: `learned-${key}`,
     army: "Learned bases",
+    gameSystem: "Learned bases",
     name: entry.name,
     width: entry.width,
     depth: entry.depth,
     baseShape: normalizeStorageBaseShape(entry.baseShape, entry.width, entry.depth),
     aliases: [key]
   }));
-  const entries = [...baseCatalogue, ...customCatalogue(), ...learned];
+  const entries = [
+    ...baseCatalogue.map((entry) => normaliseCatalogueEntry(entry, "Warhammer: The Old World")),
+    ...warhammer40000Catalogue,
+    ...customCatalogue().map((entry) => normaliseCatalogueEntry(entry, "Custom")),
+    ...learned
+  ];
   return entries.filter((entry, index) => entries.findIndex((candidate) => (
-    normalizeText(candidate.army || "") === normalizeText(entry.army || "")
+    normalizeText(candidate.gameSystem || "") === normalizeText(entry.gameSystem || "")
+    && normalizeText(candidate.army || "") === normalizeText(entry.army || "")
     && normalizeText(candidate.name) === normalizeText(entry.name)
   )) === index);
 }
@@ -991,12 +1074,20 @@ function catalogueArmies() {
   return [...new Set(allCatalogueEntries().map((entry) => entry.army || "Other"))].sort();
 }
 
+function catalogueSystems() {
+  return [...new Set(allCatalogueEntries().map((entry) => entry.gameSystem || "Other"))].sort();
+}
+
 function prepareCatalogue(context) {
   catalogueContext = context;
+  const systemFilter = document.getElementById("catalogueSystemFilter");
   const filter = document.getElementById("catalogueArmyFilter");
+  const currentSystem = systemFilter.value;
   const current = filter.value;
+  systemFilter.innerHTML = `<option value="">All systems</option>${catalogueSystems().map((system) => `<option value="${escapeHtml(system)}">${escapeHtml(system)}</option>`).join("")}`;
+  systemFilter.value = [...systemFilter.options].some((option) => option.value === currentSystem) ? currentSystem : "";
   filter.innerHTML = `<option value="">All armies</option>${catalogueArmies().map((army) => `<option value="${escapeHtml(army)}">${escapeHtml(army)}</option>`).join("")}`;
-  filter.value = current;
+  filter.value = [...filter.options].some((option) => option.value === current) ? current : "";
   document.getElementById("customUnitCountField").hidden = context === "single";
   document.getElementById("customUnitSubmit").textContent = context === "single" ? "Use this base" : context === "storage" ? "Add to insert" : "Add tray tab";
   renderCatalogue();
@@ -1024,14 +1115,16 @@ function applyCatalogueEntry(entry, count = 10) {
 
 function renderCatalogue() {
   const query = normalizeText(document.getElementById("catalogueSearch").value);
+  const system = document.getElementById("catalogueSystemFilter").value;
   const army = document.getElementById("catalogueArmyFilter").value;
   const entries = allCatalogueEntries().filter((entry) => (
-    (!army || entry.army === army)
-    && (!query || normalizeText(`${entry.name} ${entry.army || ""}`).includes(query))
+    (!system || entry.gameSystem === system)
+    && (!army || entry.army === army)
+    && (!query || normalizeText(`${entry.name} ${entry.army || ""} ${entry.gameSystem || ""}`).includes(query))
   ));
   document.getElementById("catalogueList").innerHTML = entries.map((entry) => `
     <article class="catalogue-entry ${catalogueContext === "single" ? "single-catalogue-entry" : ""}" data-catalogue-id="${escapeHtml(entry.id)}">
-      <div><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.army || "Other")} · ${entry.width} x ${entry.depth} mm</small></div>
+      <div><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(entry.army || "Other")} - ${entry.width} x ${entry.depth} mm</small><span class="catalogue-system">${escapeHtml(entry.gameSystem || "Other")}</span></div>
       ${catalogueContext === "single" ? "" : `<input type="number" min="2" max="500" value="10" aria-label="Model count for ${escapeHtml(entry.name)}">`}
       <button type="button">${catalogueContext === "single" ? "Use base" : "Add"}</button>
     </article>
@@ -1328,7 +1421,7 @@ function renderStorageRecommendations() {
   document.getElementById("storageOuterSize").textContent = `${config.boxInternalLength.toFixed(0)} x ${config.boxInternalWidth.toFixed(0)} mm`;
   document.getElementById("storageSlotCount").textContent = `${metrics.slots.length}${metrics.unplaced ? ` / ${metrics.slots.length + metrics.unplaced}` : ""}`;
   document.getElementById("storagePlateCount").textContent = String(metrics.plateCount);
-  document.getElementById("storageMaterialEstimate").textContent = `${(metrics.volume / 1000 * materialDensity).toFixed(1)} g`;
+  document.getElementById("storageMaterialEstimate").textContent = `${(effectiveStoragePrintVolumeMm3(metrics.volume) / 1000 * materialDensity).toFixed(1)} g`;
   drawStoragePreview(metrics, config);
   if (!storageRecommendations.length) {
     summary.textContent = `${storageParseReport.lines} lines checked - no units yet`;
@@ -1336,8 +1429,9 @@ function renderStorageRecommendations() {
     return;
   }
   const unknown = storageRecommendations.filter((item) => !item.matched).length;
-  summary.textContent = `${metrics.slots.length} slots placed${metrics.unplaced ? ` - ${metrics.unplaced} overflow` : ""}${unknown ? ` - ${unknown} need bases` : ""}`;
-  container.innerHTML = storageRecommendations.map((item) => {
+  const validation = storageValidationMessages(config, metrics);
+  summary.textContent = `${metrics.slots.length} slots placed${unknown ? ` - ${unknown} need bases` : ""}${validation.length ? ` - ${validation.join(" - ")}` : ""}`;
+  container.innerHTML = storageRecommendations.map((item, index) => {
     item.baseShape = normalizeStorageBaseShape(item.baseShape, item.baseSize, item.baseDepth);
     if (shapeLocksDepth(item.baseShape)) item.baseDepth = item.baseSize;
     const ready = item.baseSize > 0 && item.baseDepth > 0;
@@ -1351,7 +1445,11 @@ function renderStorageRecommendations() {
         <label>Shape<select data-storage-field="baseShape">${shapeOptions}</select></label>
         <label>${item.baseShape === "circle" ? "Diameter" : "Base W"}<input data-storage-field="baseSize" type="number" min="10" max="180" value="${item.baseSize || ""}"></label>
         <label>${depthLocked ? "Auto D" : item.baseShape === "oval" ? "Oval D" : "Base D"}<input data-storage-field="baseDepth" type="number" min="10" max="180" value="${item.baseDepth || ""}" ${depthLocked ? "disabled" : ""}></label>
-        <button type="button" data-storage-remove="${escapeHtml(item.id)}">Remove</button>
+        <div class="storage-unit-actions">
+          <button type="button" data-storage-move="-1" ${index === 0 ? "disabled" : ""}>Up</button>
+          <button type="button" data-storage-move="1" ${index === storageRecommendations.length - 1 ? "disabled" : ""}>Down</button>
+          <button type="button" data-storage-remove="${escapeHtml(item.id)}">Remove</button>
+        </div>
       </article>
     `;
   }).join("");
@@ -2011,12 +2109,13 @@ document.getElementById("sampleStorageArmy").addEventListener("click", () => {
 });
 document.getElementById("analyzeStorageArmy").addEventListener("click", analyzeStorageList);
 document.getElementById("storageBoxSelect").addEventListener("change", renderStorageRecommendations);
-["storageBoxLength", "storageBoxWidth", "storageBoxDepth", "storageIncludeBases"].forEach((id) => {
+["storageBoxLength", "storageBoxWidth", "storageBoxDepth", "storageWallHeightPreset", "storageWallHeight", "storageIncludeBases"].forEach((id) => {
   document.getElementById(id).addEventListener("input", renderStorageRecommendations);
   document.getElementById(id).addEventListener("change", renderStorageRecommendations);
 });
 document.querySelectorAll('input[name="storageInsertMagnets"], input[name="storageBaseMagnets"]').forEach((input) => input.addEventListener("change", renderStorageRecommendations));
 document.getElementById("catalogueSearch").addEventListener("input", renderCatalogue);
+document.getElementById("catalogueSystemFilter").addEventListener("change", renderCatalogue);
 document.getElementById("catalogueArmyFilter").addEventListener("change", renderCatalogue);
 document.getElementById("catalogueList").addEventListener("click", (event) => {
   const card = event.target.closest("[data-catalogue-id]");
@@ -2193,6 +2292,18 @@ function handleStorageUnitChange(event) {
 document.getElementById("storageResults").addEventListener("input", handleStorageUnitChange);
 document.getElementById("storageResults").addEventListener("change", handleStorageUnitChange);
 document.getElementById("storageResults").addEventListener("click", (event) => {
+  const moveDelta = Number(event.target.dataset.storageMove || 0);
+  if (moveDelta) {
+    const card = event.target.closest("[data-storage-unit]");
+    const index = storageRecommendations.findIndex((item) => item.id === card?.dataset.storageUnit);
+    const nextIndex = index + moveDelta;
+    if (index >= 0 && nextIndex >= 0 && nextIndex < storageRecommendations.length) {
+      const [item] = storageRecommendations.splice(index, 1);
+      storageRecommendations.splice(nextIndex, 0, item);
+      renderStorageRecommendations();
+    }
+    return;
+  }
   const removeId = event.target.dataset.storageRemove;
   if (!removeId) return;
   storageRecommendations = storageRecommendations.filter((item) => item.id !== removeId);
