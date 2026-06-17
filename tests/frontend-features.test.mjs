@@ -59,12 +59,13 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.match(html, /data-account-view="password"/);
   assert.match(html, /data-account-view="orders"/);
   assert.match(html, /data-oauth-provider="google"/);
-  assert.match(html, /data-oauth-provider="apple"/);
+  assert.match(html, /data-oauth-provider="apple"[^>]*hidden/);
   assert.match(html, /id="oauthStatus"/);
   assert.match(app, /accountService\.updatePassword\(password\)/);
   assert.match(app, /accountService\.signInWithProvider\(button\.dataset\.oauthProvider\)/);
   assert.match(app, /accountService\.providerAvailability\(\)/);
   assert.match(account, /async function signInWithProvider\(provider\)/);
+  assert.match(account, /enabledOauthProviders = new Set\(\["google"\]\)/);
   assert.match(account, /window\.MOVEMENT_TRAY_PUBLIC_CONFIG/);
   assert.match(account, /\/auth\/v1\/authorize/);
 
@@ -88,7 +89,7 @@ test("login surfaces keep shared account actions across brands and factory", asy
   for (const html of surfaces) {
     assert.match(html, /class="login-divider"/);
     assert.match(html, /data-oauth-provider="google"/);
-    assert.match(html, /data-oauth-provider="apple"/);
+    assert.match(html, /data-oauth-provider="apple"[^>]*hidden/);
     assert.match(html, /id="oauthStatus"/);
     assert.match(html, />Create account</);
     assert.match(html, />Forgot password</);
@@ -96,11 +97,13 @@ test("login surfaces keep shared account actions across brands and factory", asy
   }
   for (const source of [trayApp, makeupApp, factoryApp]) {
     assert.match(source, /accountService\.providerAvailability\(\)/);
+    assert.match(source, /button\.hidden = configured === false/);
     assert.match(source, /accountService\.signInWithProvider\(button\.dataset\.oauthProvider\)/);
     assert.match(source, /accountService\.resetPassword\(email\)/);
     assert.match(source, /accountService\.authType\(\) === "recovery"/);
   }
   assert.match(architecture, /Login surfaces must stay functionally and structurally identical/);
+  assert.match(architecture, /enabled OAuth providers/);
 });
 
 test("makeup and factory OAuth keep users on the originating app after provider sign-in", async () => {
@@ -164,7 +167,11 @@ test("makeup and factory OAuth keep users on the originating app after provider 
   };
 
   vm.runInNewContext(account, factoryContext);
-  await factoryContext.window.accountService.signInWithProvider("apple");
+  await assert.rejects(
+    factoryContext.window.accountService.signInWithProvider("apple"),
+    /Apple sign-in is not available yet/
+  );
+  await factoryContext.window.accountService.signInWithProvider("google");
 
   const factoryAuthUrl = new URL(factoryAssigned[0]);
   assert.equal(factoryAuthUrl.searchParams.get("redirect_to"), "https://app.test/factory/");

@@ -3,6 +3,7 @@
   const sessionKey = "forget-about-supabase-session";
   const activeSessionKey = "forget-about-active-session";
   const pendingAuthReturnKey = "forget-about-pending-auth-return";
+  const enabledOauthProviders = new Set(["google"]);
   let config = null;
   let session = null;
   let user = null;
@@ -94,11 +95,11 @@
       });
       const settings = await responseJson(response);
       return {
-        google: Boolean(settings.external?.google),
-        apple: Boolean(settings.external?.apple)
+        google: enabledOauthProviders.has("google") && Boolean(settings.external?.google),
+        apple: enabledOauthProviders.has("apple") && Boolean(settings.external?.apple)
       };
     } catch {
-      return { google: null, apple: null };
+      return { google: null, apple: false };
     }
   }
 
@@ -208,6 +209,7 @@
   }
 
   async function signInWithProvider(provider) {
+    if (!enabledOauthProviders.has(provider)) throw new Error(`${provider[0].toUpperCase() + provider.slice(1)} sign-in is not available yet.`);
     await loadConfig();
     const url = new URL(`${config.supabaseUrl}/auth/v1/authorize`);
     const returnUrl = appUrl();

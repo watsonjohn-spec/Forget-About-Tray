@@ -49,7 +49,7 @@ button { cursor: pointer; }
 .login-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .login-divider { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
 .login-divider::before, .login-divider::after { content: ""; height: 1px; background: var(--line); }
-.oauth-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.oauth-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .oauth-button { display: flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--line); background: white; }
 .oauth-button b { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--forest); font-size: 10px; }
 .oauth-button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
