@@ -51,7 +51,9 @@ main { width:min(1240px,calc(100% - 40px)); margin:0 auto; }
 .control-body,.quote-body { padding:18px; display:grid; gap:12px; }
 .field-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
 .field-grid.single-field { grid-template-columns:1fr; }
-.preview-stage { min-height:430px; padding:18px; display:grid; place-items:center; background:radial-gradient(circle,var(--white),var(--paper)); }
+.preview-stage { min-height:430px; padding:18px; position:relative; display:grid; place-items:center; touch-action:none; background:radial-gradient(circle,var(--white),var(--paper)); }
+.preview-angle-controls { position:absolute; top:12px; right:12px; z-index:2; display:flex; gap:5px; }
+.preview-angle-controls button { min-height:32px; padding:0 10px; border:1px solid var(--line); border-radius:7px; color:var(--ink); background:rgba(255,253,244,.9); font-size:9px; font-weight:850; }
 .preview-stage svg { width:100%; max-height:390px; }
 .stats { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid var(--line); }
 .stats div { padding:13px; border-right:1px solid var(--line); }

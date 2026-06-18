@@ -102,6 +102,20 @@ test("uploaded print, paint, and stitch generators are registered brands", () =>
   const stitchContext = resolvePlatformContext({ brandKey: "stitch" });
   assert.equal(stitchContext.brand.defaultGeneratorType, "stitch_organizer");
   assert.match(stitchContext.generator.renderStl({ threadRefs: ["310", "B5200", "666"], columns: 3 }), /^solid stitch_organizer/);
+  const stitchThreads = [
+    { number: "310", name: "Black" },
+    { number: "321", name: "Red" },
+    { number: "Blanc", name: "White" },
+    { number: "742", name: "Tangerine" }
+  ];
+  const flossCard = stitchContext.generator.buildGeometry({ style: "floss-card", threads: stitchThreads, slotWidth: 6, slotDepth: 12 });
+  const workstation = stitchContext.generator.buildGeometry({ style: "workstation-tray", threads: stitchThreads, columns: 2, slotWidth: 16, slotDepth: 34 });
+  assert.equal(flossCard.config.style, "floss-card");
+  assert.equal(workstation.config.style, "workstation-tray");
+  assert.ok(flossCard.boxes.length > 20);
+  assert.ok(workstation.outerWidth > flossCard.outerWidth);
+  assert.match(stitchContext.generator.safeFileName({ style: "floss-card", threads: stitchThreads }, "Threads"), /threads-floss-card-4-threads\.stl/);
+  assert.match(stitchContext.generator.describe({ style: "workstation-tray", threads: stitchThreads }), /bobbins, tools, and phone/);
 
   assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "print"));
   assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "paint"));
@@ -120,8 +134,16 @@ test("generator contract validates parameters and renders an STL", () => {
   const geometryWithBases = generator.buildGeometry({ ...source, includeBases: true });
   assert.ok(geometry.materialCm3 > 0);
   assert.equal(geometryWithBases.boxes.length, geometry.boxes.length + 12);
+  assert.equal(geometryWithBases.config.outputMode, "tray-and-bases");
+  assert.equal(geometryWithBases.baseLayout.placements.length, 12);
+  assert.ok(Math.max(geometryWithBases.outerWidth, geometryWithBases.outerDepth) / Math.min(geometryWithBases.outerWidth, geometryWithBases.outerDepth) < 1.25);
   assert.ok(geometryWithBases.materialCm3 > geometry.materialCm3);
   assert.match(generator.renderStl(parameters), /^solid movement_tray/);
+  const basesOnlyGeometry = generator.buildGeometry({ ...source, outputMode: "bases-only" });
+  assert.equal(basesOnlyGeometry.config.outputMode, "bases-only");
+  assert.equal(basesOnlyGeometry.boxes.length, 12);
+  assert.equal(basesOnlyGeometry.baseLayout.placements.length, 12);
+  assert.match(generator.safeFileName(basesOnlyGeometry.config, "Bases"), /bases-4x3-25mm-bases-only\.stl/);
   const roundGeometry = generator.buildGeometry({ ...source, baseShape: "circle", baseSize: 32, baseDepth: 99, includeBases: true });
   assert.equal(roundGeometry.config.baseShape, "circle");
   assert.equal(roundGeometry.config.baseDepth, 32);

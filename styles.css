@@ -332,6 +332,7 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .radio-panel strong { flex: 1 0 100%; color: var(--ink); font-size: 11px; }
 .radio-panel label { display: inline-flex !important; align-items: center; gap: 5px; text-transform: none !important; }
 .radio-panel input { width: 16px; height: 16px; accent-color: var(--forest); }
+.print-output-panel { margin-top: 16px; }
 .storage-switch { margin: 0; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: #fbfbf7; }
 .storage-preview-panel { padding: 14px; display: grid; gap: 12px; border-bottom: 1px solid var(--line); background: radial-gradient(circle, #f8fbef, #e3e9d8); }
 #storagePreview { width: 100%; min-height: 300px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.62); }

@@ -187,7 +187,43 @@
     return { transform, faces };
   }
 
+  function createTurntable(svg, render, options = {}) {
+    const initialYaw = Number.isFinite(options.yaw) ? options.yaw : -Math.PI / 4;
+    const initialPitch = Number.isFinite(options.pitch) ? options.pitch : Math.PI / 5;
+    const state = { yaw: initialYaw, pitch: initialPitch, drag: null };
+    const redraw = () => render({ yaw: state.yaw, pitch: state.pitch });
+    const clampPitch = (pitch) => clamp(pitch, options.minPitch || 0.12, options.maxPitch || 1.35);
+    svg.style.touchAction = "none";
+    svg.addEventListener("pointerdown", (event) => {
+      state.drag = { x: event.clientX, y: event.clientY, yaw: state.yaw, pitch: state.pitch };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    });
+    svg.addEventListener("pointermove", (event) => {
+      if (!state.drag) return;
+      state.yaw = state.drag.yaw + (event.clientX - state.drag.x) * (options.yawSpeed || 0.012);
+      state.pitch = clampPitch(state.drag.pitch - (event.clientY - state.drag.y) * (options.pitchSpeed || 0.008));
+      redraw();
+    });
+    ["pointerup", "pointercancel", "pointerleave"].forEach((name) => {
+      svg.addEventListener(name, () => { state.drag = null; });
+    });
+    return {
+      state,
+      render: redraw,
+      reset() {
+        state.yaw = initialYaw;
+        state.pitch = initialPitch;
+        redraw();
+      },
+      turn(delta) {
+        state.yaw += delta;
+        redraw();
+      }
+    };
+  }
+
   window.forgetPreview3d = {
+    createTurntable,
     createTransform,
     ellipsePolygon,
     mixColour,

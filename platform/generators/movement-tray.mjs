@@ -2,6 +2,7 @@ const generatorType = "movement_tray";
 const version = 1;
 const storageMode = "storage_insert";
 const insertBaseShapes = ["square", "rectangle", "circle", "oval"];
+const trayOutputModes = ["tray", "tray-and-bases", "bases-only"];
 
 function numberInRange(value, minimum, maximum) {
   const number = Number(value);
@@ -24,6 +25,20 @@ function insertShapeLocksDepth(shape) {
 function normalizeInsertBaseShape(shape, width, depth) {
   if (insertBaseShapes.includes(shape)) return shape;
   return Number(width) === Number(depth) ? "square" : "rectangle";
+}
+
+function normalizeTrayOutputMode(input = {}) {
+  if (trayOutputModes.includes(input.outputMode)) return input.outputMode;
+  if (input.basesOnly) return "bases-only";
+  return input.includeBases ? "tray-and-bases" : "tray";
+}
+
+function trayHasTray(config) {
+  return normalizeTrayOutputMode(config) !== "bases-only";
+}
+
+function trayIncludesBases(config) {
+  return normalizeTrayOutputMode(config) !== "tray";
 }
 
 function filamentParameters(input = {}) {
@@ -84,6 +99,7 @@ function normalizeParameters(input = {}) {
       ...filamentParameters(input)
     };
   }
+  const outputMode = normalizeTrayOutputMode(input);
   return {
     columns: numberInRange(input.columns, 1, 12),
     rows: numberInRange(input.rows, 1, 12),
@@ -100,7 +116,8 @@ function normalizeParameters(input = {}) {
     lipEnabled: Boolean(input.lipEnabled),
     notchesEnabled: Boolean(input.notchesEnabled),
     notchWidth: numberInRange(input.notchWidth ?? 2, 0.5, 20),
-    includeBases: Boolean(input.includeBases),
+    outputMode,
+    includeBases: outputMode !== "tray",
     ...filamentParameters(input)
   };
 }
@@ -120,53 +137,132 @@ function segmentSpans(count, baseSize, gap, clearance, notch) {
   return spans.filter((span) => span.length > 0.1);
 }
 
+function baseLayoutMetrics(count, columns, baseWidth, baseDepth, gap) {
+  const rows = Math.ceil(count / columns);
+  return {
+    columns,
+    rows,
+    width: columns * baseWidth + Math.max(0, columns - 1) * gap,
+    depth: rows * baseDepth + Math.max(0, rows - 1) * gap
+  };
+}
+
+function baseGridPlacements(count, grid, x, y, baseWidth, baseDepth, gap) {
+  return Array.from({ length: count }, (_, index) => ({
+    x: x + (index % grid.columns) * (baseWidth + gap),
+    y: y + Math.floor(index / grid.columns) * (baseDepth + gap),
+    w: baseWidth,
+    d: baseDepth
+  }));
+}
+
+function packedLooseBaseLayout(config, trayWidth = 0, trayDepth = 0) {
+  const count = Math.max(0, Math.round(config.columns) * Math.round(config.rows));
+  if (!count || !trayIncludesBases(config)) return { placements: [], width: trayWidth, depth: trayDepth };
+  const baseWidth = Number(config.baseSize);
+  const baseDepth = Number(config.baseDepth);
+  const baseGap = Math.max(1, Number(config.gap) || 0);
+  const spacing = Math.max(5, baseGap * 2);
+  const basesOnly = !trayHasTray(config);
+  let best = null;
+
+  if (basesOnly) {
+    for (let columns = 1; columns <= count; columns += 1) {
+      const grid = baseLayoutMetrics(count, columns, baseWidth, baseDepth, baseGap);
+      const score = Math.max(grid.width, grid.depth) * 8 + Math.abs(grid.width - grid.depth) * 2 + grid.width * grid.depth * 0.001;
+      if (!best || score < best.score) best = { score, grids: [{ count, grid, x: 0, y: 0 }], width: grid.width, depth: grid.depth };
+    }
+  } else {
+    for (let rightCount = 0; rightCount <= count; rightCount += 1) {
+      const bottomCount = count - rightCount;
+      const rightColumns = rightCount ? Array.from({ length: rightCount }, (_, index) => index + 1) : [0];
+      const bottomColumns = bottomCount ? Array.from({ length: bottomCount }, (_, index) => index + 1) : [0];
+      rightColumns.forEach((rightColumnCount) => {
+        const rightGrid = rightCount ? baseLayoutMetrics(rightCount, rightColumnCount, baseWidth, baseDepth, baseGap) : null;
+        if (rightGrid && rightGrid.depth > trayDepth + 0.01) return;
+        bottomColumns.forEach((bottomColumnCount) => {
+          const bottomGrid = bottomCount ? baseLayoutMetrics(bottomCount, bottomColumnCount, baseWidth, baseDepth, baseGap) : null;
+          const rightWidth = rightGrid ? spacing + rightGrid.width : 0;
+          const bottomDepth = bottomGrid ? spacing + bottomGrid.depth : 0;
+          const width = Math.max(trayWidth + rightWidth, bottomGrid?.width || 0);
+          const depth = Math.max(trayDepth + bottomDepth, rightGrid?.depth || 0);
+          const score = Math.max(width, depth) * 8 + Math.abs(width - depth) * 2 + width * depth * 0.001;
+          if (!best || score < best.score) {
+            best = {
+              score,
+              grids: [
+                ...(rightGrid ? [{ count: rightCount, grid: rightGrid, x: trayWidth + spacing, y: 0 }] : []),
+                ...(bottomGrid ? [{ count: bottomCount, grid: bottomGrid, x: 0, y: trayDepth + spacing }] : [])
+              ],
+              width,
+              depth
+            };
+          }
+        });
+      });
+    }
+  }
+
+  const placements = best?.grids.flatMap((gridConfig) => baseGridPlacements(
+    gridConfig.count,
+    gridConfig.grid,
+    gridConfig.x,
+    gridConfig.y,
+    baseWidth,
+    baseDepth,
+    baseGap
+  )) || [];
+  return { placements, width: best?.width || trayWidth, depth: best?.depth || trayDepth };
+}
+
 function buildTrayGeometry(config) {
   const innerWidth = config.columns * config.baseSize + (config.columns - 1) * config.gap + config.clearance * 2;
   const innerDepth = config.rows * config.baseDepth + (config.rows - 1) * config.gap + config.clearance * 2;
   const wall = config.lipEnabled ? config.wallThickness : 0;
-  const outerWidth = innerWidth + wall * 2;
-  const outerDepth = innerDepth + wall * 2;
-  const boxes = [{ x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: config.plateThickness }];
+  const trayOuterWidth = innerWidth + wall * 2;
+  const trayOuterDepth = innerDepth + wall * 2;
+  const hasTray = trayHasTray(config);
+  const boxes = hasTray ? [{ x: 0, y: 0, z: 0, w: trayOuterWidth, d: trayOuterDepth, h: config.plateThickness }] : [];
 
-  if (config.lipEnabled) {
+  if (hasTray && config.lipEnabled) {
     const z = config.plateThickness;
     const h = config.wallHeight;
     const notch = config.notchesEnabled ? Math.min(config.notchWidth, config.baseSize * 0.45) : 0;
     segmentSpans(config.columns, config.baseSize, config.gap, config.clearance, notch).forEach(({ start, length }) => {
       boxes.push({ x: wall + start, y: 0, z, w: length, d: wall, h });
-      boxes.push({ x: wall + start, y: outerDepth - wall, z, w: length, d: wall, h });
+      boxes.push({ x: wall + start, y: trayOuterDepth - wall, z, w: length, d: wall, h });
     });
     segmentSpans(config.rows, config.baseDepth, config.gap, config.clearance, notch).forEach(({ start, length }) => {
       boxes.push({ x: 0, y: wall + start, z, w: wall, d: length, h });
-      boxes.push({ x: outerWidth - wall, y: wall + start, z, w: wall, d: length, h });
+      boxes.push({ x: trayOuterWidth - wall, y: wall + start, z, w: wall, d: length, h });
     });
     boxes.push(
       { x: 0, y: 0, z, w: wall, d: wall, h },
-      { x: outerWidth - wall, y: 0, z, w: wall, d: wall, h },
-      { x: 0, y: outerDepth - wall, z, w: wall, d: wall, h },
-      { x: outerWidth - wall, y: outerDepth - wall, z, w: wall, d: wall, h }
+      { x: trayOuterWidth - wall, y: 0, z, w: wall, d: wall, h },
+      { x: 0, y: trayOuterDepth - wall, z, w: wall, d: wall, h },
+      { x: trayOuterWidth - wall, y: trayOuterDepth - wall, z, w: wall, d: wall, h }
     );
   }
 
+  const baseLayout = config.includeBases ? packedLooseBaseLayout(config, hasTray ? trayOuterWidth : 0, hasTray ? trayOuterDepth : 0) : null;
   if (config.includeBases) {
-    const baseStartY = outerDepth + 5;
-    for (let column = 0; column < config.columns; column += 1) {
-      for (let row = 0; row < config.rows; row += 1) {
-        boxes.push(...baseBoxesWithOptionalHole({
-          x: column * (config.baseSize + config.gap),
-          y: baseStartY + row * (config.baseDepth + config.gap),
-          z: 0,
-          w: config.baseSize,
-          d: config.baseDepth,
-          h: config.plateThickness,
-          shape: config.baseShape
-        }));
-      }
-    }
+    baseLayout.placements.forEach((placement) => {
+      boxes.push(...baseBoxesWithOptionalHole({
+        x: placement.x,
+        y: placement.y,
+        z: 0,
+        w: placement.w,
+        d: placement.d,
+        h: config.plateThickness,
+        shape: config.baseShape
+      }));
+    });
   }
 
   const materialCm3 = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
-  return { config, boxes, innerWidth, innerDepth, outerWidth, outerDepth, materialCm3 };
+  const outerWidth = hasTray ? Math.max(trayOuterWidth, baseLayout?.width || trayOuterWidth) : (baseLayout?.width || 0);
+  const outerDepth = hasTray ? Math.max(trayOuterDepth, baseLayout?.depth || trayOuterDepth) : (baseLayout?.depth || 0);
+  return { config, boxes, innerWidth, innerDepth, trayOuterWidth, trayOuterDepth, outerWidth, outerDepth, baseLayout, materialCm3 };
 }
 
 function rectWithVoids({ x = 0, y = 0, z = 0, w, d, h, voids = [] }) {
@@ -483,7 +579,8 @@ function safeFileName(parameters, name) {
   if (config.mode === storageMode) return `${prefix}-${config.boxKey || "box"}-insert${config.boxInternalLength > config.splitThreshold || config.boxInternalWidth > config.splitThreshold ? "-4-plates" : ""}.stl`;
   const base = config.baseSize === config.baseDepth ? `${config.baseSize}mm` : `${config.baseSize}x${config.baseDepth}mm`;
   const shapeSuffix = config.baseShape === "square" || config.baseShape === "rectangle" ? "" : `-${config.baseShape}`;
-  return `${prefix}-${config.columns}x${config.rows}-${base}${shapeSuffix}.stl`;
+  const outputSuffix = normalizeTrayOutputMode(config) === "bases-only" ? "-bases-only" : "";
+  return `${prefix}-${config.columns}x${config.rows}-${base}${shapeSuffix}${outputSuffix}.stl`;
 }
 
 function describe(parameters) {
@@ -491,6 +588,9 @@ function describe(parameters) {
   if (config.mode === storageMode) {
     const unitCount = config.insertUnits.reduce((sum, unit) => sum + unit.count * unit.copies, 0);
     return `${config.boxName} insert for ${unitCount} models${config.insertMagnetHoles ? ", with 2mm insert magnet holes" : ""}${config.includeBases ? ", including printable bases" : ""}`;
+  }
+  if (config.outputMode === "bases-only") {
+    return `${config.columns} x ${config.rows} printable ${config.baseSize} x ${config.baseDepth}mm bases`;
   }
   const shape = config.baseShape ? ` ${config.baseShape}` : "";
   return `${config.columns} x ${config.rows} tray for ${config.baseSize} x ${config.baseDepth}mm${shape} bases${config.includeBases ? ", including printable bases" : ""}`;

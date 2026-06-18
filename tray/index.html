@@ -114,7 +114,7 @@
               <div class="axis-control">
                 <label for="columns">Columns</label>
                 <div class="stepper">
-                  <button type="button" data-step="columns" data-direction="-1" aria-label="Decrease columns">âˆ’</button>
+                  <button type="button" data-step="columns" data-direction="-1" aria-label="Decrease columns">-</button>
                   <output id="columnsOutput">4</output>
                   <button type="button" data-step="columns" data-direction="1" aria-label="Increase columns">+</button>
                 </div>
@@ -123,7 +123,7 @@
               <div class="axis-control">
                 <label for="rows">Rows</label>
                 <div class="stepper">
-                  <button type="button" data-step="rows" data-direction="-1" aria-label="Decrease rows">âˆ’</button>
+                  <button type="button" data-step="rows" data-direction="-1" aria-label="Decrease rows">-</button>
                   <output id="rowsOutput">3</output>
                   <button type="button" data-step="rows" data-direction="1" aria-label="Increase rows">+</button>
                 </div>
@@ -222,11 +222,12 @@
               <input id="notchesEnabled" type="checkbox" checked />
               <i aria-hidden="true"></i>
             </label>
-            <label class="switch-row">
-              <span><strong>Include printable bases</strong><small>Add matching model bases to the STL export</small></span>
-              <input id="includeBases" type="checkbox" />
-              <i aria-hidden="true"></i>
-            </label>
+            <div class="radio-panel print-output-panel" role="radiogroup" aria-label="Print output">
+              <strong>Print output</strong>
+              <label><input type="radio" name="printOutputMode" value="tray" checked> Tray only</label>
+              <label><input type="radio" name="printOutputMode" value="tray-and-bases"> Tray + bases</label>
+              <label><input type="radio" name="printOutputMode" value="bases-only"> Bases only</label>
+            </div>
             <div class="two-fields conditional" id="lipFields">
               <label class="number-field">
                 <span>Wall thickness</span>

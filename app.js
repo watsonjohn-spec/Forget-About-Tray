@@ -12,6 +12,7 @@ const defaults = {
   wallThickness: 1.6,
   notchesEnabled: true,
   notchWidth: 2,
+  outputMode: "tray",
   includeBases: false,
   filamentKey: "pla-bambu-green",
   filamentMaterial: "pla",
@@ -23,7 +24,7 @@ const numericKeys = [
   "columns", "rows", "baseSize", "baseDepth", "gap", "clearance", "plateThickness",
   "wallHeight", "wallThickness", "notchWidth"
 ];
-const checkboxKeys = ["lipEnabled", "notchesEnabled", "includeBases"];
+const checkboxKeys = ["lipEnabled", "notchesEnabled"];
 const rectangleBaseLengths = [50, 60, 75, 100, 150];
 const circleBaseDiameters = [25, 28.5, 32, 40, 50, 60, 80, 90, 100, 130, 160];
 const ovalBaseSizes = [
@@ -36,6 +37,7 @@ const ovalBaseSizes = [
 ];
 const storageInsertMode = "storage_insert";
 const storageBaseShapes = ["square", "rectangle", "circle", "oval"];
+const trayOutputModes = ["tray", "tray-and-bases", "bases-only"];
 const reallyUsefulBoxes = [
   { key: "rub-4l", name: "4 litre Really Useful Box", internalLength: 348, internalWidth: 220, internalDepth: 68 },
   { key: "rub-9l", name: "9 litre Really Useful Box", internalLength: 335, internalWidth: 210, internalDepth: 140 },
@@ -113,6 +115,98 @@ function storageBaseArea(width, depth, shape) {
   return isRoundBaseShape(shape) ? Math.PI * (width / 2) * (depth / 2) : width * depth;
 }
 
+function normalizeTrayOutputMode(config = {}) {
+  if (trayOutputModes.includes(config.outputMode)) return config.outputMode;
+  if (config.basesOnly) return "bases-only";
+  return config.includeBases ? "tray-and-bases" : "tray";
+}
+
+function trayHasTray(config = state) {
+  return normalizeTrayOutputMode(config) !== "bases-only";
+}
+
+function trayIncludesBases(config = state) {
+  return normalizeTrayOutputMode(config) !== "tray";
+}
+
+function baseLayoutMetrics(count, columns, baseWidth, baseDepth, gap) {
+  const rows = Math.ceil(count / columns);
+  return {
+    columns,
+    rows,
+    width: columns * baseWidth + Math.max(0, columns - 1) * gap,
+    depth: rows * baseDepth + Math.max(0, rows - 1) * gap
+  };
+}
+
+function baseGridPlacements(count, grid, x, y, baseWidth, baseDepth, gap) {
+  return Array.from({ length: count }, (_, index) => ({
+    x: x + (index % grid.columns) * (baseWidth + gap),
+    y: y + Math.floor(index / grid.columns) * (baseDepth + gap),
+    w: baseWidth,
+    d: baseDepth
+  }));
+}
+
+function packedLooseBaseLayout(config, trayWidth = 0, trayDepth = 0) {
+  const count = Math.max(0, Math.round(config.columns) * Math.round(config.rows));
+  if (!count || !trayIncludesBases(config)) return { placements: [], width: trayWidth, depth: trayDepth };
+  const baseWidth = Number(config.baseSize);
+  const baseDepth = Number(config.baseDepth);
+  const baseGap = Math.max(1, Number(config.gap) || 0);
+  const spacing = Math.max(5, baseGap * 2);
+  const basesOnly = !trayHasTray(config);
+  let best = null;
+
+  if (basesOnly) {
+    for (let columns = 1; columns <= count; columns += 1) {
+      const grid = baseLayoutMetrics(count, columns, baseWidth, baseDepth, baseGap);
+      const score = Math.max(grid.width, grid.depth) * 8 + Math.abs(grid.width - grid.depth) * 2 + grid.width * grid.depth * 0.001;
+      if (!best || score < best.score) best = { score, grids: [{ count, grid, x: 0, y: 0 }], width: grid.width, depth: grid.depth };
+    }
+  } else {
+    for (let rightCount = 0; rightCount <= count; rightCount += 1) {
+      const bottomCount = count - rightCount;
+      const rightColumns = rightCount ? Array.from({ length: rightCount }, (_, index) => index + 1) : [0];
+      const bottomColumns = bottomCount ? Array.from({ length: bottomCount }, (_, index) => index + 1) : [0];
+      rightColumns.forEach((rightColumnCount) => {
+        const rightGrid = rightCount ? baseLayoutMetrics(rightCount, rightColumnCount, baseWidth, baseDepth, baseGap) : null;
+        if (rightGrid && rightGrid.depth > trayDepth + 0.01) return;
+        bottomColumns.forEach((bottomColumnCount) => {
+          const bottomGrid = bottomCount ? baseLayoutMetrics(bottomCount, bottomColumnCount, baseWidth, baseDepth, baseGap) : null;
+          const rightWidth = rightGrid ? spacing + rightGrid.width : 0;
+          const bottomDepth = bottomGrid ? spacing + bottomGrid.depth : 0;
+          const width = Math.max(trayWidth + rightWidth, bottomGrid?.width || 0);
+          const depth = Math.max(trayDepth + bottomDepth, rightGrid?.depth || 0);
+          const score = Math.max(width, depth) * 8 + Math.abs(width - depth) * 2 + width * depth * 0.001;
+          if (!best || score < best.score) {
+            best = {
+              score,
+              grids: [
+                ...(rightGrid ? [{ count: rightCount, grid: rightGrid, x: trayWidth + spacing, y: 0 }] : []),
+                ...(bottomGrid ? [{ count: bottomCount, grid: bottomGrid, x: 0, y: trayDepth + spacing }] : [])
+              ],
+              width,
+              depth
+            };
+          }
+        });
+      });
+    }
+  }
+
+  const placements = best?.grids.flatMap((gridConfig) => baseGridPlacements(
+    gridConfig.count,
+    gridConfig.grid,
+    gridConfig.x,
+    gridConfig.y,
+    baseWidth,
+    baseDepth,
+    baseGap
+  )) || [];
+  return { placements, width: best?.width || trayWidth, depth: best?.depth || trayDepth };
+}
+
 function storageSlotWallVolume(slot, config) {
   const t = config.wallThickness;
   if (isRoundBaseShape(slot.baseShape)) {
@@ -166,6 +260,8 @@ function readState() {
     input.value = state[key];
   });
   checkboxKeys.forEach((key) => { state[key] = inputs[key].checked; });
+  state.outputMode = normalizeTrayOutputMode({ outputMode: document.querySelector('input[name="printOutputMode"]:checked')?.value });
+  state.includeBases = trayIncludesBases(state);
   const filament = filamentColours.find((colour) => colour.key === filamentColourInput.value) || filamentColours[0];
   state.filamentKey = filament.key;
   state.filamentMaterial = filament.material;
@@ -180,10 +276,13 @@ function readState() {
 
 function writeState(nextState) {
   state = { ...defaults, ...nextState };
+  state.outputMode = normalizeTrayOutputMode(nextState);
+  state.includeBases = trayIncludesBases(state);
   state.baseShape = normalizeStorageBaseShape(nextState.baseShape, state.baseSize, state.baseDepth);
   state.baseDepth = baseDepthForShape(state.baseShape, state.baseSize, state.baseDepth);
   numericKeys.forEach((key) => { inputs[key].value = state[key]; });
   checkboxKeys.forEach((key) => { inputs[key].checked = state[key]; });
+  document.querySelector(`input[name="printOutputMode"][value="${state.outputMode}"]`).checked = true;
   filamentColourInput.value = state.filamentKey || defaults.filamentKey;
   document.querySelectorAll("[data-base-shape]").forEach((button) => button.classList.toggle("active", button.dataset.baseShape === state.baseShape));
   render();
@@ -192,16 +291,22 @@ function writeState(nextState) {
 function trayMetrics(config = state) {
   if (config.mode === storageInsertMode) return storageInsertMetrics(config);
   config = { ...defaults, ...config };
+  config.outputMode = normalizeTrayOutputMode(config);
+  config.includeBases = trayIncludesBases(config);
+  const hasTray = trayHasTray(config);
   const innerWidth = config.columns * config.baseSize + (config.columns - 1) * config.gap + config.clearance * 2;
   const innerDepth = config.rows * config.baseDepth + (config.rows - 1) * config.gap + config.clearance * 2;
   const wall = config.lipEnabled ? config.wallThickness : 0;
-  const outerWidth = innerWidth + wall * 2;
-  const outerDepth = innerDepth + wall * 2;
-  const height = config.plateThickness + (config.lipEnabled ? config.wallHeight : 0);
-  const boxes = buildBoxes(config);
+  const trayOuterWidth = innerWidth + wall * 2;
+  const trayOuterDepth = innerDepth + wall * 2;
+  const baseLayout = config.includeBases ? packedLooseBaseLayout(config, hasTray ? trayOuterWidth : 0, hasTray ? trayOuterDepth : 0) : null;
+  const outerWidth = hasTray ? Math.max(trayOuterWidth, baseLayout?.width || trayOuterWidth) : (baseLayout?.width || 0);
+  const outerDepth = hasTray ? Math.max(trayOuterDepth, baseLayout?.depth || trayOuterDepth) : (baseLayout?.depth || 0);
+  const height = hasTray ? config.plateThickness + (config.lipEnabled ? config.wallHeight : 0) : config.plateThickness;
+  const boxes = hasTray ? buildBoxes(config) : [];
   const baseVolume = config.includeBases ? config.columns * config.rows * storageBaseArea(config.baseSize, config.baseDepth, config.baseShape) * config.plateThickness : 0;
   const volume = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) + baseVolume;
-  return { innerWidth, innerDepth, outerWidth, outerDepth, height, boxes, volume };
+  return { innerWidth, innerDepth, trayOuterWidth, trayOuterDepth, outerWidth, outerDepth, height, boxes, baseLayout, volume };
 }
 
 function readStorageState() {
@@ -459,7 +564,7 @@ function render() {
   document.getElementById("materialEstimate").textContent = `${(metrics.volume / 1000 * materialDensity).toFixed(1)} g`;
   document.getElementById("bodyCount").textContent = state.columns * state.rows;
   document.getElementById("exportFilename").textContent = fileName();
-  document.getElementById("lipFields").classList.toggle("disabled", !state.lipEnabled);
+  document.getElementById("lipFields").classList.toggle("disabled", !state.lipEnabled || !trayHasTray(state));
   document.getElementById("baseDepthField").hidden = shapeLocksDepth(state.baseShape);
   document.querySelectorAll("[data-base-shape]").forEach((button) => button.classList.toggle("active", button.dataset.baseShape === state.baseShape));
   document.querySelectorAll("[data-base]").forEach((button) => {
@@ -477,10 +582,9 @@ function shadeHex(hex, amount) {
 
 function drawPreview(metrics) {
   const svg = document.getElementById("trayPreview");
-  const basesDepth = state.includeBases ? 5 + state.rows * state.baseDepth + (state.rows - 1) * state.gap : 0;
-  const previewDepth = metrics.outerDepth + basesDepth;
-  const w = metrics.outerWidth;
-  const d = metrics.outerDepth;
+  const hasTray = trayHasTray(state);
+  const w = metrics.trayOuterWidth || 0;
+  const d = metrics.trayOuterDepth || 0;
   const base = state.plateThickness;
   const boxes = [...metrics.boxes];
   const cylinders = [];
@@ -488,31 +592,27 @@ function drawPreview(metrics) {
   const wall = state.lipEnabled ? state.wallThickness : 0;
   const xStart = wall + state.clearance;
   const yStart = wall + state.clearance;
-  if (state.includeBases) {
-    for (let column = 0; column < state.columns; column += 1) {
-      for (let row = 0; row < state.rows; row += 1) {
-        const x1 = column * (state.baseSize + state.gap);
-        const y1 = d + 5 + row * (state.baseDepth + state.gap);
-        if (isRoundBaseShape(state.baseShape)) {
-          cylinders.push({
-            cx: x1 + state.baseSize / 2,
-            cy: y1 + state.baseDepth / 2,
-            z: 0,
-            rx: state.baseSize / 2,
-            ry: state.baseDepth / 2,
-            h: state.plateThickness,
-            previewClass: "preview-loose-base"
-          });
-        } else {
-          boxes.push({ x: x1, y: y1, z: 0, w: state.baseSize, d: state.baseDepth, h: state.plateThickness, previewClass: "preview-loose-base" });
-        }
+  if (state.includeBases && metrics.baseLayout?.placements?.length) {
+    metrics.baseLayout.placements.forEach((placement) => {
+      if (isRoundBaseShape(state.baseShape)) {
+        cylinders.push({
+          cx: placement.x + placement.w / 2,
+          cy: placement.y + placement.d / 2,
+          z: 0,
+          rx: placement.w / 2,
+          ry: placement.d / 2,
+          h: state.plateThickness,
+          previewClass: "preview-loose-base"
+        });
+      } else {
+        boxes.push({ x: placement.x, y: placement.y, z: 0, w: placement.w, d: placement.d, h: state.plateThickness, previewClass: "preview-loose-base" });
       }
-    }
+    });
   }
 
   window.forgetPreview3d.renderBoxes(svg, {
-    width: Math.max(w, state.columns * state.baseSize + Math.max(0, state.columns - 1) * state.gap),
-    depth: previewDepth,
+    width: metrics.outerWidth,
+    depth: metrics.outerDepth,
     height: metrics.height,
     yaw: previewYaw,
     pitch: previewPitch,
@@ -521,6 +621,7 @@ function drawPreview(metrics) {
     boxes,
     cylinders,
     overlay: (transform) => {
+      if (!hasTray) return "";
       const filamentDark = window.forgetPreview3d.shadeColour(state.filamentHex, -70);
       let markup = "";
       for (let column = 1; column < state.columns; column += 1) {
@@ -550,7 +651,8 @@ function fileName(config = state, prefix = "movement-tray") {
     : `${formatNumber(config.baseSize)}x${formatNumber(config.baseDepth)}mm`;
   const shape = normalizeStorageBaseShape(config.baseShape, config.baseSize, config.baseDepth);
   const shapeSuffix = shape === "square" || shape === "rectangle" ? "" : `-${shape}`;
-  return `${slugify(prefix)}-${config.columns}x${config.rows}-${base}${shapeSuffix}.stl`;
+  const outputSuffix = normalizeTrayOutputMode(config) === "bases-only" ? "-bases-only" : "";
+  return `${slugify(prefix)}-${config.columns}x${config.rows}-${base}${shapeSuffix}${outputSuffix}.stl`;
 }
 
 function formatNumber(value) {
@@ -680,13 +782,16 @@ async function showPrintOrder() {
   document.getElementById("exportChoices").hidden = true;
   document.getElementById("unlockExports").hidden = true;
   document.getElementById("printOrder").hidden = false;
+  const outputMode = normalizeTrayOutputMode(pendingExportConfig);
+  const outputLabel = outputMode === "bases-only" ? "Bases only" : outputMode === "tray-and-bases" ? "Tray + bases" : "Tray only";
   document.getElementById("printOrderSummary").innerHTML = pendingExportConfig.mode === storageInsertMode ? `
     <div><dt>Insert</dt><dd>${escapeHtml(pendingExportConfig.boxName)}</dd></div>
     <div><dt>Slots</dt><dd>${metrics.slots.length}${metrics.unplaced ? ` placed, ${metrics.unplaced} overflow` : ""}</dd></div>
     <div><dt>Footprint</dt><dd>${metrics.assembledWidth.toFixed(1)} x ${metrics.assembledDepth.toFixed(1)} mm</dd></div>
     <div><dt>Print plates</dt><dd>${metrics.plateCount}</dd></div>
   ` : `
-    <div><dt>Tray</dt><dd>${pendingExportConfig.columns} x ${pendingExportConfig.rows}</dd></div>
+    <div><dt>Output</dt><dd>${outputLabel}</dd></div>
+    <div><dt>Formation</dt><dd>${pendingExportConfig.columns} x ${pendingExportConfig.rows}</dd></div>
     <div><dt>Base</dt><dd>${pendingExportConfig.baseSize} x ${pendingExportConfig.baseDepth} mm</dd></div>
     <div><dt>Outer size</dt><dd>${metrics.outerWidth.toFixed(1)} x ${metrics.outerDepth.toFixed(1)} mm</dd></div>
   `;
@@ -1867,6 +1972,7 @@ async function initializeAccount() {
 }
 
 Object.values(inputs).forEach((input) => input.addEventListener("input", render));
+document.querySelectorAll('input[name="printOutputMode"]').forEach((input) => input.addEventListener("change", render));
 filamentColourInput.addEventListener("change", () => {
   render();
   if (document.body.dataset.activeMode === "storage") renderStorageRecommendations();

@@ -6,6 +6,8 @@ function number(id) {
   return Number(value(id) || 0);
 }
 
+let previewTurntable = null;
+
 function paintConfig() {
   return {
     paintType: value("paintType"),
@@ -74,13 +76,15 @@ function paintPreviewGeometry(config) {
   return { boxes, cylinders, outerWidth, outerDepth, height: config.plateThickness + config.wallHeight, rows, diameter };
 }
 
-function renderPaintPreview() {
+function renderPaintPreview(view = previewTurntable?.state || {}) {
   const config = paintConfig();
   const geometry = paintPreviewGeometry(config);
   window.forgetPreview3d.renderBoxes(document.getElementById("preview"), {
     width: geometry.outerWidth,
     depth: geometry.outerDepth,
     height: geometry.height,
+    yaw: view.yaw,
+    pitch: view.pitch,
     colour: config.filamentHex,
     boxes: geometry.boxes,
     cylinders: geometry.cylinders,
@@ -92,7 +96,7 @@ function renderPaintPreview() {
   document.getElementById("materialStat").textContent = `${Math.max(20, Math.round(config.paintCount * geometry.diameter * .18 + config.brushSlots * 1.5))} g est.`;
 }
 
-document.querySelectorAll("input,select").forEach((input) => input.addEventListener("input", renderPaintPreview));
+document.querySelectorAll("input,select").forEach((input) => input.addEventListener("input", () => previewTurntable.render()));
 document.getElementById("quoteButton").addEventListener("click", async () => {
   try {
     await window.generatorQuotes.request(paintConfig(), value("projectName"));
@@ -103,4 +107,7 @@ document.getElementById("quoteButton").addEventListener("click", async () => {
 });
 
 window.generatorAuth.initAuth().catch((error) => { document.getElementById("loginError").textContent = error.message; });
-renderPaintPreview();
+previewTurntable = window.forgetPreview3d.createTurntable(document.getElementById("preview"), renderPaintPreview);
+document.querySelectorAll("[data-preview-turn]").forEach((button) => button.addEventListener("click", () => previewTurntable.turn(Number(button.dataset.previewTurn) * Math.PI / 8)));
+document.querySelector("[data-preview-reset]").addEventListener("click", () => previewTurntable.reset());
+previewTurntable.render();

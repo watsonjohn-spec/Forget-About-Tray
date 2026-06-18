@@ -1,6 +1,7 @@
 let stlBase64 = "";
 let uploadedFileName = "";
 let stlMesh = null;
+let previewTurntable = null;
 const maxPreviewTriangles = 2400;
 const filamentColours = [
   { key: "all", name: "Any standard colour", hex: "#8b9499" },
@@ -147,11 +148,13 @@ function parseStlMesh(buffer) {
   return parseAsciiStlMesh(text);
 }
 
-function renderStlMeshPreview(svg, mesh, colour) {
+function renderStlMeshPreview(svg, mesh, colour, view = {}) {
   const transform = window.forgetPreview3d.createTransform({
     width: Math.max(1, mesh.width),
     depth: Math.max(1, mesh.depth),
     height: Math.max(1, mesh.height),
+    yaw: view.yaw,
+    pitch: view.pitch,
     padding: 30
   });
   const stride = Math.max(1, Math.ceil(mesh.triangles.length / maxPreviewTriangles));
@@ -184,19 +187,21 @@ function renderStlMeshPreview(svg, mesh, colour) {
   svg.innerHTML = `<ellipse cx="380" cy="378" rx="${shadowWidth.toFixed(1)}" ry="24" fill="#1e2b33" opacity=".14"/>${triangles.map((triangle) => triangle.markup).join("")}${skipped}`;
 }
 
-function drawPreview() {
+function drawPreview(view = previewTurntable?.state || {}) {
   const svg = document.getElementById("preview");
   const width = Math.max(1, readNumber("outerWidth"));
   const depth = Math.max(1, readNumber("outerDepth"));
   const height = Math.max(1, readNumber("height"));
   const colour = selectedFilamentColour().hex;
   if (stlMesh) {
-    renderStlMeshPreview(svg, stlMesh, colour);
+    renderStlMeshPreview(svg, stlMesh, colour, view);
   } else {
   window.forgetPreview3d.renderBoxes(svg, {
     width,
     depth,
     height,
+    yaw: view.yaw,
+    pitch: view.pitch,
     colour,
     boxes: [{ x: 0, y: 0, z: 0, w: width, d: depth, h: height, previewClass: "uploaded-print-envelope" }],
     overlay: (transform) => window.forgetPreview3d.textLabel(
@@ -248,7 +253,7 @@ async function loadStl(file) {
   document.getElementById("uploadStatus").textContent = stlMesh
     ? `${file.name} loaded. ${stlMesh.triangles.length} facets rendered in the preview.`
     : `${file.name} loaded. Check the dimensions and estimated grams before quoting.`;
-  drawPreview();
+  previewTurntable.render();
 }
 
 function populatePrinterPreference(quotes) {
@@ -276,9 +281,9 @@ document.getElementById("stlFile").addEventListener("change", async (event) => {
 
 ["outerWidth", "outerDepth", "height"].forEach((id) => document.getElementById(id).addEventListener("input", () => {
   stlMesh = null;
-  drawPreview();
+  previewTurntable.render();
 }));
-["estimatedWeightGrams", "filamentMaterial", "filamentColour"].forEach((id) => document.getElementById(id).addEventListener("input", drawPreview));
+["estimatedWeightGrams", "filamentMaterial", "filamentColour"].forEach((id) => document.getElementById(id).addEventListener("input", () => previewTurntable.render()));
 document.getElementById("printerPreference").addEventListener("change", (event) => {
   window.generatorQuotes.setPrinterFilter?.(event.target.value);
   document.getElementById("printerPreferenceStatus").textContent = event.target.value
@@ -297,4 +302,7 @@ document.getElementById("quoteButton").addEventListener("click", async () => {
 });
 
 window.generatorAuth.initAuth().catch((error) => { document.getElementById("loginError").textContent = error.message; });
-drawPreview();
+previewTurntable = window.forgetPreview3d.createTurntable(document.getElementById("preview"), drawPreview);
+document.querySelectorAll("[data-preview-turn]").forEach((button) => button.addEventListener("click", () => previewTurntable.turn(Number(button.dataset.previewTurn) * Math.PI / 8)));
+document.querySelector("[data-preview-reset]").addEventListener("click", () => previewTurntable.reset());
+previewTurntable.render();
