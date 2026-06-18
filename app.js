@@ -63,11 +63,28 @@ const filamentColours = [
   ["pla", "Gray", "#8A8D8F"], ["pla", "Silver", "#A6A8A9"], ["pla", "Black", "#202223"],
   ["petg", "White", "#F1F2EE"], ["petg", "Yellow", "#F3C623"], ["petg", "Orange", "#E87524"],
   ["petg", "Red", "#B93636"], ["petg", "Blue", "#32658C"], ["petg", "Green", "#398052"],
-  ["petg", "Gray", "#777C7D"], ["petg", "Black", "#1C1E1F"]
+  ["petg", "Gray", "#777C7D"], ["petg", "Black", "#1C1E1F"],
+  ["abs", "Natural", "#E6DFCF"], ["abs", "Gray", "#777C7D"], ["abs", "Black", "#202223"]
 ].map(([material, name, hex]) => ({ material, name, hex, key: `${material}-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}` }));
 const inputs = Object.fromEntries([...numericKeys, ...checkboxKeys].map((key) => [key, document.getElementById(key)]));
 const filamentColourInput = document.getElementById("filamentColour");
-filamentColourInput.innerHTML = filamentColours.filter((colour) => colour.material === "pla").map((colour) => `<option value="${colour.key}" ${colour.key === defaults.filamentKey ? "selected" : ""}>${colour.name}</option>`).join("");
+const filamentMaterialInput = document.getElementById("filamentMaterial");
+const storageFilamentColourInput = document.getElementById("storageFilamentColour");
+const storageFilamentMaterialInput = document.getElementById("storageFilamentMaterial");
+function populateStorageFilamentControls(material = "pla", selectedKey = "") {
+  if (!storageFilamentColourInput || !storageFilamentMaterialInput) return;
+  storageFilamentMaterialInput.value = material;
+  const options = filamentColours.filter((colour) => colour.material === material);
+  storageFilamentColourInput.innerHTML = options.map((colour) => `<option value="${colour.key}">${colour.name}</option>`).join("");
+  storageFilamentColourInput.value = options.some((colour) => colour.key === selectedKey) ? selectedKey : options[0]?.key || "";
+}
+function populateFilamentColours(material = "pla", selectedKey = "") {
+  const options = filamentColours.filter((colour) => colour.material === material);
+  filamentColourInput.innerHTML = options.map((colour) => `<option value="${colour.key}">${colour.name}</option>`).join("");
+  filamentColourInput.value = options.some((colour) => colour.key === selectedKey) ? selectedKey : options[0]?.key || "";
+  populateStorageFilamentControls(material, filamentColourInput.value);
+}
+populateFilamentColours(defaults.filamentMaterial, defaults.filamentKey);
 let state = { ...defaults };
 let armyRecommendations = [];
 let activeArmyRecommendationId = "";
@@ -262,6 +279,7 @@ function readState() {
   checkboxKeys.forEach((key) => { state[key] = inputs[key].checked; });
   state.outputMode = normalizeTrayOutputMode({ outputMode: document.querySelector('input[name="printOutputMode"]:checked')?.value });
   state.includeBases = trayIncludesBases(state);
+  if (filamentMaterialInput && filamentMaterialInput.value !== state.filamentMaterial) populateFilamentColours(filamentMaterialInput.value, filamentColourInput.value);
   const filament = filamentColours.find((colour) => colour.key === filamentColourInput.value) || filamentColours[0];
   state.filamentKey = filament.key;
   state.filamentMaterial = filament.material;
@@ -283,6 +301,8 @@ function writeState(nextState) {
   numericKeys.forEach((key) => { inputs[key].value = state[key]; });
   checkboxKeys.forEach((key) => { inputs[key].checked = state[key]; });
   document.querySelector(`input[name="printOutputMode"][value="${state.outputMode}"]`).checked = true;
+  if (filamentMaterialInput) filamentMaterialInput.value = state.filamentMaterial || defaults.filamentMaterial;
+  populateFilamentColours(state.filamentMaterial || defaults.filamentMaterial, state.filamentKey || defaults.filamentKey);
   filamentColourInput.value = state.filamentKey || defaults.filamentKey;
   document.querySelectorAll("[data-base-shape]").forEach((button) => button.classList.toggle("active", button.dataset.baseShape === state.baseShape));
   render();
@@ -487,7 +507,7 @@ function storageInsertMetrics(config = storageInsertConfig()) {
 }
 
 function effectiveStoragePrintVolumeMm3(volume) {
-  return volume * 0.46;
+  return window.forgetPrintEstimates.calibratedMaterialCm3(volume / 1000) * 1000;
 }
 
 function storageValidationMessages(config, metrics) {
@@ -560,8 +580,7 @@ function render() {
   document.getElementById("depthLabel").textContent = `${metrics.outerDepth.toFixed(1)} mm`;
   document.getElementById("outerSize").textContent = `${metrics.outerWidth.toFixed(1)} × ${metrics.outerDepth.toFixed(1)} mm`;
   document.getElementById("totalHeight").textContent = `${metrics.height.toFixed(1)} mm`;
-  const materialDensity = state.filamentMaterial === "petg" ? 1.27 : 1.24;
-  document.getElementById("materialEstimate").textContent = `${(metrics.volume / 1000 * materialDensity).toFixed(1)} g`;
+  document.getElementById("materialEstimate").textContent = `${window.forgetPrintEstimates.generatedWeightGrams(metrics.volume / 1000, state.filamentMaterial).toFixed(1)} g`;
   document.getElementById("bodyCount").textContent = state.columns * state.rows;
   document.getElementById("exportFilename").textContent = fileName();
   document.getElementById("lipFields").classList.toggle("disabled", !state.lipEnabled || !trayHasTray(state));
@@ -877,7 +896,7 @@ function renderProviderQuotes() {
       <span class="provider-colour" style="background:${escapeHtml(quote.colourHex || "#c8c8c8")}"></span>
       <span class="provider-main">
         <strong>${escapeHtml(quote.providerName)}</strong>
-        <small>${escapeHtml(quote.basedIn)} · ${quote.ratingCount ? `${quote.ratingAverage.toFixed(1)} / 5 from ${quote.ratingCount}` : "New provider"} · ${quote.leadTimeDays} day lead time</small>
+        <small>${escapeHtml(quote.basedIn)} · ${quote.ratingCount ? `${quote.ratingAverage.toFixed(1)} / 5 from ${quote.ratingCount}` : "New provider"} · ${quote.leadTimeDays} day lead time${quote.estimatedPrintHours ? ` · ${window.forgetPrintEstimates.printTimeLabel(quote.estimatedPrintHours)} print` : ""}</small>
         ${quote.providerStatus === "pending_review" ? `<em>Prototype provider · platform review pending</em>` : ""}
       </span>
       <span class="provider-price"><strong>${formatMoney(quote.totalIncVatPence, quote.currency)}</strong><small>all in</small></span>
@@ -1559,11 +1578,10 @@ function renderStorageRecommendations() {
   const metrics = storageInsertMetrics(config);
   const summary = document.getElementById("storageSummary");
   const container = document.getElementById("storageResults");
-  const materialDensity = config.filamentMaterial === "petg" ? 1.27 : 1.24;
   document.getElementById("storageOuterSize").textContent = `${config.boxInternalLength.toFixed(0)} x ${config.boxInternalWidth.toFixed(0)} mm`;
   document.getElementById("storageSlotCount").textContent = `${metrics.slots.length}${metrics.unplaced ? ` / ${metrics.slots.length + metrics.unplaced}` : ""}`;
   document.getElementById("storagePlateCount").textContent = String(metrics.plateCount);
-  document.getElementById("storageMaterialEstimate").textContent = `${(effectiveStoragePrintVolumeMm3(metrics.volume) / 1000 * materialDensity).toFixed(1)} g`;
+  document.getElementById("storageMaterialEstimate").textContent = `${window.forgetPrintEstimates.generatedWeightGrams(effectiveStoragePrintVolumeMm3(metrics.volume) / 1000, config.filamentMaterial, { uploaded: true }).toFixed(1)} g`;
   drawStoragePreview(metrics, config);
   if (!storageRecommendations.length) {
     summary.textContent = `${storageParseReport.lines} lines checked - no units yet`;
@@ -1977,6 +1995,22 @@ filamentColourInput.addEventListener("change", () => {
   render();
   if (document.body.dataset.activeMode === "storage") renderStorageRecommendations();
 });
+filamentMaterialInput.addEventListener("change", () => {
+  populateFilamentColours(filamentMaterialInput.value, state.filamentKey);
+  render();
+  if (document.body.dataset.activeMode === "storage") renderStorageRecommendations();
+});
+storageFilamentColourInput.addEventListener("change", () => {
+  filamentColourInput.value = storageFilamentColourInput.value;
+  render();
+  renderStorageRecommendations();
+});
+storageFilamentMaterialInput.addEventListener("change", () => {
+  filamentMaterialInput.value = storageFilamentMaterialInput.value;
+  populateFilamentColours(storageFilamentMaterialInput.value, state.filamentKey);
+  render();
+  renderStorageRecommendations();
+});
 document.querySelectorAll("[data-preview-turn]").forEach((button) => button.addEventListener("click", () => {
   previewYaw += Number(button.dataset.previewTurn) * Math.PI / 8;
   render();
@@ -2383,6 +2417,8 @@ document.getElementById("armyResults").addEventListener("input", (event) => {
     if (shapeLocksDepth(recommendation.baseShape)) recommendation.baseDepth = recommendation.baseSize;
     else if (field === "baseShape" || field === "baseSize") recommendation.baseDepth = baseDepthForShape(recommendation.baseShape, recommendation.baseSize, recommendation.baseDepth);
   }
+  const preview = card.querySelector(".army-unit-preview");
+  if (preview) preview.innerHTML = trayThumbnailSvg(recommendationConfig(recommendation));
   const ready = recommendation.baseSize > 0 && recommendation.baseDepth > 0;
   card.querySelectorAll("[data-army-action]").forEach((button) => { button.disabled = !ready; });
 });

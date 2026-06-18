@@ -34,7 +34,7 @@
     </div>
     <header class="topbar">
       <div class="brand-intro">
-        <a class="brand" id="brandHome" href="#" aria-label="Forget About Tray home">
+        <a class="brand" id="brandHome" href="../" aria-label="Forget About Tray home">
           <span class="brand-mark" aria-hidden="true">
             <span></span><span></span><span></span><span></span>
           </span>
@@ -46,7 +46,7 @@
         <button class="button top-action-button" id="savePresetTop" type="button">Save preset</button>
         <button class="button top-action-button" id="exportTop" type="button">Export STL</button>
         <div class="account-menu-wrap">
-          <button class="button top-action-button account-menu-button" id="accountButton" type="button" aria-expanded="false">Account <span>â–¾</span></button>
+          <button class="button top-action-button account-menu-button" id="accountButton" type="button" aria-expanded="false">Account <span>&#9662;</span></button>
           <div class="account-menu" id="accountMenu" hidden>
             <strong id="accountMenuEmail">Workshop account</strong>
             <button type="button" data-account-view="profile">Profile and address</button>
@@ -63,7 +63,7 @@
         <span class="ad-label">Sponsored field note</span>
         <div>
           <strong>Leaderboard advertising space</strong>
-          <small>Ideal for miniatures, paints, terrain, and print services Â· 970 Ã— 90</small>
+          <small>Ideal for miniatures, paints, terrain, and print services &middot; 970 &times; 90</small>
         </div>
         <span class="ad-cta">Advertise here</span>
       </aside>
@@ -248,22 +248,31 @@
                 <span class="step">02</span>
                 <h2>Print preview</h2>
               </div>
-              <label class="preview-colour-control">Print colour
-                <select id="filamentColour" aria-label="Preview filament colour"></select>
-              </label>
+              <div class="preview-toolbar">
+                <label class="preview-colour-control">Print colour
+                  <select id="filamentColour" aria-label="Preview filament colour"></select>
+                </label>
+                <label class="preview-colour-control">Filament
+                  <select id="filamentMaterial" aria-label="Preview filament material">
+                    <option value="pla" selected>PLA</option>
+                    <option value="petg">PETG</option>
+                    <option value="abs">ABS</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <div class="preview-stage">
               <div class="preview-angle-controls" aria-label="Rotate preview">
-                <button type="button" data-preview-turn="-1" aria-label="Rotate left">â†</button>
+                <button type="button" data-preview-turn="-1" aria-label="Rotate left">&larr;</button>
                 <button type="button" data-preview-reset aria-label="Reset preview angle">Reset</button>
-                <button type="button" data-preview-turn="1" aria-label="Rotate right">â†’</button>
+                <button type="button" data-preview-turn="1" aria-label="Rotate right">&rarr;</button>
               </div>
               <div class="dimension dimension-width" id="widthLabel">108.2 mm</div>
               <div class="dimension dimension-depth" id="depthLabel">82.2 mm</div>
               <svg id="trayPreview" role="img" aria-label="Configured tray preview" viewBox="0 0 760 450"></svg>
             </div>
             <div class="stats">
-              <div><span>Outer size</span><strong id="outerSize">108.2 Ã— 82.2 mm</strong></div>
+              <div><span>Outer size</span><strong id="outerSize">108.2 &times; 82.2 mm</strong></div>
               <div><span>Total height</span><strong id="totalHeight">5.0 mm</strong></div>
               <div><span>Est. material</span><strong id="materialEstimate">24.1 g</strong></div>
               <div><span>STL bodies</span><strong id="bodyCount">12</strong></div>
@@ -410,6 +419,21 @@
               <span id="storageSummary">Waiting for a list</span>
             </div>
             <div class="storage-preview-panel">
+              <div class="storage-preview-heading">
+                <h3>Print preview</h3>
+                <div class="preview-toolbar">
+                  <label class="preview-colour-control">Print colour
+                    <select id="storageFilamentColour" aria-label="Storage preview filament colour"></select>
+                  </label>
+                  <label class="preview-colour-control">Filament
+                    <select id="storageFilamentMaterial" aria-label="Storage preview filament material">
+                      <option value="pla" selected>PLA</option>
+                      <option value="petg">PETG</option>
+                      <option value="abs">ABS</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
               <svg id="storagePreview" viewBox="0 0 760 420" role="img" aria-label="Storage insert preview"></svg>
               <div class="storage-stats">
                 <div><span>Box insert</span><strong id="storageOuterSize">-</strong></div>
@@ -430,7 +454,7 @@
         <span class="ad-label">Supply drop</span>
         <div>
           <strong>Campaign banner advertising space</strong>
-          <small>Reserved for a second sponsor Â· responsive 970 Ã— 90 placement</small>
+          <small>Reserved for a second sponsor &middot; responsive 970 &times; 90 placement</small>
         </div>
         <span class="ad-cta">Partner slot</span>
       </aside>
@@ -439,7 +463,7 @@
     <dialog class="app-dialog catalogue-dialog" id="catalogueDialog">
       <div class="dialog-heading">
         <div><p class="eyebrow">Reinforcement ledger</p><h2>Base catalogue</h2></div>
-        <button class="dialog-close" type="button" data-close-dialog="catalogueDialog" aria-label="Close">Ã—</button>
+        <button class="dialog-close" type="button" data-close-dialog="catalogueDialog" aria-label="Close">&times;</button>
       </div>
       <div class="catalogue-layout">
         <section>
@@ -468,7 +492,7 @@
     <dialog class="app-dialog saved-armies-dialog" id="savedArmiesDialog">
       <div class="dialog-heading">
         <div><p class="eyebrow">Campaign records</p><h2>Saved armies</h2></div>
-        <button class="dialog-close" type="button" data-close-dialog="savedArmiesDialog" aria-label="Close">Ã—</button>
+        <button class="dialog-close" type="button" data-close-dialog="savedArmiesDialog" aria-label="Close">&times;</button>
       </div>
       <div id="savedArmiesList" class="saved-armies-list"></div>
     </dialog>
@@ -476,7 +500,7 @@
     <dialog class="app-dialog account-dialog" id="accountDialog">
       <div class="dialog-heading">
         <div><p class="eyebrow">Workshop account</p><h2>Account and orders</h2></div>
-        <button class="dialog-close" type="button" data-close-dialog="accountDialog" aria-label="Close">Ã—</button>
+        <button class="dialog-close" type="button" data-close-dialog="accountDialog" aria-label="Close">&times;</button>
       </div>
       <nav class="account-page-nav" aria-label="Account pages">
         <button type="button" data-account-page-button="profile">Profile and address</button>
@@ -525,7 +549,7 @@
     <dialog class="app-dialog export-dialog" id="exportDialog">
       <div class="dialog-heading">
         <div><p class="eyebrow">Choose fulfilment</p><h2 id="exportDialogTitle">Get this tray</h2></div>
-        <button class="dialog-close" type="button" data-close-dialog="exportDialog" aria-label="Close">Ã—</button>
+        <button class="dialog-close" type="button" data-close-dialog="exportDialog" aria-label="Close">&times;</button>
       </div>
       <div id="exportChoices" class="export-choices">
         <button class="export-choice" id="chooseUnlockedExport" type="button" hidden>
@@ -541,8 +565,8 @@
           <small>Your first STL download is free after one 30-second sponsor placement.</small>
         </button>
         <button class="export-choice" id="chooseUnlimitedExport" type="button">
-          <span class="choice-icon">Â£5</span><strong>Unlock unlimited STLs</strong>
-          <small>Make one Â£5 payment, then download as many tray STLs as you need.</small>
+          <span class="choice-icon">&pound;5</span><strong>Unlock unlimited STLs</strong>
+          <small>Make one &pound;5 payment, then download as many tray STLs as you need.</small>
         </button>
         <button class="export-choice" id="choosePrintOrder" type="button">
           <span class="choice-icon">3D</span><strong>Have it printed</strong>
@@ -564,10 +588,10 @@
       <section class="print-order" id="unlockExports" hidden>
         <div class="print-order-mark">STL</div>
         <h3>Unlock unlimited STL exports</h3>
-        <p>Make one Â£5 payment through secure Stripe Checkout. Once Stripe confirms payment, unlimited STL downloads unlock on your account.</p>
+        <p>Make one &pound;5 payment through secure Stripe Checkout. Once Stripe confirms payment, unlimited STL downloads unlock on your account.</p>
         <dl>
           <div><dt>Access</dt><dd>Unlimited STL exports</dd></div>
-          <div><dt>One-off price</dt><dd id="unlockExportsPrice">Â£5.00</dd></div>
+          <div><dt>One-off price</dt><dd id="unlockExportsPrice">&pound;5.00</dd></div>
         </dl>
         <button class="button button-primary" id="unlockCheckoutButton" type="button" disabled>Continue to Stripe Checkout</button>
         <small id="unlockCheckoutStatus">Checking Stripe configuration...</small>
@@ -594,6 +618,7 @@
     <script src="../account.js"></script>
     <script src="../catalogue.js"></script>
     <script src="../preview-3d.js"></script>
+    <script src="../print-estimates.js"></script>
     <script src="../app.js"></script>
     <script src="../site-wide.js"></script>
   </body>

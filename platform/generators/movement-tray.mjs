@@ -44,7 +44,7 @@ function trayIncludesBases(config) {
 function filamentParameters(input = {}) {
   return {
     filamentKey: String(input.filamentKey || "pla-bambu-green").slice(0, 80),
-    filamentMaterial: ["pla", "petg"].includes(input.filamentMaterial) ? input.filamentMaterial : "pla",
+    filamentMaterial: ["pla", "petg", "abs"].includes(input.filamentMaterial) ? input.filamentMaterial : "pla",
     filamentName: String(input.filamentName || "Bambu Green").slice(0, 80),
     filamentHex: /^#[0-9a-f]{6}$/i.test(input.filamentHex || "") ? input.filamentHex : "#00AE42"
   };

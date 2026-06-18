@@ -19,6 +19,10 @@
     return printerFilterId ? quotes.filter((quote) => quote.printerProfileId === printerFilterId) : quotes;
   }
 
+  function quoteTimeLabel(quote) {
+    return quote.estimatedPrintHours && window.forgetPrintEstimates ? ` | ${window.forgetPrintEstimates.printTimeLabel(quote.estimatedPrintHours)} print` : "";
+  }
+
   function render() {
     const container = document.getElementById("quotes");
     const checkout = document.getElementById("checkoutButton");
@@ -27,7 +31,7 @@
     if (selectedQuoteId && !shownQuotes.some((quote) => quote.id === selectedQuoteId)) selectedQuoteId = "";
     container.innerHTML = shownQuotes.length ? shownQuotes.map((quote) => `
       <article class="${quote.id === selectedQuoteId ? "selected" : ""}">
-        <div><strong>${escapeHtml(quote.providerName)}</strong><br><small>${escapeHtml(quote.basedIn)} | ${quote.leadTimeDays} day lead | ${escapeHtml(quote.colourName || quote.colourKey)} | ${quote.estimatedWeightGrams}g</small>
+        <div><strong>${escapeHtml(quote.providerName)}</strong><br><small>${escapeHtml(quote.basedIn)} | ${quote.leadTimeDays} day lead | ${escapeHtml(quote.colourName || quote.colourKey)} | ${quote.estimatedWeightGrams}g${quoteTimeLabel(quote)}</small>
         <details><summary>Breakdown</summary><small>Material ${money(quote.materialCostPence, quote.currency)} | Printer fee ${money(quote.printerFeePence, quote.currency)} | Postage ${money(quote.postagePence, quote.currency)} | Commission ${money(quote.commissionPence, quote.currency)} | Platform ${money(quote.platformFeePence, quote.currency)} | VAT ${money(quote.vatAmountPence, quote.currency)}</small></details></div>
         <strong>${money(quote.totalIncVatPence, quote.currency)}</strong>
         <button class="button button-secondary" data-quote="${escapeHtml(quote.id)}" type="button">${quote.id === selectedQuoteId ? "Selected" : "Select"}</button>

@@ -34,12 +34,23 @@
     </div>
 
     <header>
-      <a class="brand" href="./"><span class="brand-gem"></span><strong>Forget About Makeup</strong></a>
-      <p><strong>Arrange the ritual.</strong><em>Carry it beautifully.</em></p>
-      <nav>
-        <button class="button header-button" id="saveDesignTop" type="button">Save caddy</button>
-        <button class="button header-button" id="exportTop" type="button">Export STL</button>
-        <button class="button header-button" id="accountButton" type="button">Account</button>
+      <div class="brand-intro">
+        <a class="brand" href="../"><span class="brand-gem"></span><strong>Forget About Makeup</strong></a>
+        <p class="top-tagline"><strong>Arrange the ritual.</strong><em>Carry it beautifully.</em></p>
+      </div>
+      <nav class="top-actions">
+        <button class="button top-action-button" id="saveDesignTop" type="button">Save preset</button>
+        <button class="button top-action-button" id="exportTop" type="button">Export STL</button>
+        <div class="account-menu-wrap">
+          <button class="button top-action-button account-menu-button" id="accountButton" type="button" aria-expanded="false">Account <span>&#9662;</span></button>
+          <div class="account-menu" id="accountMenu" hidden>
+            <strong id="accountMenuEmail">Dressing room account</strong>
+            <button type="button" data-account-view="profile">Profile and address</button>
+            <button type="button" data-account-view="password">Change password</button>
+            <button type="button" data-account-view="orders">Order history</button>
+            <button type="button" id="logoutButton">Log out</button>
+          </div>
+        </div>
       </nav>
     </header>
 
@@ -109,7 +120,7 @@
         </aside>
 
         <section class="panel preview-panel">
-          <div class="panel-heading"><div><span>02</span><h2>Caddy preview</h2></div><label>Print colour<select id="filamentColour"></select></label></div>
+          <div class="panel-heading"><div><span>02</span><h2>Print preview</h2></div><div class="preview-toolbar"><label>Print colour<select id="filamentColour"></select></label><label>Filament<select id="filamentMaterial"><option value="pla" selected>PLA</option><option value="petg">PETG</option><option value="abs">ABS</option></select></label></div></div>
           <div class="preview-stage"><div class="preview-angle-controls"><button data-preview-turn="-1" type="button">←</button><button data-preview-reset type="button">Reset</button><button data-preview-turn="1" type="button">→</button></div><svg id="caddyPreview" viewBox="0 0 760 520" role="img" aria-label="Makeup caddy preview"></svg></div>
           <div class="stats">
             <div><span>Outer size</span><strong id="outerSize">-</strong></div>
@@ -141,7 +152,6 @@
         </form>
         <section data-account-panel="password" hidden><label>New password<input id="accountNewPassword" type="password" minlength="8"></label><button class="button primary" id="changePassword" type="button">Update password</button></section>
         <section data-account-panel="orders" hidden><button class="button secondary" id="viewOrders" type="button">Refresh order history</button><div id="ordersList"></div><div id="orderDetail"></div></section>
-        <button class="button text" id="logoutButton" type="button">Log out</button>
       </div>
     </dialog>
 
@@ -166,6 +176,7 @@
     <script src="../public-config.js"></script>
     <script src="../platform.js"></script>
     <script src="../account.js"></script>
+    <script src="../print-estimates.js"></script>
     <script src="catalogue.js"></script>
     <script src="makeup.js"></script>
     <script src="../site-wide.js"></script>

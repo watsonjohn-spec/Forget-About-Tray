@@ -4,6 +4,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { extname, join, normalize } from "node:path";
 import { marketplacePolicy, publicPlatformConfig, resolvePlatformContext } from "./platform/registry.mjs";
 import { assertPrintJobTransition } from "./platform/print-factory.mjs";
+import { calibratedMaterialCm3, defaultPrintTimeModel, estimatedPrintHours, estimatedWeightGramsFromGeometry } from "./platform/print-estimates.mjs";
 
 const port = Number(process.env.PORT || 4173);
 const root = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
@@ -65,25 +66,6 @@ const postageServices = [
   { key: "royal-mail-1st", name: "Royal Mail 1st Class small parcel", pricePence: 515, days: 1 }
 ];
 
-function materialDensity(material = "pla") {
-  return material === "petg" ? 1.27 : 1.24;
-}
-
-function effectivePrintVolumeCm3(geometry) {
-  const rawVolume = Number(geometry.printMaterialCm3 ?? geometry.materialCm3 ?? 0);
-  if (!Number.isFinite(rawVolume) || rawVolume <= 0) return 0;
-  if (Number.isFinite(Number(geometry.printMaterialCm3))) return rawVolume;
-  if (geometry.config?.stlBase64) return rawVolume;
-  if (geometry.config?.mode === "storage_insert") return rawVolume * 0.46;
-  if (geometry.config?.paintType || geometry.config?.brushSlots || geometry.config?.threadRefs) return rawVolume * 0.5;
-  if (geometry.config?.caddyType) return rawVolume * 0.54;
-  return rawVolume * 0.56;
-}
-
-function estimatedWeightGrams(geometry, material = "pla") {
-  return Math.max(1, Math.round(effectivePrintVolumeCm3(geometry) * materialDensity(material)));
-}
-
 function requestPlatformContext(request, body = {}) {
   return resolvePlatformContext({
     brandKey: body.brandKey || request.headers["x-forget-about-brand"] || "tray",
@@ -93,7 +75,9 @@ function requestPlatformContext(request, body = {}) {
 
 function priceGeneratedDesign(generator, input) {
   const geometry = generator.buildGeometry(input);
-  const amount = Math.max(50, Math.round(basePrice + geometry.materialCm3 * pricePerCm3));
+  const uploaded = Boolean(geometry.config?.stlBase64 || Number.isFinite(Number(geometry.config?.estimatedWeightGrams)));
+  const materialCm3 = calibratedMaterialCm3(Number(geometry.printMaterialCm3 ?? geometry.materialCm3 ?? 0), { uploaded });
+  const amount = Math.max(50, Math.round(basePrice + materialCm3 * pricePerCm3));
   return { ...geometry, amount };
 }
 
@@ -666,7 +650,7 @@ async function addFactoryCapability(request, response) {
     const colourName = selectedColour?.name || "";
     const colourKey = selectedColour?.key || "";
     const postage = postageServices.find((service) => service.key === cleanText(body.postageService, 80));
-    if (!["pla", "petg"].includes(material) || !colourName || !colourKey) throw new Error("Choose PLA or PETG and provide a colour.");
+    if (!["pla", "petg", "abs"].includes(material) || !colourName || !colourKey) throw new Error("Choose PLA, PETG, or ABS and provide a colour.");
     if (!postage) throw new Error("Choose a standard postage service.");
     const capability = {
       printer_profile_id: profile.id,
@@ -680,7 +664,7 @@ async function addFactoryCapability(request, response) {
       max_height_mm: cleanPositiveInteger(body.maxHeightMm, 256, 1000),
       base_price_pence: cleanPositiveInteger(body.basePricePence, 0),
       price_per_cm3_pence: plaCostPerGramPence,
-      grams_per_hour: cleanPositiveInteger(body.gramsPerHour, 12, 1000),
+      grams_per_hour: cleanPositiveInteger(body.gramsPerHour, defaultPrintTimeModel.gramsPerHour, 1000),
       postage_service: postage.key,
       postage_days: postage.days,
       postage_pence: postage.pricePence,
@@ -1045,7 +1029,7 @@ async function createMarketplaceQuotes(request, response) {
     };
     const quoteRows = eligible.map((capability) => {
       const profile = profileMap.get(capability.printer_profile_id);
-      const weightGrams = estimatedWeightGrams(geometry, capability.material);
+      const weightGrams = estimatedWeightGramsFromGeometry(geometry, capability.material);
       const materialCost = Math.round(weightGrams * plaCostPerGramPence);
       const printerFee = Number(capability.base_price_pence);
       const productionPrice = materialCost + printerFee;
@@ -1054,7 +1038,7 @@ async function createMarketplaceQuotes(request, response) {
       const commission = Math.max(0, Math.round(providerShare * marketplaceCommissionPercent / 100));
       const platformFee = marketplacePlatformFeePence;
       const vatAmount = Math.max(0, Math.round((providerShare + commission + platformFee) * marketplaceVatPercent / 100));
-      const printHours = Math.max(0.1, weightGrams / Math.max(1, Number(capability.grams_per_hour || 12)));
+      const printHours = estimatedPrintHours(weightGrams, Number(capability.grams_per_hour || defaultPrintTimeModel.gramsPerHour), defaultPrintTimeModel.setupMinutes);
       const printDays = Math.max(1, Math.ceil(printHours / 24));
       const handlingDays = Number(profile.lead_time_days);
       const postageDays = Number(capability.postage_days || 3);

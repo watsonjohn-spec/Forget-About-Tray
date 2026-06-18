@@ -8,11 +8,13 @@ function numberInRange(value, minimum, maximum, fallback) {
 }
 
 function density(material = "pla") {
-  return material === "petg" ? 1.27 : 1.24;
+  if (material === "petg") return 1.27;
+  if (material === "abs") return 1.04;
+  return 1.24;
 }
 
 function normalizeParameters(input = {}) {
-  const material = ["pla", "petg"].includes(input.filamentMaterial) ? input.filamentMaterial : "pla";
+  const material = ["pla", "petg", "abs"].includes(input.filamentMaterial) ? input.filamentMaterial : "pla";
   const estimatedWeightGrams = numberInRange(input.estimatedWeightGrams, 1, 5000, 25);
   return {
     name: String(input.name || "Uploaded STL").slice(0, 80),

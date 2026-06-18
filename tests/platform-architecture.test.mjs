@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { marketplacePolicy, publicPlatformConfig, resolvePlatformContext } from "../platform/registry.mjs";
 import { assertPrintJobTransition, customerCanCancel, filterPrinterQuotes, providerTransferEligible } from "../platform/print-factory.mjs";
+import { defaultPrintTimeModel, estimatedPrintHours, generatedWeightGrams, printTimeLabel, slicerCalibration } from "../platform/print-estimates.mjs";
 
 test("movement trays are registered as a versioned generator under the tray brand", () => {
   const { brand, generator } = resolvePlatformContext({ brandKey: "tray" });
@@ -223,6 +224,13 @@ test("printer quote filters cover customer selection fields", () => {
     { colourKey: "black", material: "pla", totalIncVatPence: 900, leadTimeDays: 8, ratingAverage: 4.2, basedIn: "London" }
   ];
   assert.deepEqual(filterPrinterQuotes(quotes, { colourKey: "green", maximumLeadTimeDays: 5, minimumRating: 4.5 }), [quotes[0]]);
+});
+
+test("print estimates are calibrated against the Bambu P1S reference", () => {
+  const oldPreviewCm3 = slicerCalibration.referencePreviewGrams / 1.24;
+  assert.equal(generatedWeightGrams(oldPreviewCm3, "pla"), 78.8);
+  const hours = estimatedPrintHours(slicerCalibration.referenceSlicerGrams, defaultPrintTimeModel.gramsPerHour, defaultPrintTimeModel.setupMinutes);
+  assert.equal(printTimeLabel(hours), "1h 51m");
 });
 
 test("factory portal keeps completion and payout release outside printer controls", async () => {

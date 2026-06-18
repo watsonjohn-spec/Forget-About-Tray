@@ -1,4 +1,14 @@
 let previewTurntable = null;
+const filamentColours = [
+  { key: "pla-project-lilac", material: "pla", name: "Project Lilac", hex: "#8d6aa9" },
+  { key: "pla-ivory", material: "pla", name: "Ivory", hex: "#eee5d4" },
+  { key: "pla-black", material: "pla", name: "Black", hex: "#252124" },
+  { key: "pla-thread-red", material: "pla", name: "Thread Red", hex: "#c63d4d" },
+  { key: "petg-white", material: "petg", name: "PETG White", hex: "#f1f2ee" },
+  { key: "petg-clear", material: "petg", name: "Translucent", hex: "#d5d7d8" },
+  { key: "abs-grey", material: "abs", name: "ABS Grey", hex: "#777c7d" },
+  { key: "abs-black", material: "abs", name: "ABS Black", hex: "#202223" }
+];
 
 const stitchStyleDefaults = {
   "floss-card": { columns: 2, slotWidth: 6, slotDepth: 12 },
@@ -21,21 +31,37 @@ function parseThreads() {
     .filter(Boolean);
 }
 
+function populateColours() {
+  const material = document.getElementById("filamentMaterial").value || "pla";
+  const select = document.getElementById("filamentColour");
+  const current = select.value;
+  const options = filamentColours.filter((colour) => colour.material === material);
+  select.innerHTML = options.map((colour) => `<option value="${colour.key}">${colour.name}</option>`).join("");
+  select.value = options.some((colour) => colour.key === current) ? current : options[0]?.key || "";
+}
+
+function selectedFilament() {
+  return filamentColours.find((colour) => colour.key === document.getElementById("filamentColour").value) || filamentColours[0];
+}
+
 function stitchConfig() {
+  const filament = selectedFilament();
   return {
     style: document.getElementById("layoutStyle").value,
+    projectName: document.getElementById("projectName").value.trim() || "Stitch project",
     threads: parseThreads(),
     columns: Number(document.getElementById("columns").value || 1),
     slotWidth: Number(document.getElementById("slotWidth").value || 16),
     slotDepth: Number(document.getElementById("slotDepth").value || 34),
+    labelTextSize: Number(document.getElementById("threadLabelSize").value || 10),
     gap: 2,
     wallThickness: 1.6,
     wallHeight: 10,
     plateThickness: 2,
-    filamentMaterial: "pla",
-    filamentKey: "pla-project-lilac",
-    filamentName: "Project Lilac",
-    filamentHex: "#8d6aa9"
+    filamentMaterial: document.getElementById("filamentMaterial").value || "pla",
+    filamentKey: filament.key,
+    filamentName: filament.name,
+    filamentHex: filament.hex
   };
 }
 
@@ -94,7 +120,7 @@ function workstationPreviewGeometry(config) {
       previewOpacity: 0.48,
       previewClass: "preview-thread-bobbin"
     });
-    labels.push({ x: x + config.slotWidth / 2, y: y + 5, z: config.plateThickness + config.wallHeight + 0.6, text: thread.number, fill: "#fffdf4" });
+    labels.push({ x: x + config.slotWidth / 2, y: y + 5, z: config.plateThickness + config.wallHeight + 0.6, text: thread.number, fill: "#fffdf4", size: config.labelTextSize });
   });
   const toolX = bobbinX + slotAreaWidth + 16;
   const toolY = 16;
@@ -107,7 +133,8 @@ function workstationPreviewGeometry(config) {
     { x: toolX + 10, y: toolY + toolD * 0.58, z: config.plateThickness + 0.1, w: toolWidth - 20, d: config.wallThickness, h: config.wallHeight * 0.55 }
   );
   labels.push({ x: toolX + toolWidth / 2, y: toolY + 11, z: config.plateThickness + config.wallHeight + 0.8, text: "tools", fill: "#30273a" });
-  return { style: "Workstation", boxes, previewBoxes, labels, holes: [], threadPaths: [], outerWidth, outerDepth, height: config.plateThickness + config.wallHeight + 12, rows };
+  const materialCm3 = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
+  return { style: "Workstation", boxes, previewBoxes, labels, holes: [], threadPaths: [], outerWidth, outerDepth, height: config.plateThickness + config.wallHeight + 12, rows, materialCm3 };
 }
 
 function flossCardPreviewGeometry(config) {
@@ -126,7 +153,7 @@ function flossCardPreviewGeometry(config) {
     { x: 5, y: 4, z: config.plateThickness + 0.1, w: outerWidth - 10, d: 4, h: 0.7, previewColour: "#efece4", previewOpacity: 0.92 }
   ];
   const holes = [{ x: outerWidth / 2, y: 8, rx: 4, ry: 2.4, kind: "slot" }];
-  const labels = [{ x: outerWidth / 2, y: 16, z: config.plateThickness + 0.8, text: "PROJECT", fill: "#30273a" }];
+  const labels = [{ x: outerWidth / 2, y: 15.5, z: config.plateThickness + 0.8, text: config.projectName, fill: "#30273a", size: Math.max(7, Math.min(12, config.labelTextSize + 1)) }];
   const threadPaths = [];
   config.threads.forEach((thread, index) => {
     const rightSide = index % 2 === 1;
@@ -135,7 +162,7 @@ function flossCardPreviewGeometry(config) {
     const y = headerDepth + margin + row * pitch;
     const labelX = rightSide ? outerWidth / 2 + 8 : outerWidth / 2 - 8;
     holes.push({ x, y, rx: holeDiameter / 2, ry: holeDiameter / 2, kind: "hole" });
-    labels.push({ x: labelX, y: y + 1.5, z: config.plateThickness + 0.8, text: thread.number, fill: "#30273a" });
+    labels.push({ x: labelX, y: y + 1.5, z: config.plateThickness + 0.8, text: thread.number, fill: "#30273a", size: config.labelTextSize });
     threadPaths.push({
       colour: threadColour(index),
       start: { x, y, z: config.plateThickness + 0.9 },
@@ -143,7 +170,8 @@ function flossCardPreviewGeometry(config) {
       end: { x: rightSide ? outerWidth + 28 : -28, y: y + (index % 3 - 1) * 5, z: 4 }
     });
   });
-  return { style: "Floss card", boxes, previewBoxes: [], labels, holes, threadPaths, outerWidth, outerDepth, height: config.plateThickness + 8, rows: perSide };
+  const materialCm3 = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
+  return { style: "Floss card", boxes, previewBoxes: [], labels, holes, threadPaths, outerWidth, outerDepth, height: config.plateThickness + 8, rows: perSide, materialCm3 };
 }
 
 function stitchPreviewGeometry(config) {
@@ -186,14 +214,14 @@ function renderStitchPreview(view = previewTurntable?.state || {}) {
         label.y,
         label.z,
         escapeHtml(label.text),
-        `text-anchor="middle" dominant-baseline="middle" fill="${label.fill}" font-size="9" font-weight="850"`
+        `text-anchor="middle" dominant-baseline="middle" fill="${label.fill}" font-size="${Math.max(7, Math.min(16, Number(label.size || config.labelTextSize)))}" font-weight="850"`
       ))
     ].join("")
   });
   document.getElementById("threadStat").textContent = config.threads.length;
   document.getElementById("rowStat").textContent = geometry.rows;
   document.getElementById("styleStat").textContent = geometry.style;
-  document.getElementById("materialStat").textContent = `${Math.max(15, Math.round(geometry.boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000 * 1.24))} g est.`;
+  document.getElementById("materialStat").textContent = `${window.forgetPrintEstimates.generatedWeightGrams(geometry.materialCm3, config.filamentMaterial).toFixed(1)} g est.`;
 }
 
 function applyStyleDefaults() {
@@ -207,7 +235,12 @@ function applyStyleDefaults() {
   previewTurntable.render();
 }
 
-["threads", "columns", "slotWidth", "slotDepth"].forEach((id) => document.getElementById(id).addEventListener("input", () => previewTurntable.render()));
+document.getElementById("filamentMaterial").addEventListener("change", () => {
+  populateColours();
+  previewTurntable.render();
+});
+populateColours();
+["projectName", "threads", "columns", "slotWidth", "slotDepth", "threadLabelSize", "filamentColour", "filamentMaterial"].forEach((id) => document.getElementById(id).addEventListener("input", () => previewTurntable.render()));
 document.getElementById("layoutStyle").addEventListener("change", applyStyleDefaults);
 document.getElementById("quoteButton").addEventListener("click", async () => {
   try {
@@ -219,6 +252,8 @@ document.getElementById("quoteButton").addEventListener("click", async () => {
 });
 
 window.generatorAuth.initAuth().catch((error) => { document.getElementById("loginError").textContent = error.message; });
+window.generatorCurrentConfig = stitchConfig;
+window.generatorCurrentName = () => document.getElementById("projectName").value.trim() || "Stitch project";
 previewTurntable = window.forgetPreview3d.createTurntable(document.getElementById("preview"), renderStitchPreview);
 document.querySelectorAll("[data-preview-turn]").forEach((button) => button.addEventListener("click", () => previewTurntable.turn(Number(button.dataset.previewTurn) * Math.PI / 8)));
 document.querySelector("[data-preview-reset]").addEventListener("click", () => previewTurntable.reset());

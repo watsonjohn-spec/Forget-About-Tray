@@ -4,11 +4,14 @@ const filamentColours = [
   { key: "pla-blush", material: "pla", name: "Blush Pink", hex: "#e5a6ae" },
   { key: "pla-ivory", material: "pla", name: "Ivory", hex: "#eee5d4" },
   { key: "pla-black", material: "pla", name: "Black", hex: "#252124" },
-  { key: "petg-clear", material: "petg", name: "Translucent", hex: "#d5d7d8" }
+  { key: "petg-clear", material: "petg", name: "Translucent", hex: "#d5d7d8" },
+  { key: "petg-white", material: "petg", name: "PETG White", hex: "#f1f2ee" },
+  { key: "abs-soft-grey", material: "abs", name: "ABS Soft Grey", hex: "#777c7d" },
+  { key: "abs-black", material: "abs", name: "ABS Black", hex: "#202223" }
 ];
 const defaults = {
   items: catalogue.slice(0, 3).map((item, index) => ({ ...item, id: `${item.id}-${index}`, clearance: 1.5 })),
-  layoutMode: "caddy", maxSpineLength: 220, gap: 6, edgeMargin: 8, baseThickness: 3, wallThickness: 2, stepRise: 22,
+  layoutMode: "caddy", maxSpineLength: 220, gap: 6, edgeMargin: 8, baseThickness: 2.6, wallThickness: 1.7, stepRise: 22,
   pegboardColumns: 3, pegboardRows: 2, pegboardHookSpacing: 40,
   handleEnabled: true, handleHeight: 95, handleWidth: 70, balanceCatchalls: true,
   filamentKey: "pla-rose-gold", filamentMaterial: "pla", filamentName: "Rose Gold", filamentHex: "#b76e79"
@@ -49,6 +52,13 @@ async function api(path, options = {}) {
 
 function money(pence, currency = "gbp") {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: currency.toUpperCase() }).format(Number(pence || 0) / 100);
+}
+
+function populateFilamentColours(material = "pla", selectedKey = "") {
+  const select = document.getElementById("filamentColour");
+  const options = filamentColours.filter((colour) => colour.material === material);
+  select.innerHTML = options.map((colour) => `<option value="${colour.key}">${colour.name}</option>`).join("");
+  select.value = options.some((colour) => colour.key === selectedKey) ? selectedKey : options[0]?.key || "";
 }
 
 function splitPegboardBoxes(boxes, sheetWidth, sheetDepth, hookDepth, baseThickness, baseZ = 0) {
@@ -101,6 +111,9 @@ function readConstruction() {
   state.handleEnabled = true;
   state.balanceCatchalls = document.getElementById("balanceCatchalls").checked;
   document.getElementById("handleEnabled").checked = true;
+  if (document.getElementById("filamentMaterial").value !== state.filamentMaterial) {
+    populateFilamentColours(document.getElementById("filamentMaterial").value, state.filamentKey);
+  }
   const filament = filamentColours.find((candidate) => candidate.key === document.getElementById("filamentColour").value) || filamentColours[0];
   state.filamentKey = filament.key;
   state.filamentMaterial = filament.material;
@@ -116,6 +129,9 @@ function writeConstruction() {
   });
   document.getElementById("handleEnabled").checked = true;
   document.getElementById("balanceCatchalls").checked = state.balanceCatchalls !== false;
+  document.getElementById("filamentMaterial").value = state.filamentMaterial || "pla";
+  populateFilamentColours(state.filamentMaterial || "pla", state.filamentKey || defaults.filamentKey);
+  document.getElementById("filamentColour").value = state.filamentKey || defaults.filamentKey;
   const isCaddy = state.layoutMode === "caddy";
   const isStaircase = state.layoutMode === "staircase";
   const isPegboard = state.layoutMode === "pegboard";
@@ -252,13 +268,13 @@ function geometry() {
     const rowDepthsForBoard = Array.from({ length: rows }, (_, row) => Math.max(24, ...cells.filter((cell) => cell.row === row).map((cell) => cell.cellDepth)));
     const columnOffsets = columnWidths.map((_, column) => columnWidths.slice(0, column).reduce((sum, width) => sum + width, 0));
     const rowOffsets = rowDepthsForBoard.map((_, row) => rowDepthsForBoard.slice(0, row).reduce((sum, depth) => sum + depth, 0));
-    const hookDepth = Math.max(12, t * 6);
+    const hookDepth = Math.max(9, t * 4);
     const hookPitch = Math.max(30, Math.min(60, Number(state.pegboardHookSpacing || 40)));
     const hookWidth = 4.2;
-    const hookBladeDepth = 12;
-    const hookDrop = Math.max(7, t * 3.5);
-    const hookCatchDepth = 4;
-    const hookCatchHeight = 2;
+    const hookBladeDepth = 4;
+    const hookDrop = Math.max(14, t * 8);
+    const hookCatchDepth = 10;
+    const hookCatchHeight = 3;
     const baseZ = hookDrop;
     const sheetWidth = columnWidths.reduce((sum, width) => sum + width, 0);
     const sheetDepth = rowDepthsForBoard.reduce((sum, depth) => sum + depth, 0);
@@ -267,10 +283,10 @@ function geometry() {
     positions = cells.map((cell) => ({
       ...cell,
       x: columnOffsets[cell.column] + t,
-      y: hookDepth + rowOffsets[cell.row] + t,
+      y: rowOffsets[cell.row] + t,
       z: 0
     }));
-    const pegboardBoxes = [{ x: 0, y: hookDepth, z: baseZ, w: sheetWidth, d: sheetDepth, h: state.baseThickness, kind: "base" }];
+    const pegboardBoxes = [{ x: 0, y: 0, z: baseZ, w: sheetWidth, d: sheetDepth, h: state.baseThickness, kind: "base" }];
     positions.forEach((item) => {
       const h = Math.max(8, item.height * 2 / 3);
       const z = baseZ + state.baseThickness;
@@ -284,10 +300,10 @@ function geometry() {
     const hookCount = Math.max(2, Math.min(10, Math.floor(sheetWidth / hookPitch) + 1));
     for (let hook = 0; hook < hookCount; hook += 1) {
       const hookX = hookCount === 1 ? sheetWidth / 2 - hookWidth / 2 : (hook * (sheetWidth - hookWidth)) / (hookCount - 1);
-      const hookY = (hookDepth - hookBladeDepth) / 2;
+      const hookY = sheetDepth + 2;
       pegboardBoxes.push(
         { x: hookX, y: hookY, z: 0, w: hookWidth, d: hookBladeDepth, h: hookDrop, kind: "hook" },
-        { x: hookX, y: hookY + hookBladeDepth - hookCatchDepth, z: 0, w: hookWidth, d: hookCatchDepth, h: hookDrop + hookCatchHeight, kind: "hook" }
+        { x: hookX, y: hookY + hookBladeDepth - t, z: 0, w: hookWidth, d: hookCatchDepth, h: hookCatchHeight, kind: "hook" }
       );
     }
     const split = splitPegboardBoxes(pegboardBoxes, sheetWidth, sheetDepth, hookDepth, state.baseThickness, baseZ);
@@ -325,7 +341,7 @@ function geometry() {
     });
   } else {
     const holderHeights = positions.map((item) => Math.max(8, item.height * 2 / 3));
-    boxes.push({ x: 0, y: spineY, z: state.baseThickness, w: outerWidth, d: spineWidth, h: Math.max(...holderHeights, state.handleHeight / 2), kind: "spine" });
+    boxes.push({ x: 0, y: spineY, z: state.baseThickness, w: outerWidth, d: spineWidth, h: Math.max(...holderHeights, state.handleHeight * 0.55), kind: "spine" });
   }
   positions.forEach((item) => {
     const t = state.wallThickness;
@@ -477,7 +493,7 @@ function visibleBoxFaces(box, transform, colour, opacity, boxIndex) {
         fill: shadePreviewColour(colour, previewFaceShade(face.normal)),
         stroke: shadePreviewColour(colour, -45),
         opacity,
-        className: box.previewClass || ""
+        className: [box.previewClass, box.kind ? `preview-${box.kind}` : ""].filter(Boolean).join(" ")
       };
     });
 }
@@ -521,11 +537,11 @@ function renderPreviewModel() {
     </g>`;
   /*
   document.getElementById("outerSize").textContent = metric.assembledWidth
-    ? `${metric.assembledWidth.toFixed(1)} Ã— ${metric.assembledDepth.toFixed(1)} mm${metric.chunkCount > 1 ? ` (${metric.chunkCount} plates)` : ""}`
-    : `${metric.outerWidth.toFixed(1)} Ã— ${metric.outerDepth.toFixed(1)} mm`;
+    ? `${metric.assembledWidth.toFixed(1)} x ${metric.assembledDepth.toFixed(1)} mm${metric.chunkCount > 1 ? ` (${metric.chunkCount} plates)` : ""}`
+    : `${metric.outerWidth.toFixed(1)} x ${metric.outerDepth.toFixed(1)} mm`;
   */
   document.getElementById("totalHeight").textContent = `${metric.height.toFixed(1)} mm`;
-  document.getElementById("materialEstimate").textContent = `${(metric.materialCm3 * (state.filamentMaterial === "petg" ? 1.27 : 1.24)).toFixed(1)} g`;
+  document.getElementById("materialEstimate").textContent = `${window.forgetPrintEstimates.generatedWeightGrams(metric.materialCm3, state.filamentMaterial).toFixed(1)} g`;
   document.getElementById("slotCount").textContent = metric.catchalls?.length ? `${state.items.length} + ${metric.catchalls.length}` : state.items.length;
   document.getElementById("outerSize").textContent = metric.assembledWidth
     ? `${metric.assembledWidth.toFixed(1)} x ${metric.assembledDepth.toFixed(1)} mm${metric.chunkCount > 1 ? ` (${metric.chunkCount} plates)` : ""}`
@@ -564,7 +580,7 @@ function renderPreview() {
     ? `${metric.assembledWidth.toFixed(1)} × ${metric.assembledDepth.toFixed(1)} mm${metric.chunkCount > 1 ? ` (${metric.chunkCount} plates)` : ""}`
     : `${metric.outerWidth.toFixed(1)} × ${metric.outerDepth.toFixed(1)} mm`;
   document.getElementById("totalHeight").textContent = `${metric.height.toFixed(1)} mm`;
-  document.getElementById("materialEstimate").textContent = `${(metric.materialCm3 * (state.filamentMaterial === "petg" ? 1.27 : 1.24)).toFixed(1)} g`;
+  document.getElementById("materialEstimate").textContent = `${window.forgetPrintEstimates.generatedWeightGrams(metric.materialCm3, state.filamentMaterial).toFixed(1)} g`;
   document.getElementById("slotCount").textContent = state.items.length;
   renderSlotList();
 }
@@ -690,7 +706,7 @@ function renderQuotes() {
   document.getElementById("providerQuotes").innerHTML = filtered.length ? filtered.map((quote) => `
     <article class="provider-quote ${quote.id === selectedQuoteId ? "selected" : ""}">
       <span class="colour-chip" style="background:${escapeHtml(quote.colourHex || "#ccc")}"></span>
-      <div><strong>${escapeHtml(quote.providerName)}</strong><small>${escapeHtml(quote.basedIn)} | ${quote.ratingCount ? `${quote.ratingAverage.toFixed(1)} / 5` : "New"} | ${quote.leadTimeDays} days</small><small>${escapeHtml(quote.colourName)} | ${Number(quote.estimatedWeightGrams || 0).toFixed(1)} g</small></div>
+      <div><strong>${escapeHtml(quote.providerName)}</strong><small>${escapeHtml(quote.basedIn)} | ${quote.ratingCount ? `${quote.ratingAverage.toFixed(1)} / 5` : "New"} | ${quote.leadTimeDays} days${quote.estimatedPrintHours ? ` | ${window.forgetPrintEstimates.printTimeLabel(quote.estimatedPrintHours)} print` : ""}</small><small>${escapeHtml(quote.colourName)} | ${Number(quote.estimatedWeightGrams || 0).toFixed(1)} g</small></div>
       <strong>${money(quote.totalIncVatPence, quote.currency)}</strong>
       <details class="quote-breakdown"><summary>Price breakdown</summary><p>Material ${money(quote.materialCostPence, quote.currency)} | Printer fee ${money(quote.printerFeePence, quote.currency)} | Postage ${money(quote.postagePence, quote.currency)} | Commission ${money(quote.commissionPence, quote.currency)} | Platform ${money(quote.platformFeePence, quote.currency)} | VAT ${money(quote.vatAmountPence, quote.currency)}</p></details>
       <button data-quote="${escapeHtml(quote.id)}">${quote.id === selectedQuoteId ? "Selected" : "Select printer"}</button>
@@ -789,7 +805,7 @@ async function configureProviderButtons() {
 }
 
 async function initialize() {
-  document.getElementById("filamentColour").innerHTML = filamentColours.filter((colour) => colour.material === "pla").map((colour) => `<option value="${colour.key}">${colour.name}</option>`).join("");
+  populateFilamentColours("pla", defaults.filamentKey);
   populateCatalogue();
   writeConstruction();
   renderPreview();
@@ -837,7 +853,7 @@ document.getElementById("slotList").addEventListener("click", (event) => {
   }
   renderPreview();
 });
-["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "pegboardColumns", "pegboardRows", "pegboardHookSpacing", "handleHeight", "handleWidth", "filamentColour", "balanceCatchalls"].forEach((id) => document.getElementById(id).addEventListener("input", renderPreview));
+["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "pegboardColumns", "pegboardRows", "pegboardHookSpacing", "handleHeight", "handleWidth", "filamentColour", "filamentMaterial", "balanceCatchalls"].forEach((id) => document.getElementById(id).addEventListener("input", renderPreview));
 document.querySelectorAll("[data-layout-mode]").forEach((button) => button.addEventListener("click", () => {
   state.layoutMode = button.dataset.layoutMode;
   writeConstruction();
@@ -901,10 +917,16 @@ document.querySelectorAll("[data-oauth-provider]").forEach((button) => button.ad
     document.getElementById("loginError").textContent = error.message;
   }
 }));
-document.getElementById("accountButton").addEventListener("click", async () => {
+function setAccountTab(view) {
+  document.querySelectorAll("[data-account-tab]").forEach((candidate) => candidate.classList.toggle("active", candidate.dataset.accountTab === view));
+  document.querySelectorAll("[data-account-panel]").forEach((panel) => { panel.hidden = panel.dataset.accountPanel !== view; });
+}
+
+async function openAccountDialog(view = "profile") {
   try {
     const [profile] = await Promise.all([accountService.loadProfile(), refreshOrders()]);
     const address = profile?.default_address || {};
+    document.getElementById("accountMenuEmail").textContent = accountService.currentUser()?.email || "Dressing room account";
     document.getElementById("accountEmail").value = accountService.currentUser()?.email || "";
     document.getElementById("accountDisplayName").value = profile?.display_name || "";
     document.getElementById("accountAddressLine1").value = address.line1 || "";
@@ -913,13 +935,29 @@ document.getElementById("accountButton").addEventListener("click", async () => {
     document.getElementById("accountCounty").value = address.county || "";
     document.getElementById("accountPostcode").value = address.postcode || "";
     document.getElementById("accountCountry").value = address.country || "GB";
+    setAccountTab(view);
     document.getElementById("accountDialog").showModal();
   } catch (error) { toast(error.message); }
+}
+
+document.getElementById("accountButton").addEventListener("click", () => {
+  const menu = document.getElementById("accountMenu");
+  menu.hidden = !menu.hidden;
+  document.getElementById("accountButton").setAttribute("aria-expanded", String(!menu.hidden));
 });
 document.querySelectorAll("[data-account-tab]").forEach((button) => button.addEventListener("click", () => {
-  document.querySelectorAll("[data-account-tab]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
-  document.querySelectorAll("[data-account-panel]").forEach((panel) => { panel.hidden = panel.dataset.accountPanel !== button.dataset.accountTab; });
+  setAccountTab(button.dataset.accountTab);
 }));
+document.querySelectorAll("[data-account-view]").forEach((button) => button.addEventListener("click", () => {
+  document.getElementById("accountMenu").hidden = true;
+  document.getElementById("accountButton").setAttribute("aria-expanded", "false");
+  openAccountDialog(button.dataset.accountView);
+}));
+document.addEventListener("click", (event) => {
+  if (event.target.closest(".account-menu-wrap")) return;
+  document.getElementById("accountMenu").hidden = true;
+  document.getElementById("accountButton").setAttribute("aria-expanded", "false");
+});
 document.getElementById("makeupProfileForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
@@ -955,6 +993,11 @@ document.getElementById("orderDetail").addEventListener("click", async (event) =
     toast(messageButton ? "Message sent" : result.transfer?.released ? "Order completed and printer payout released" : "Order completed");
   } catch (error) { toast(error.message); }
 });
-document.getElementById("logoutButton").addEventListener("click", async () => { await accountService.signOut(); document.getElementById("accountDialog").close(); setAuthenticated(false); });
+document.getElementById("logoutButton").addEventListener("click", async () => {
+  await accountService.signOut();
+  if (document.getElementById("accountDialog").open) document.getElementById("accountDialog").close();
+  document.getElementById("accountMenu").hidden = true;
+  setAuthenticated(false);
+});
 
 initialize();

@@ -205,6 +205,7 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(html, /class="button top-action-button" id="exportTop"/);
   assert.match(html, /class="button top-action-button account-menu-button" id="accountButton"/);
   assert.match(html, /id="filamentColour"/);
+  assert.match(html, /print-estimates\.js/);
   assert.match(html, /name="printOutputMode"/);
   assert.match(html, /value="bases-only"/);
   assert.match(html, /data-mode="storage"/);
@@ -224,7 +225,7 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(css, /\.top-action-button/);
   assert.match(app, /packedLooseBaseLayout/);
   assert.match(app, /input\[name="printOutputMode"\]/);
-  assert.match(app, /materialEstimate"\)\.textContent = `\$\{\(metrics\.volume \/ 1000 \* materialDensity\)\.toFixed\(1\)\} g`/);
+  assert.match(app, /forgetPrintEstimates\.generatedWeightGrams\(metrics\.volume \/ 1000, state\.filamentMaterial\)/);
   assert.match(app, /window\.location\.href = `mailto:/);
   assert.match(app, /window\.confirm\("Request account deletion\?/);
   assert.match(app, /Confirm delivery and complete order/);
@@ -245,7 +246,8 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(account, /forget-about-active-session/);
   assert.match(account, /sessionStorage\.getItem\(activeSessionKey\)/);
   assert.match(trayHtml, /data-preview-turn="-1"/);
-  assert.match(trayApp, /filamentColours\.filter\(\(colour\) => colour\.material === "pla"\)/);
+  assert.match(trayHtml, /id="filamentMaterial"/);
+  assert.match(trayApp, /filamentColours\.filter\(\(colour\) => colour\.material === material\)/);
   assert.match(trayApp, /data-army-field="includeBases"/);
   assert.match(trayApp, /const storageInsertMode = "storage_insert"/);
   assert.match(trayApp, /const storageBaseShapes = \["square", "rectangle", "circle", "oval"\]/);
@@ -265,9 +267,13 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(trayApp, /<ellipse cx="\$\{cx\}" cy="\$\{cy\}"/);
   assert.match(trayApp, /checkout\/print\/verify/);
   assert.match(factoryHtml, /id="capabilityGramsPerHour"/);
+  assert.match(factoryHtml, /id="factoryCalcTime"/);
+  assert.match(factoryHtml, /value="78\.78"/);
   assert.match(factoryHtml, /id="capabilityPostage"/);
   assert.match(factoryApp, /status !== "pending_payment"/);
   assert.match(factoryApp, /data-job-label/);
+  assert.match(factoryApp, /renderTimeCalculator/);
+  assert.match(factoryApp, /printTimeLabel/);
   assert.match(makeupHtml, /data-layout-mode="staircase"/);
   assert.match(makeupHtml, /data-layout-mode="pegboard"/);
   assert.match(makeupHtml, /id="handleEnabled" type="checkbox" checked disabled/);
@@ -286,7 +292,7 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(makeupApp, /function previewTransform\(metric\)/);
   assert.match(makeupApp, /function visibleBoxFaces\(box, transform, colour, opacity, boxIndex\)/);
   assert.match(makeupApp, /\.sort\(\(a, b\) => a\.depth - b\.depth\)/);
-  assert.match(makeupApp, /Math\.max\(\.\.\.holderHeights, state\.handleHeight \/ 2\)/);
+  assert.match(makeupApp, /Math\.max\(\.\.\.holderHeights, state\.handleHeight \* 0\.55\)/);
   assert.match(makeupApp, /data-complete-print-job/);
   assert.match(makeupApp, /data-send-job-message/);
   assert.match(makeupApp, /checkout\/print\/verify/);
@@ -325,6 +331,7 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerCss, /\.site-footer/);
   assert.match(printHtml, /Forget About Print/);
   assert.match(printHtml, /preview-3d\.js/);
+  assert.match(printHtml, /print-estimates\.js/);
   assert.match(printHtml, /data-preview-turn="-1"/);
   assert.match(printHtml, /id="filamentColour"/);
   assert.match(printHtml, /id="printerPreference"/);
@@ -337,20 +344,24 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(printJs, /forgetPreview3d\.createTurntable/);
   assert.match(printJs, /preferredPrinterProfileId: document\.getElementById\("printerPreference"\)\.value/);
   assert.match(generatorQuotes, /function setPrinterFilter\(profileId = ""\)/);
+  assert.match(generatorQuotes, /quoteTimeLabel/);
   assert.match(serverSource, /preferredPrinterProfileId/);
   assert.match(serverSource, /desiredColourKey/);
   assert.match(uploadedPrint, /desiredColourKey/);
   assert.match(uploadedPrint, /preferredPrinterProfileId/);
   assert.match(paintHtml, /Forget About Paint/);
   assert.match(paintHtml, /preview-3d\.js/);
+  assert.match(paintHtml, /print-estimates\.js/);
   assert.match(paintHtml, /data-preview-turn="-1"/);
   assert.match(paintJs, /paintConfig/);
   assert.match(paintJs, /brushSlots/);
   assert.match(paintJs, /paintPreviewGeometry/);
   assert.match(paintJs, /forgetPreview3d\.renderBoxes/);
   assert.match(paintJs, /forgetPreview3d\.createTurntable/);
+  assert.match(paintJs, /forgetPrintEstimates\.generatedWeightGrams/);
   assert.match(stitchHtml, /Forget About Stitch/);
   assert.match(stitchHtml, /preview-3d\.js/);
+  assert.match(stitchHtml, /print-estimates\.js/);
   assert.match(stitchHtml, /id="layoutStyle"/);
   assert.match(stitchHtml, /value="floss-card"/);
   assert.match(stitchHtml, /value="workstation-tray"/);
@@ -362,4 +373,5 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(stitchJs, /stitchPreviewGeometry/);
   assert.match(stitchJs, /forgetPreview3d\.textLabel/);
   assert.match(stitchJs, /forgetPreview3d\.createTurntable/);
+  assert.match(stitchJs, /forgetPrintEstimates\.generatedWeightGrams/);
 });

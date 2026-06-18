@@ -41,10 +41,8 @@
               <label>Depth mm<input id="outerDepth" type="number" min="1" max="1000" value="100"></label>
               <label>Height mm<input id="height" type="number" min="1" max="1000" value="30"></label>
             </div>
-            <div class="field-grid">
+            <div class="field-grid single-field">
               <label>Estimated grams<input id="estimatedWeightGrams" type="number" min="1" max="5000" value="25"></label>
-              <label>Filament type<select id="filamentMaterial"><option value="pla">PLA</option><option value="petg">PETG</option></select></label>
-              <label>Filament colour<select id="filamentColour"></select></label>
             </div>
             <div class="field-grid single-field">
               <label>Preferred printer<select id="printerPreference" disabled><option value="">Any matching printer</option></select></label>
@@ -55,7 +53,7 @@
           </div>
         </section>
         <section class="preview-card">
-          <div class="card-heading"><h2>Print preview</h2></div>
+          <div class="card-heading"><h2>Print preview</h2><div class="preview-toolbar"><label>Colour<select id="filamentColour"></select></label><label>Filament<select id="filamentMaterial"><option value="pla" selected>PLA</option><option value="petg">PETG</option><option value="abs">ABS</option></select></label></div></div>
           <div class="preview-stage"><div class="preview-angle-controls" aria-label="Rotate preview"><button data-preview-turn="-1" type="button">←</button><button data-preview-reset type="button">Reset</button><button data-preview-turn="1" type="button">→</button></div><svg id="preview" viewBox="0 0 760 420" role="img" aria-label="Uploaded STL preview"></svg></div>
           <div class="stats">
             <div><span>Size</span><strong id="sizeStat">100 x 100 mm</strong></div>
@@ -72,6 +70,7 @@
     <script src="../platform.js"></script>
     <script src="../account.js"></script>
     <script src="../generator-auth.js"></script>
+    <script src="../print-estimates.js"></script>
     <script src="../generator-quotes.js"></script>
     <script src="../preview-3d.js"></script>
     <script src="print.js"></script>

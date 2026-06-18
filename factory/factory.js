@@ -13,6 +13,16 @@ const postageServices = [
   { key: "royal-mail-2nd", name: "Royal Mail 2nd Class small parcel", pricePence: 395, days: 3 },
   { key: "royal-mail-1st", name: "Royal Mail 1st Class small parcel", pricePence: 515, days: 1 }
 ];
+const commonPrinters = [
+  { key: "bambu-a1-mini", name: "Bambu Lab A1 mini", width: 180, depth: 180, height: 180, gramsPerHour: 42 },
+  { key: "bambu-a1", name: "Bambu Lab A1", width: 256, depth: 256, height: 256, gramsPerHour: 48 },
+  { key: "bambu-p1s", name: "Bambu Lab P1S", width: 256, depth: 256, height: 256, gramsPerHour: 55 },
+  { key: "bambu-x1-carbon", name: "Bambu Lab X1 Carbon", width: 256, depth: 256, height: 256, gramsPerHour: 58 },
+  { key: "prusa-mk4s", name: "Original Prusa MK4S", width: 250, depth: 210, height: 220, gramsPerHour: 38 },
+  { key: "creality-k1", name: "Creality K1", width: 220, depth: 220, height: 250, gramsPerHour: 48 },
+  { key: "elegoo-neptune-4", name: "Elegoo Neptune 4", width: 225, depth: 225, height: 265, gramsPerHour: 42 },
+  { key: "custom", name: "Custom printer", width: 256, depth: 256, height: 256, gramsPerHour: 48 }
+];
 
 function apiBase() {
   return document.querySelector('meta[name="checkout-api-url"]').content.trim().replace(/\/$/, "");
@@ -24,6 +34,40 @@ function money(pence, currency = "gbp") {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]);
+}
+
+function printEstimateTools() {
+  return window.forgetPrintEstimates;
+}
+
+function printTimeLabel(hours) {
+  return printEstimateTools().printTimeLabel(Number(hours || 0));
+}
+
+function providerLocalSettings() {
+  return JSON.parse(localStorage.getItem("forget-about-factory-profile-settings") || "{}");
+}
+
+function saveProviderLocalSettings(settings) {
+  localStorage.setItem("forget-about-factory-profile-settings", JSON.stringify({ ...providerLocalSettings(), ...settings }));
+}
+
+function jobWeightGrams(job) {
+  const quote = jobQuote(job);
+  return Number(job.design_snapshot?.estimatedWeightGrams || quote?.estimated_weight_grams || 0);
+}
+
+function jobPrintHours(job) {
+  const quote = jobQuote(job);
+  return Number(job.design_snapshot?.estimatedPrintHours || quote?.estimated_print_hours || 0);
+}
+
+function renderTimeCalculator() {
+  const tools = printEstimateTools();
+  const weight = Number(document.getElementById("factoryCalcWeight").value || 0);
+  const rate = Number(document.getElementById("factoryCalcRate").value || tools.defaultPrintTimeModel.gramsPerHour);
+  const setup = Number(document.getElementById("factoryCalcSetup").value || tools.defaultPrintTimeModel.setupMinutes);
+  document.getElementById("factoryCalcTime").textContent = tools.printTimeLabel(tools.estimatedPrintHours(weight, rate, setup));
 }
 
 function toast(message) {
@@ -93,11 +137,13 @@ function setTab(tab) {
 
 function renderProfile() {
   const profile = factoryDashboardState.profile;
+  const localSettings = providerLocalSettings();
   document.getElementById("factoryProfileStatus").textContent = profile ? profile.status.replace("_", " ") : "Setup required";
   document.getElementById("factoryAcceptingStatus").textContent = profile?.accepting_jobs ? "Accepting jobs" : profile ? "Not accepting jobs" : "Profile setup required";
   document.getElementById("printerDisplayName").value = profile?.display_name || "";
   document.getElementById("printerBasedIn").value = profile?.based_in || "";
   document.getElementById("printerPostcodeArea").value = profile?.postcode_area || "";
+  document.getElementById("printerModel").value = localSettings.printerModel || "bambu-a1";
   document.getElementById("printerLeadTime").value = profile?.lead_time_days || 7;
   document.getElementById("printerDescription").value = profile?.description || "";
   document.getElementById("printerAcceptingJobs").checked = Boolean(profile?.accepting_jobs);
@@ -109,7 +155,7 @@ function renderCapabilities() {
   document.getElementById("factoryCapabilities").innerHTML = capabilities.length ? capabilities.map((capability) => `
     <article class="capability-card">
       <div><h3><span class="colour-chip" style="background:${escapeHtml(capability.colour_hex || "#cccccc")}"></span> ${escapeHtml(capability.colour_name)} · ${escapeHtml(capability.material.toUpperCase())}</h3>
-      <p>${capability.max_width_mm} × ${capability.max_depth_mm} × ${capability.max_height_mm} mm · Printer fee ${money(capability.base_price_pence)} per print · ${capability.grams_per_hour || 12} g/hour · ${escapeHtml(postageServices.find((service) => service.key === capability.postage_service)?.name || capability.postage_service || "Postage")} ${money(capability.postage_pence)}</p></div>
+      <p>${capability.max_width_mm} × ${capability.max_depth_mm} × ${capability.max_height_mm} mm · Printer fee ${money(capability.base_price_pence)} per print · ${capability.grams_per_hour || printEstimateTools().defaultPrintTimeModel.gramsPerHour} g/hour · ${escapeHtml(postageServices.find((service) => service.key === capability.postage_service)?.name || capability.postage_service || "Postage")} ${money(capability.postage_pence)}</p></div>
       <button class="button button-secondary" data-remove-capability="${escapeHtml(capability.id)}" type="button">Remove</button>
     </article>
   `).join("") : '<div class="empty-state">Add at least one material and colour before the profile can receive marketplace jobs.</div>';
@@ -161,12 +207,58 @@ function renderJobs() {
     <article class="job-card brand-${escapeHtml(job.brand_key)}" data-job-id="${escapeHtml(job.id)}">
       <span class="job-brand-marker">${job.brand_key === "makeup" ? "MAKEUP" : "TRAY"}</span>
       <div><h3>${escapeHtml(job.design_snapshot?.name || job.generator_type.replaceAll("_", " "))}</h3>
-      <p>Status: <strong>${escapeHtml(job.status.replaceAll("_", " "))}</strong> · ${escapeHtml(job.colour_key)} · Estimated ${job.design_snapshot?.estimatedWeightGrams || "?"}g</p>
+      <p>Status: <strong>${escapeHtml(job.status.replaceAll("_", " "))}</strong> · ${escapeHtml(job.colour_key)} · ${jobWeightGrams(job) || "?"}g · ${jobPrintHours(job) ? printTimeLabel(jobPrintHours(job)) : "time pending"}</p>
       <p>Provider payout ${money(job.provider_share_pence)} · Created ${new Date(job.created_at).toLocaleString()}${job.tracking_reference ? ` · Tracking ${escapeHtml(job.tracking_reference)}` : ""}</p></div>
       <button class="button button-primary" data-open-job="${escapeHtml(job.id)}" type="button">Open order</button>
     </article>
   `).join("") : '<div class="empty-state">No assigned jobs yet. Approved profiles with active capabilities become selectable by customers.</div>';
   if (jobs.length) document.getElementById("factoryJobs").insertAdjacentHTML("afterbegin", billingStatusMarkup(jobs));
+}
+
+function filteredJobs(jobs) {
+  const status = document.getElementById("jobStatusFilter")?.value || "";
+  const brand = document.getElementById("jobBrandFilter")?.value || "";
+  const payout = document.getElementById("jobPayoutFilter")?.value || "";
+  const search = (document.getElementById("jobSearchFilter")?.value || "").trim().toLowerCase();
+  return jobs.filter((job) => {
+    const haystack = [
+      job.id,
+      job.status,
+      job.brand_key,
+      job.generator_type,
+      job.colour_key,
+      job.design_snapshot?.name,
+      job.tracking_reference,
+      jobOrder(job)?.invoice_number
+    ].filter(Boolean).join(" ").toLowerCase();
+    return (!status || job.status === status)
+      && (!brand || job.brand_key === brand)
+      && (!payout || job.payout_status === payout)
+      && (!search || haystack.includes(search));
+  });
+}
+
+function drillableBillingStatusMarkup(jobs) {
+  return `<section class="billing-status-grid">${jobStatusFinancials(jobs).map((item) => `
+    <article data-status-drill="${escapeHtml(item.status)}"><span>${escapeHtml(item.status.replaceAll("_", " "))}</span><strong>${money(item.providerShare)}</strong><small>${item.count} job${item.count === 1 ? "" : "s"} | customer total ${money(item.customerTotal)}</small></article>
+  `).join("")}</section>`;
+}
+
+function renderJobs() {
+  const allJobs = factoryDashboardState.jobs.filter((job) => job.status !== "pending_payment");
+  const jobs = filteredJobs(allJobs);
+  const active = allJobs.filter((job) => ["order_made", "producing", "posted"].includes(job.status));
+  document.getElementById("activeJobCount").textContent = active.length;
+  document.getElementById("factoryJobs").innerHTML = jobs.length ? jobs.map((job) => `
+    <article class="job-card brand-${escapeHtml(job.brand_key)}" data-job-id="${escapeHtml(job.id)}">
+      <span class="job-brand-marker">${escapeHtml(String(job.brand_key || "job").toUpperCase())}</span>
+      <div><h3>${escapeHtml(job.design_snapshot?.name || job.generator_type.replaceAll("_", " "))}</h3>
+      <p>Status: <strong>${escapeHtml(job.status.replaceAll("_", " "))}</strong> | ${escapeHtml(job.colour_key)} | ${jobWeightGrams(job) || "?"}g | ${jobPrintHours(job) ? printTimeLabel(jobPrintHours(job)) : "time pending"}</p>
+      <p>Provider payout ${money(job.provider_share_pence)} | Created ${new Date(job.created_at).toLocaleString()}${job.tracking_reference ? ` | Tracking ${escapeHtml(job.tracking_reference)}` : ""}</p></div>
+      <button class="button button-primary" data-open-job="${escapeHtml(job.id)}" type="button">Open order</button>
+    </article>
+  `).join("") : '<div class="empty-state">No jobs match these filters.</div>';
+  document.getElementById("factoryJobs").insertAdjacentHTML("afterbegin", drillableBillingStatusMarkup(jobs));
 }
 
 function eventTitle(event) {
@@ -210,8 +302,8 @@ function showJobDetail(jobId) {
     <div class="job-detail-hero brand-${escapeHtml(job.brand_key)}"><strong>${job.brand_key === "makeup" ? "MAKEUP" : "TRAY"}</strong><span>${escapeHtml(job.status.replaceAll("_", " "))}</span></div>
     <div class="job-detail-grid">
       <div><span>Colour</span><strong>${escapeHtml(job.colour_key)}</strong></div>
-      <div><span>Material estimate</span><strong>${job.design_snapshot?.estimatedWeightGrams || quote?.estimated_weight_grams || "?"} g</strong></div>
-      <div><span>Print time</span><strong>${job.design_snapshot?.estimatedPrintHours || quote?.estimated_print_hours || "?"} hours</strong></div>
+      <div><span>Material estimate</span><strong>${jobWeightGrams(job) || "?"} g</strong></div>
+      <div><span>Print time</span><strong>${jobPrintHours(job) ? printTimeLabel(jobPrintHours(job)) : "Pending"}</strong></div>
       <div><span>Tracking</span><strong>${escapeHtml(job.tracking_reference || "Not posted")}</strong></div>
     </div>
     <section class="job-breakdown"><h3>Order breakdown</h3>
@@ -257,6 +349,44 @@ function renderDashboard() {
   }
 }
 
+function filteredPayoutJobs(jobs) {
+  const status = document.getElementById("payoutStatusFilter")?.value || "";
+  const brand = document.getElementById("payoutBrandFilter")?.value || "";
+  const search = (document.getElementById("payoutSearchFilter")?.value || "").trim().toLowerCase();
+  return jobs.filter((job) => {
+    const statusMatch = !status || job.payout_status === status || job.status === status;
+    const brandMatch = !brand || job.brand_key === brand;
+    const haystack = [job.id, job.brand_key, job.status, job.payout_status, jobOrder(job)?.invoice_number, job.design_snapshot?.name].filter(Boolean).join(" ").toLowerCase();
+    return statusMatch && brandMatch && (!search || haystack.includes(search));
+  });
+}
+
+function renderPayouts() {
+  const allJobs = factoryDashboardState.jobs;
+  const jobs = filteredPayoutJobs(allJobs);
+  const transfers = factoryDashboardState.transfers.filter((transfer) => {
+    const status = document.getElementById("payoutStatusFilter")?.value || "";
+    const search = (document.getElementById("payoutSearchFilter")?.value || "").trim().toLowerCase();
+    const haystack = [transfer.id, transfer.status, transfer.currency, transfer.created_at].filter(Boolean).join(" ").toLowerCase();
+    return (!status || transfer.status === status) && (!search || haystack.includes(search));
+  });
+  const held = allJobs.filter((job) => job.payout_status === "held").reduce((total, job) => total + Number(job.provider_share_pence || 0), 0);
+  document.getElementById("heldPayoutTotal").textContent = money(held);
+  const payment = factoryDashboardState.paymentAccount;
+  document.getElementById("connectStatus").textContent = payment?.onboarding_complete ? "Stripe Connect ready" : "Stripe Connect not onboarded";
+  document.getElementById("factoryPayouts").innerHTML = transfers.length ? transfers.map((transfer) => `
+    <article class="payout-card"><div><strong>${money(transfer.amount_pence, transfer.currency)}</strong><p>${escapeHtml(transfer.status)} | Created ${new Date(transfer.created_at).toLocaleDateString()}</p></div><span class="status-pill">${escapeHtml(transfer.status)}</span></article>
+  `).join("") : '<div class="empty-state">No provider transfers match these filters yet.</div>';
+  document.getElementById("factoryPayouts").insertAdjacentHTML("afterbegin", drillableBillingStatusMarkup(jobs));
+}
+
+function renderDashboard() {
+  renderProfile();
+  renderCapabilities();
+  renderJobs();
+  renderPayouts();
+}
+
 async function loadDashboard() {
   factoryDashboardState = await factoryFetch("/api/factory/dashboard");
   renderDashboard();
@@ -265,7 +395,11 @@ async function loadDashboard() {
 async function initializeFactory() {
   document.getElementById("capabilityColourName").innerHTML = standardColours.map((colour) => `<option value="${colour.key}">${colour.name}</option>`).join("");
   document.getElementById("capabilityPostage").innerHTML = postageServices.map((service) => `<option value="${service.key}">${service.name} · ${money(service.pricePence)} · ${service.days} day${service.days === 1 ? "" : "s"}</option>`).join("");
+  document.getElementById("printerModel").innerHTML = commonPrinters.map((printer) => `<option value="${printer.key}">${printer.name} - ${printer.width} x ${printer.depth} x ${printer.height} mm</option>`).join("");
+  document.getElementById("printerModel").value = providerLocalSettings().printerModel || "bambu-a1";
+  applyPrinterPreset();
   updateColourSample();
+  renderTimeCalculator();
   try {
     const session = await accountService.init();
     await configureProviderButtons();
@@ -292,6 +426,19 @@ function updateColourSample() {
   const colour = standardColours.find((candidate) => candidate.key === document.getElementById("capabilityColourName").value) || standardColours[0];
   document.getElementById("capabilityColourSample").style.background = colour.hex;
   document.getElementById("capabilityColourSample").title = colour.name;
+}
+
+function applyPrinterPreset() {
+  const printer = commonPrinters.find((candidate) => candidate.key === document.getElementById("printerModel").value) || commonPrinters[1];
+  saveProviderLocalSettings({ printerModel: printer.key });
+  if (printer.key !== "custom") {
+    document.getElementById("capabilityMaxWidth").value = printer.width;
+    document.getElementById("capabilityMaxDepth").value = printer.depth;
+    document.getElementById("capabilityMaxHeight").value = printer.height;
+    document.getElementById("capabilityGramsPerHour").value = printer.gramsPerHour;
+    document.getElementById("factoryCalcRate").value = printer.gramsPerHour;
+    renderTimeCalculator();
+  }
 }
 
 document.getElementById("factoryLoginForm").addEventListener("submit", async (event) => {
@@ -373,6 +520,7 @@ document.querySelectorAll("[data-factory-tab]").forEach((button) => button.addEv
 document.getElementById("factoryProfileForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
+    saveProviderLocalSettings({ printerModel: document.getElementById("printerModel").value });
     await factoryFetch("/api/factory/profile", {
       method: "POST",
       body: JSON.stringify({
@@ -390,6 +538,7 @@ document.getElementById("factoryProfileForm").addEventListener("submit", async (
     toast(error.message);
   }
 });
+document.getElementById("printerModel").addEventListener("change", applyPrinterPreset);
 
 document.getElementById("factoryCapabilityForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -429,9 +578,30 @@ document.getElementById("factoryCapabilities").addEventListener("click", async (
 });
 
 document.getElementById("factoryJobs").addEventListener("click", (event) => {
+  const drill = event.target.closest("[data-status-drill]");
+  if (drill) {
+    document.getElementById("jobStatusFilter").value = drill.dataset.statusDrill;
+    renderJobs();
+    return;
+  }
   const button = event.target.closest("[data-open-job]");
   if (button) showJobDetail(button.dataset.openJob);
 });
+["jobStatusFilter", "jobBrandFilter", "jobPayoutFilter", "jobSearchFilter"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", renderJobs);
+  document.getElementById(id).addEventListener("change", renderJobs);
+});
+["payoutStatusFilter", "payoutBrandFilter", "payoutSearchFilter"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", renderPayouts);
+  document.getElementById(id).addEventListener("change", renderPayouts);
+});
+document.getElementById("factoryPayouts").addEventListener("click", (event) => {
+  const drill = event.target.closest("[data-status-drill]");
+  if (!drill) return;
+  document.getElementById("payoutStatusFilter").value = drill.dataset.statusDrill;
+  renderPayouts();
+});
+["factoryCalcWeight", "factoryCalcRate", "factoryCalcSetup"].forEach((id) => document.getElementById(id).addEventListener("input", renderTimeCalculator));
 document.getElementById("closeJobDialog").addEventListener("click", () => document.getElementById("factoryJobDialog").close());
 document.getElementById("jobDialogContent").addEventListener("click", async (event) => {
   try {

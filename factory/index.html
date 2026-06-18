@@ -35,10 +35,11 @@
     </section>
 
     <header class="factory-header">
-      <a href="./" class="factory-brand">
+      <a href="../" class="factory-brand">
         <span class="factory-mark" aria-hidden="true"><span></span><span></span><span></span></span>
         <span><strong>Forget About Print Factory</strong><small>Cross-brand provider workspace</small></span>
       </a>
+      <p class="factory-header-note"><strong>Make good prints. Keep customers informed.</strong><span>Refundable until production begins. Payouts stay held until the customer order reaches complete.</span></p>
       <div class="header-actions">
         <span id="factoryAccountEmail"></span>
         <button class="button button-secondary" id="factoryRefresh" type="button">Refresh</button>
@@ -50,8 +51,7 @@
       <section class="factory-hero">
         <div>
           <p class="eyebrow">Provider operations</p>
-          <h1>Make good prints. Keep customers informed.</h1>
-          <p>Jobs remain refundable until production begins. Provider payouts stay held until the customer order reaches complete.</p>
+          <h1>Jobs, pricing, and payouts in one queue.</h1>
         </div>
         <div class="hero-metrics">
           <div><span>Active jobs</span><strong id="activeJobCount">0</strong></div>
@@ -69,6 +69,12 @@
 
       <section class="factory-panel active" data-factory-panel="jobs">
         <div class="section-heading"><div><p class="eyebrow">Production queue</p><h2>Assigned jobs</h2></div><span class="status-pill" id="factoryAcceptingStatus">Profile setup required</span></div>
+        <div class="factory-filters">
+          <label>Status<select id="jobStatusFilter"><option value="">All statuses</option><option value="order_made">Order made</option><option value="producing">Producing</option><option value="posted">Posted</option><option value="complete">Complete</option><option value="cancelled">Cancelled</option><option value="refunded">Refunded</option></select></label>
+          <label>Brand<select id="jobBrandFilter"><option value="">All brands</option><option value="tray">Tray</option><option value="makeup">Makeup</option><option value="paint">Paint</option><option value="stitch">Stitch</option><option value="print">Print</option></select></label>
+          <label>Payout<select id="jobPayoutFilter"><option value="">Any payout state</option><option value="held">Held</option><option value="released">Released</option><option value="cancelled">Cancelled</option></select></label>
+          <label>Search<input id="jobSearchFilter" type="search" placeholder="Order, colour, status"></label>
+        </div>
         <div class="job-grid" id="factoryJobs"></div>
       </section>
 
@@ -78,6 +84,7 @@
           <label>Display name<input id="printerDisplayName" required maxlength="80"></label>
           <label>Based in<input id="printerBasedIn" required placeholder="e.g. Leeds"></label>
           <label>Postcode area<input id="printerPostcodeArea" required maxlength="12" placeholder="e.g. LS1"></label>
+          <label>Primary printer<select id="printerModel"></select></label>
           <label>Handling time in days<input id="printerLeadTime" required type="number" min="1" max="90" value="2"></label>
           <label class="wide">Description<textarea id="printerDescription" rows="4" maxlength="800" placeholder="Tell customers about your printers and finishing standards."></textarea></label>
           <label class="switch-field wide"><input id="printerAcceptingJobs" type="checkbox"><span>Accept new jobs once the profile is approved</span></label>
@@ -88,23 +95,40 @@
       <section class="factory-panel" data-factory-panel="capabilities" hidden>
         <div class="section-heading"><div><p class="eyebrow">Capacity and pricing</p><h2>Print capabilities</h2></div></div>
         <form class="factory-form capability-form" id="factoryCapabilityForm">
-          <label>Material<select id="capabilityMaterial"><option value="pla">PLA</option><option value="petg">PETG</option></select></label>
+          <label>Material<select id="capabilityMaterial"><option value="pla">PLA</option><option value="petg">PETG</option><option value="abs">ABS</option></select></label>
           <label>Colour capability<select id="capabilityColourName"></select></label>
           <label>Colour sample<span class="capability-colour-sample" id="capabilityColourSample"></span></label>
           <label>Max width mm<input id="capabilityMaxWidth" type="number" min="1" max="1000" value="256"></label>
           <label>Max depth mm<input id="capabilityMaxDepth" type="number" min="1" max="1000" value="256"></label>
           <label>Max height mm<input id="capabilityMaxHeight" type="number" min="1" max="1000" value="256"></label>
           <label>Printer fee per print £<input id="capabilityBasePrice" type="number" min="0" step="0.01" value="8.00"></label>
-          <label>Printing speed grams/hour<input id="capabilityGramsPerHour" type="number" min="1" max="1000" step="1" value="12"></label>
+          <label>Printing speed grams/hour<input id="capabilityGramsPerHour" type="number" min="1" max="1000" step="1" value="48"></label>
           <label>Postage service<select id="capabilityPostage"></select></label>
           <button class="button button-primary" type="submit">Add capability</button>
         </form>
+        <section class="time-calculator" aria-label="Estimated print time calculator">
+          <div>
+            <h3>Print time calculator</h3>
+            <p>Calibrated from the Bambu P1S reference print.</p>
+          </div>
+          <div class="calculator-fields">
+            <label>Model grams<input id="factoryCalcWeight" type="number" min="1" max="5000" step="0.1" value="78.78"></label>
+            <label>Rate g/hour<input id="factoryCalcRate" type="number" min="1" max="1000" step="1" value="48"></label>
+            <label>Setup minutes<input id="factoryCalcSetup" type="number" min="0" max="120" step="0.1" value="12.7"></label>
+          </div>
+          <strong id="factoryCalcTime">1h 51m</strong>
+        </section>
         <div class="capability-grid" id="factoryCapabilities"></div>
       </section>
 
       <section class="factory-panel" data-factory-panel="payouts" hidden>
         <div class="section-heading"><div><p class="eyebrow">Financials</p><h2>Held and completed payouts</h2></div><span class="status-pill" id="connectStatus">Stripe Connect not onboarded</span></div>
         <p class="factory-note">Payouts are held while a job is producing or posted. They become eligible only after the order reaches complete.</p>
+        <div class="factory-filters">
+          <label>Status<select id="payoutStatusFilter"><option value="">All payout states</option><option value="held">Held</option><option value="eligible">Eligible</option><option value="paid">Paid</option><option value="failed">Failed</option></select></label>
+          <label>Brand<select id="payoutBrandFilter"><option value="">All brands</option><option value="tray">Tray</option><option value="makeup">Makeup</option><option value="paint">Paint</option><option value="stitch">Stitch</option><option value="print">Print</option></select></label>
+          <label>Search<input id="payoutSearchFilter" type="search" placeholder="Invoice or order"></label>
+        </div>
         <div class="connect-actions">
           <button class="button button-primary" id="startConnectOnboarding" type="button">Open Stripe onboarding</button>
           <button class="button button-secondary" id="refreshConnectStatus" type="button">Refresh Stripe status</button>
@@ -121,6 +145,7 @@
     <div class="toast" id="factoryToast" role="status"></div>
     <script src="../public-config.js"></script>
     <script src="../account.js"></script>
+    <script src="../print-estimates.js"></script>
     <script src="factory.js"></script>
     <script src="../site-wide.js"></script>
   </body>

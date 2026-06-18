@@ -16,7 +16,8 @@ const filamentColours = [
   { key: "purple", name: "Purple", hex: "#6e4b8b" },
   { key: "pink", name: "Pink", hex: "#d98c9b" },
   { key: "rose-gold", name: "Rose Gold", hex: "#b76e79" },
-  { key: "brown", name: "Brown", hex: "#6f4e37" }
+  { key: "brown", name: "Brown", hex: "#6f4e37" },
+  { key: "natural-abs", name: "Natural ABS", hex: "#e6dfcf" }
 ];
 
 document.getElementById("filamentColour").innerHTML = filamentColours
@@ -302,6 +303,8 @@ document.getElementById("quoteButton").addEventListener("click", async () => {
 });
 
 window.generatorAuth.initAuth().catch((error) => { document.getElementById("loginError").textContent = error.message; });
+window.generatorCurrentConfig = config;
+window.generatorCurrentName = () => document.getElementById("printName").value.trim() || "Uploaded print";
 previewTurntable = window.forgetPreview3d.createTurntable(document.getElementById("preview"), drawPreview);
 document.querySelectorAll("[data-preview-turn]").forEach((button) => button.addEventListener("click", () => previewTurntable.turn(Number(button.dataset.previewTurn) * Math.PI / 8)));
 document.querySelector("[data-preview-reset]").addEventListener("click", () => previewTurntable.reset());

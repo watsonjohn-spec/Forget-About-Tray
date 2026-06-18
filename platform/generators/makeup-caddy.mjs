@@ -32,8 +32,8 @@ function normalizeParameters(input = {}) {
     maxSpineLength: numberInRange(input.maxSpineLength ?? 220, 100, 400),
     gap: numberInRange(input.gap ?? 6, 2, 30),
     edgeMargin: numberInRange(input.edgeMargin ?? 8, 3, 30),
-    baseThickness: numberInRange(input.baseThickness ?? 3, 1.2, 12),
-    wallThickness: numberInRange(input.wallThickness ?? 2, 1, 6),
+    baseThickness: numberInRange(input.baseThickness ?? 2.6, 1.2, 12),
+    wallThickness: numberInRange(input.wallThickness ?? 1.7, 1, 6),
     holderHeight: numberInRange(input.holderHeight ?? 18, 5, 220),
     stepRise: numberInRange(input.stepRise ?? 22, 10, 60),
     pegboardColumns: Math.round(numberInRange(input.pegboardColumns ?? 3, 1, 8)),
@@ -44,7 +44,7 @@ function normalizeParameters(input = {}) {
     handleWidth: numberInRange(input.handleWidth ?? 70, 35, 180),
     balanceCatchalls: input.balanceCatchalls !== false,
     filamentKey: String(input.filamentKey || "pla-rose-gold").slice(0, 80),
-    filamentMaterial: ["pla", "petg"].includes(input.filamentMaterial) ? input.filamentMaterial : "pla",
+    filamentMaterial: ["pla", "petg", "abs"].includes(input.filamentMaterial) ? input.filamentMaterial : "pla",
     filamentName: String(input.filamentName || "Rose Gold").slice(0, 80),
     filamentHex: /^#[0-9a-f]{6}$/i.test(input.filamentHex || "") ? input.filamentHex : "#b76e79"
   };
@@ -138,19 +138,19 @@ function itemLayout(config) {
     const rowDepths = Array.from({ length: rows }, (_, row) => Math.max(24, ...cells.filter((cell) => cell.row === row).map((cell) => cell.cellDepth)));
     const columnOffsets = columnWidths.map((_, column) => columnWidths.slice(0, column).reduce((sum, width) => sum + width, 0));
     const rowOffsets = rowDepths.map((_, row) => rowDepths.slice(0, row).reduce((sum, depth) => sum + depth, 0));
-    const hookDepth = Math.max(12, t * 6);
+    const hookDepth = Math.max(9, t * 4);
     const hookWidth = 4.2;
-    const hookBladeDepth = 12;
-    const hookDrop = Math.max(7, t * 3.5);
-    const hookCatchDepth = 4;
-    const hookCatchHeight = 2;
+    const hookBladeDepth = 4;
+    const hookDrop = Math.max(14, t * 8);
+    const hookCatchDepth = 10;
+    const hookCatchHeight = 3;
     const baseZ = hookDrop;
     const outerWidth = columnWidths.reduce((sum, width) => sum + width, 0);
     const sheetDepth = rowDepths.reduce((sum, depth) => sum + depth, 0);
     const positions = cells.map((cell) => ({
       ...cell,
       x: columnOffsets[cell.column] + t,
-      y: hookDepth + rowOffsets[cell.row] + t,
+      y: rowOffsets[cell.row] + t,
       z: 0
     }));
     const hookCount = Math.max(2, Math.min(10, Math.floor(outerWidth / config.pegboardHookSpacing) + 1));
@@ -272,7 +272,7 @@ function buildGeometry(parameters) {
   const { positions, outerWidth, outerDepth } = layout;
   if (config.layoutMode === "pegboard") {
     const t = config.wallThickness;
-    const boxes = [{ x: 0, y: layout.hookDepth, z: layout.baseZ, w: layout.sheetWidth, d: layout.sheetDepth, h: config.baseThickness, kind: "base" }];
+    const boxes = [{ x: 0, y: 0, z: layout.baseZ, w: layout.sheetWidth, d: layout.sheetDepth, h: config.baseThickness, kind: "base" }];
     positions.forEach((position) => {
       const h = Math.max(8, position.height * 2 / 3);
       const z = layout.baseZ + config.baseThickness;
@@ -285,10 +285,10 @@ function buildGeometry(parameters) {
     });
     for (let hook = 0; hook < layout.hookCount; hook += 1) {
       const hookX = layout.hookCount === 1 ? layout.sheetWidth / 2 - layout.hookWidth / 2 : (hook * (layout.sheetWidth - layout.hookWidth)) / (layout.hookCount - 1);
-      const hookY = (layout.hookDepth - layout.hookBladeDepth) / 2;
+      const hookY = layout.sheetDepth + 2;
       boxes.push(
         { x: hookX, y: hookY, z: 0, w: layout.hookWidth, d: layout.hookBladeDepth, h: layout.hookDrop, kind: "hook" },
-        { x: hookX, y: hookY + layout.hookBladeDepth - layout.hookCatchDepth, z: 0, w: layout.hookWidth, d: layout.hookCatchDepth, h: layout.hookDrop + layout.hookCatchHeight, kind: "hook" }
+        { x: hookX, y: hookY + layout.hookBladeDepth - config.wallThickness, z: 0, w: layout.hookWidth, d: layout.hookCatchDepth, h: layout.hookCatchHeight, kind: "hook" }
       );
     }
     const split = splitPegboardBoxes(boxes, layout.sheetWidth, layout.sheetDepth, layout.hookDepth, config.baseThickness, layout.baseZ);
@@ -322,7 +322,7 @@ function buildGeometry(parameters) {
     });
   } else {
     const holderHeights = positions.map((position) => Math.max(8, position.height * 2 / 3));
-    const spineHeight = Math.max(...holderHeights, config.handleHeight / 2);
+    const spineHeight = Math.max(...holderHeights, config.handleHeight * 0.55);
     boxes.push({ x: 0, y: layout.spineY, z: config.baseThickness, w: outerWidth, d: layout.spineWidth, h: spineHeight });
   }
   positions.forEach((position) => {

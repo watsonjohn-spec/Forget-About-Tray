@@ -335,6 +335,8 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .print-output-panel { margin-top: 16px; }
 .storage-switch { margin: 0; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: #fbfbf7; }
 .storage-preview-panel { padding: 14px; display: grid; gap: 12px; border-bottom: 1px solid var(--line); background: radial-gradient(circle, #f8fbef, #e3e9d8); }
+.storage-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.storage-preview-heading h3 { margin: 0; font-size: 14px; }
 #storagePreview { width: 100%; min-height: 300px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.62); }
 .storage-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .storage-stats div { padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.75); }
