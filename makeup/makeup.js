@@ -10,7 +10,7 @@ const defaults = {
   items: catalogue.slice(0, 3).map((item, index) => ({ ...item, id: `${item.id}-${index}`, clearance: 1.5 })),
   layoutMode: "caddy", maxSpineLength: 220, gap: 6, edgeMargin: 8, baseThickness: 3, wallThickness: 2, stepRise: 22,
   pegboardColumns: 3, pegboardRows: 2, pegboardHookSpacing: 40,
-  handleEnabled: true, handleHeight: 95, handleWidth: 70,
+  handleEnabled: true, handleHeight: 95, handleWidth: 70, balanceCatchalls: true,
   filamentKey: "pla-rose-gold", filamentMaterial: "pla", filamentName: "Rose Gold", filamentHex: "#b76e79"
 };
 let state = structuredClone(defaults);
@@ -99,6 +99,7 @@ function readConstruction() {
     state[key] = Number(document.getElementById(key).value);
   });
   state.handleEnabled = true;
+  state.balanceCatchalls = document.getElementById("balanceCatchalls").checked;
   document.getElementById("handleEnabled").checked = true;
   const filament = filamentColours.find((candidate) => candidate.key === document.getElementById("filamentColour").value) || filamentColours[0];
   state.filamentKey = filament.key;
@@ -108,12 +109,13 @@ function readConstruction() {
 }
 
 function writeConstruction() {
-  state = { ...defaults, ...state, handleEnabled: true };
+  state = { ...defaults, ...state, handleEnabled: true, balanceCatchalls: state.balanceCatchalls !== false };
   if (!["caddy", "staircase", "pegboard"].includes(state.layoutMode)) state.layoutMode = "caddy";
   ["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "pegboardColumns", "pegboardRows", "pegboardHookSpacing", "handleHeight", "handleWidth"].forEach((key) => {
     document.getElementById(key).value = state[key];
   });
   document.getElementById("handleEnabled").checked = true;
+  document.getElementById("balanceCatchalls").checked = state.balanceCatchalls !== false;
   const isCaddy = state.layoutMode === "caddy";
   const isStaircase = state.layoutMode === "staircase";
   const isPegboard = state.layoutMode === "pegboard";
@@ -124,13 +126,90 @@ function writeConstruction() {
   document.getElementById("pegboardNote").hidden = !isPegboard;
   document.getElementById("handleFields").hidden = !isCaddy;
   document.getElementById("handleEnabled").closest(".switch").hidden = !isCaddy;
+  document.getElementById("balanceCatchalls").closest(".switch").hidden = isPegboard;
   document.querySelectorAll("[data-layout-mode]").forEach((button) => button.classList.toggle("active", button.dataset.layoutMode === state.layoutMode));
   document.getElementById("filamentColour").value = state.filamentKey;
 }
 
+function catchallWallHeight(config) {
+  return Math.max(10, Math.min(28, Number(config.handleHeight || 88) / 4));
+}
+
+function makeCatchallCell({ x, y, z = 0, width, depth, row, side }, config) {
+  const minimum = Math.max(12, config.wallThickness * 5);
+  if (!config.balanceCatchalls || width < minimum || depth < minimum) return null;
+  return {
+    id: `catchall-${side ?? row ?? "space"}`,
+    name: "Catchall tray",
+    kind: "catchall",
+    x,
+    y,
+    z,
+    row,
+    side,
+    slotWidth: width,
+    slotDepth: depth,
+    height: catchallWallHeight(config)
+  };
+}
+
+function caddyCatchalls(layout, config) {
+  if (config.layoutMode !== "caddy" || !config.balanceCatchalls) return [];
+  return [0, 1].map((side) => {
+    const usedLength = layout.sideLengths[side] || 0;
+    const depth = layout.sideDepths[side] || 0;
+    const x = config.wallThickness + usedLength;
+    const y = side === 0 ? layout.spineY - depth : layout.spineY + layout.spineWidth;
+    return makeCatchallCell({
+      x,
+      y,
+      width: layout.outerWidth - config.wallThickness - x,
+      depth,
+      side
+    }, config);
+  }).filter(Boolean);
+}
+
+function staircaseCatchalls(layout, config) {
+  if (config.layoutMode !== "staircase" || !config.balanceCatchalls) return [];
+  return layout.rowDepths.map((depth, row) => {
+    const rowPositions = layout.positions.filter((position) => position.row === row);
+    const endX = Math.max(config.edgeMargin, ...rowPositions.map((position) => position.x + position.slotWidth));
+    const y = rowPositions[0]?.y ?? config.edgeMargin;
+    return makeCatchallCell({
+      x: endX,
+      y,
+      z: row * config.stepRise,
+      width: layout.outerWidth - config.edgeMargin - endX,
+      depth,
+      row
+    }, config);
+  }).filter(Boolean);
+}
+
+function catchallWallBoxes(catchall, config, mode) {
+  const t = config.wallThickness;
+  const z = config.baseThickness + Number(catchall.z || 0);
+  const h = catchall.height;
+  if (mode === "caddy") {
+    const frontY = catchall.side === 0 ? catchall.y - t : catchall.y + catchall.slotDepth;
+    return [
+      { x: catchall.x - t, y: frontY, z, w: catchall.slotWidth + t * 2, d: t, h, kind: "catchall" },
+      { x: catchall.x - t, y: catchall.y, z, w: t, d: catchall.slotDepth, h, kind: "catchall" },
+      { x: catchall.x + catchall.slotWidth, y: catchall.y, z, w: t, d: catchall.slotDepth, h, kind: "catchall" }
+    ];
+  }
+  return [
+    { x: catchall.x - t, y: catchall.y - t, z, w: catchall.slotWidth + t * 2, d: t, h, kind: "catchall" },
+    { x: catchall.x - t, y: catchall.y + catchall.slotDepth, z, w: catchall.slotWidth + t * 2, d: t, h, kind: "catchall" },
+    { x: catchall.x - t, y: catchall.y, z, w: t, d: catchall.slotDepth, h, kind: "catchall" },
+    { x: catchall.x + catchall.slotWidth, y: catchall.y, z, w: t, d: catchall.slotDepth, h, kind: "catchall" }
+  ];
+}
+
 function geometry() {
   readConstruction();
-  if (!state.items.length) return { positions: [], boxes: [], outerWidth: 100, outerDepth: 70, height: state.baseThickness, materialCm3: 0 };
+  if (!state.items.length) return { positions: [], catchalls: [], boxes: [], outerWidth: 100, outerDepth: 70, height: state.baseThickness, materialCm3: 0 };
   const items = state.items.map((item) => ({ ...item, slotWidth: item.width + item.clearance * 2, slotDepth: item.depth + item.clearance * 2 }));
   let positions = [];
   let outerWidth;
@@ -138,6 +217,8 @@ function geometry() {
   let rowDepths = [];
   let spineY = 0;
   let spineWidth = Math.max(state.wallThickness * 3, 8);
+  let sideDepths = [];
+  let sideLengths = [];
   if (state.layoutMode === "staircase") {
     const rows = [];
     items.forEach((item) => {
@@ -216,9 +297,9 @@ function geometry() {
   } else {
     const sides = [[], []];
     items.forEach((item, index) => sides[index % 2].push(item));
-    const sideDepths = sides.map((side) => Math.max(0, ...side.map((item) => item.slotDepth)));
+    sideDepths = sides.map((side) => Math.max(0, ...side.map((item) => item.slotDepth)));
     spineWidth = Math.max(state.wallThickness * 4, 10);
-    const sideLengths = sides.map((side) => side.reduce((sum, item) => sum + item.slotWidth, 0) + Math.max(0, side.length - 1) * state.gap);
+    sideLengths = sides.map((side) => side.reduce((sum, item) => sum + item.slotWidth, 0) + Math.max(0, side.length - 1) * state.gap);
     outerWidth = Math.max(...sideLengths) + state.wallThickness * 2;
     outerDepth = sideDepths[0] + spineWidth + sideDepths[1] + state.wallThickness * 2;
     spineY = state.wallThickness + sideDepths[0];
@@ -231,6 +312,8 @@ function geometry() {
       });
     });
   }
+  const layout = { positions, outerWidth, outerDepth, rowDepths, spineY, spineWidth, sideDepths, sideLengths };
+  const catchalls = state.layoutMode === "staircase" ? staircaseCatchalls(layout, state) : caddyCatchalls(layout, state);
   const boxes = [{ x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: state.baseThickness, kind: "base" }];
   if (state.layoutMode === "staircase") {
     let y = state.edgeMargin;
@@ -264,6 +347,9 @@ function geometry() {
       );
     }
   });
+  catchalls.forEach((catchall) => {
+    boxes.push(...catchallWallBoxes(catchall, state, state.layoutMode));
+  });
   if (state.layoutMode === "caddy") {
     const t = Math.max(state.wallThickness * 2, 4);
     const width = Math.min(Math.max(t * 2, state.handleWidth), outerWidth);
@@ -278,7 +364,7 @@ function geometry() {
   }
   const materialCm3 = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
   const height = Math.max(...boxes.map((box) => box.z + box.h));
-  return { positions, boxes, outerWidth, outerDepth, height, materialCm3 };
+  return { positions, catchalls, boxes, outerWidth, outerDepth, height, materialCm3 };
 }
 
 function renderSlotList() {
@@ -440,7 +526,7 @@ function renderPreviewModel() {
   */
   document.getElementById("totalHeight").textContent = `${metric.height.toFixed(1)} mm`;
   document.getElementById("materialEstimate").textContent = `${(metric.materialCm3 * (state.filamentMaterial === "petg" ? 1.27 : 1.24)).toFixed(1)} g`;
-  document.getElementById("slotCount").textContent = state.items.length;
+  document.getElementById("slotCount").textContent = metric.catchalls?.length ? `${state.items.length} + ${metric.catchalls.length}` : state.items.length;
   document.getElementById("outerSize").textContent = metric.assembledWidth
     ? `${metric.assembledWidth.toFixed(1)} x ${metric.assembledDepth.toFixed(1)} mm${metric.chunkCount > 1 ? ` (${metric.chunkCount} plates)` : ""}`
     : `${metric.outerWidth.toFixed(1)} x ${metric.outerDepth.toFixed(1)} mm`;
@@ -751,7 +837,7 @@ document.getElementById("slotList").addEventListener("click", (event) => {
   }
   renderPreview();
 });
-["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "pegboardColumns", "pegboardRows", "pegboardHookSpacing", "handleHeight", "handleWidth", "filamentColour"].forEach((id) => document.getElementById(id).addEventListener("input", renderPreview));
+["maxSpineLength", "gap", "edgeMargin", "baseThickness", "wallThickness", "stepRise", "pegboardColumns", "pegboardRows", "pegboardHookSpacing", "handleHeight", "handleWidth", "filamentColour", "balanceCatchalls"].forEach((id) => document.getElementById(id).addEventListener("input", renderPreview));
 document.querySelectorAll("[data-layout-mode]").forEach((button) => button.addEventListener("click", () => {
   state.layoutMode = button.dataset.layoutMode;
   writeConstruction();

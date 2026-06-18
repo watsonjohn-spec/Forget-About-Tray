@@ -42,6 +42,7 @@ function normalizeParameters(input = {}) {
     handleEnabled: true,
     handleHeight: numberInRange(input.handleHeight ?? 95, 45, 180),
     handleWidth: numberInRange(input.handleWidth ?? 70, 35, 180),
+    balanceCatchalls: input.balanceCatchalls !== false,
     filamentKey: String(input.filamentKey || "pla-rose-gold").slice(0, 80),
     filamentMaterial: ["pla", "petg"].includes(input.filamentMaterial) ? input.filamentMaterial : "pla",
     filamentName: String(input.filamentName || "Rose Gold").slice(0, 80),
@@ -189,6 +190,82 @@ function itemLayout(config) {
   return { positions, outerWidth, outerDepth, spineWidth, spineY, sideDepths, sideLengths };
 }
 
+function catchallWallHeight(config) {
+  return Math.max(10, Math.min(28, Number(config.handleHeight || 88) / 4));
+}
+
+function makeCatchallCell({ x, y, z = 0, width, depth, row, side }, config) {
+  const minimum = Math.max(12, config.wallThickness * 5);
+  if (!config.balanceCatchalls || width < minimum || depth < minimum) return null;
+  return {
+    id: `catchall-${side ?? row ?? "space"}`,
+    name: "Catchall tray",
+    kind: "catchall",
+    x,
+    y,
+    z,
+    row,
+    side,
+    slotWidth: width,
+    slotDepth: depth,
+    height: catchallWallHeight(config)
+  };
+}
+
+function caddyCatchalls(layout, config) {
+  if (config.layoutMode !== "caddy" || !config.balanceCatchalls) return [];
+  return [0, 1].map((side) => {
+    const usedLength = layout.sideLengths[side] || 0;
+    const depth = layout.sideDepths[side] || 0;
+    const x = config.wallThickness + usedLength;
+    const y = side === 0 ? layout.spineY - depth : layout.spineY + layout.spineWidth;
+    return makeCatchallCell({
+      x,
+      y,
+      width: layout.outerWidth - config.wallThickness - x,
+      depth,
+      side
+    }, config);
+  }).filter(Boolean);
+}
+
+function staircaseCatchalls(layout, config) {
+  if (config.layoutMode !== "staircase" || !config.balanceCatchalls) return [];
+  return layout.rowDepths.map((depth, row) => {
+    const rowPositions = layout.positions.filter((position) => position.row === row);
+    const endX = Math.max(config.edgeMargin, ...rowPositions.map((position) => position.x + position.slotWidth));
+    const y = rowPositions[0]?.y ?? config.edgeMargin;
+    return makeCatchallCell({
+      x: endX,
+      y,
+      z: row * config.stepRise,
+      width: layout.outerWidth - config.edgeMargin - endX,
+      depth,
+      row
+    }, config);
+  }).filter(Boolean);
+}
+
+function catchallWallBoxes(catchall, config, mode) {
+  const t = config.wallThickness;
+  const z = config.baseThickness + Number(catchall.z || 0);
+  const h = catchall.height;
+  if (mode === "caddy") {
+    const frontY = catchall.side === 0 ? catchall.y - t : catchall.y + catchall.slotDepth;
+    return [
+      { x: catchall.x - t, y: frontY, z, w: catchall.slotWidth + t * 2, d: t, h, kind: "catchall" },
+      { x: catchall.x - t, y: catchall.y, z, w: t, d: catchall.slotDepth, h, kind: "catchall" },
+      { x: catchall.x + catchall.slotWidth, y: catchall.y, z, w: t, d: catchall.slotDepth, h, kind: "catchall" }
+    ];
+  }
+  return [
+    { x: catchall.x - t, y: catchall.y - t, z, w: catchall.slotWidth + t * 2, d: t, h, kind: "catchall" },
+    { x: catchall.x - t, y: catchall.y + catchall.slotDepth, z, w: catchall.slotWidth + t * 2, d: t, h, kind: "catchall" },
+    { x: catchall.x - t, y: catchall.y, z, w: t, d: catchall.slotDepth, h, kind: "catchall" },
+    { x: catchall.x + catchall.slotWidth, y: catchall.y, z, w: t, d: catchall.slotDepth, h, kind: "catchall" }
+  ];
+}
+
 function buildGeometry(parameters) {
   const config = normalizeParameters(parameters);
   const layout = itemLayout(config);
@@ -233,6 +310,7 @@ function buildGeometry(parameters) {
       chunkCount: split.chunkCount
     };
   }
+  const catchalls = config.layoutMode === "staircase" ? staircaseCatchalls(layout, config) : caddyCatchalls(layout, config);
   const boxes = [{ x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: config.baseThickness }];
   if (config.layoutMode === "staircase") {
     let y = config.edgeMargin;
@@ -267,6 +345,9 @@ function buildGeometry(parameters) {
       );
     }
   });
+  catchalls.forEach((catchall) => {
+    boxes.push(...catchallWallBoxes(catchall, config, config.layoutMode));
+  });
   if (config.layoutMode === "caddy") {
     const t = Math.max(config.wallThickness * 2, 4);
     const handleWidth = Math.min(Math.max(t * 2, config.handleWidth), outerWidth);
@@ -282,7 +363,7 @@ function buildGeometry(parameters) {
   const materialCm3 = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
   const holderTop = Math.max(...positions.map((position) => config.baseThickness + Number(position.z || 0) + position.height * 2 / 3));
   const height = Math.max(holderTop, ...boxes.map((box) => box.z + box.h));
-  return { config, boxes, positions, outerWidth, outerDepth, height, materialCm3, spineY: layout.spineY, spineWidth: layout.spineWidth };
+  return { config, boxes, positions, catchalls, outerWidth, outerDepth, height, materialCm3, spineY: layout.spineY, spineWidth: layout.spineWidth };
 }
 
 function boxTriangles({ x, y, z, w, d, h }) {

@@ -30,8 +30,12 @@ test("makeup caddies are a separate enabled generator under the makeup brand", (
   };
   const geometry = generator.buildGeometry(parameters);
   assert.equal(geometry.positions.length, 2);
+  assert.equal(geometry.catchalls.length, 1);
+  assert.ok(geometry.boxes.some((box) => box.kind === "catchall"));
   assert.ok(geometry.boxes.length > 10);
   assert.equal(generator.normalizeParameters({ ...parameters, handleEnabled: false }).handleEnabled, true);
+  assert.equal(generator.normalizeParameters(parameters).balanceCatchalls, true);
+  assert.equal(generator.normalizeParameters({ ...parameters, balanceCatchalls: false }).balanceCatchalls, false);
   assert.equal(geometry.config.handleEnabled, true);
   assert.equal(geometry.spineWidth, 10);
   assert.equal(geometry.spineY, 27);
@@ -42,10 +46,13 @@ test("makeup caddies are a separate enabled generator under the makeup brand", (
   const shortCaddy = generator.buildGeometry({ ...parameters, items: [{ id: "compact", brand: "Generic", name: "Tiny compact", category: "Compact", width: 20, depth: 20, height: 24, clearance: 1.5 }], handleHeight: 160 });
   const spineWall = shortCaddy.boxes.find((box) => box.y === shortCaddy.spineY && box.d === shortCaddy.spineWidth && box.w === shortCaddy.outerWidth);
   assert.ok(spineWall.h >= 80);
+  const unbalanced = generator.buildGeometry({ ...parameters, balanceCatchalls: false });
+  assert.equal(unbalanced.catchalls.length, 0);
   assert.match(generator.renderStl(parameters), /^solid makeup_caddy/);
   assert.match(generator.safeFileName(parameters, "Dressing table"), /2-slots-handle\.stl$/);
   const staircase = generator.buildGeometry({ ...parameters, items: [...parameters.items, { ...parameters.items[1], id: "foundation-two" }], layoutMode: "staircase", maxSpineLength: 100, stepRise: 22 });
   assert.ok(staircase.positions.some((position) => position.z > 0));
+  assert.ok(staircase.catchalls.length > 0);
   assert.ok(staircase.height > geometry.config.baseThickness);
   const pegboard = generator.buildGeometry({
     ...parameters,
@@ -57,6 +64,7 @@ test("makeup caddies are a separate enabled generator under the makeup brand", (
   });
   assert.equal(pegboard.config.layoutMode, "pegboard");
   assert.equal(pegboard.positions.length, 12);
+  assert.equal(pegboard.catchalls, undefined);
   const pegboardHooks = pegboard.boxes.filter((box) => box.kind === "hook");
   const pegboardBases = pegboard.boxes.filter((box) => box.kind === "base");
   assert.ok(pegboardHooks.length > 0);

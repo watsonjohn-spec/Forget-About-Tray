@@ -260,10 +260,15 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(makeupHtml, /data-layout-mode="staircase"/);
   assert.match(makeupHtml, /data-layout-mode="pegboard"/);
   assert.match(makeupHtml, /id="handleEnabled" type="checkbox" checked disabled/);
+  assert.match(makeupHtml, /id="balanceCatchalls" type="checkbox" checked/);
   assert.match(makeupHtml, /id="stepRiseField"/);
   assert.match(makeupHtml, /id="pegboardFields"/);
   assert.match(makeupHtml, /data-account-tab="orders"/);
   assert.match(makeupApp, /state\.handleEnabled = true/);
+  assert.match(makeupApp, /balanceCatchalls: true/);
+  assert.match(makeupApp, /function caddyCatchalls/);
+  assert.match(makeupApp, /function staircaseCatchalls/);
+  assert.match(makeupApp, /kind: "catchall"/);
   assert.match(makeupApp, /outerWidth = Math\.max\(\.\.\.sideLengths\) \+ state\.wallThickness \* 2/);
   assert.match(makeupApp, /state\.layoutMode === "pegboard"/);
   assert.match(makeupApp, /splitPegboardBoxes/);
