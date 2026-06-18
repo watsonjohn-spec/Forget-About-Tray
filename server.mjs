@@ -1865,18 +1865,8 @@ createServer(async (request, response) => {
   }
 
   const brandRoute = publicPlatformConfig.brands.find((brand) => brand.enabled && (pathname === `/${brand.path}` || pathname === `/${brand.path}/`));
-  if (brandRoute?.key === "makeup" && !pathname.endsWith("/")) {
+  if (brandRoute && ["tray", "makeup", "print", "paint", "stitch"].includes(brandRoute.key) && !pathname.endsWith("/")) {
     response.writeHead(308, { Location: `/${brandRoute.path}/${requestUrl.search}` });
-    response.end();
-    return;
-  }
-  if (brandRoute && ["print", "paint", "stitch"].includes(brandRoute.key) && !pathname.endsWith("/")) {
-    response.writeHead(308, { Location: `/${brandRoute.path}/${requestUrl.search}` });
-    response.end();
-    return;
-  }
-  if (brandRoute && brandRoute.key === "tray" && pathname.endsWith("/")) {
-    response.writeHead(308, { Location: `/${brandRoute.path}${requestUrl.search}` });
     response.end();
     return;
   }
@@ -1886,13 +1876,14 @@ createServer(async (request, response) => {
     return;
   }
   const brandEntries = {
+    tray: "tray/index.html",
     makeup: "makeup/index.html",
     print: "print/index.html",
     paint: "paint/index.html",
     stitch: "stitch/index.html"
   };
   const brandEntry = brandEntries[brandRoute?.key] || "index.html";
-  const relativePath = pathname === "/" ? "home.html" : brandRoute ? brandEntry : pathname === "/factory/" ? "factory/index.html" : pathname.slice(1);
+  const relativePath = pathname === "/" ? "index.html" : brandRoute ? brandEntry : pathname === "/factory/" ? "factory/index.html" : pathname.slice(1);
   const filePath = normalize(join(root, relativePath));
 
   if (!filePath.startsWith(normalize(root)) || !existsSync(filePath) || !statSync(filePath).isFile()) {

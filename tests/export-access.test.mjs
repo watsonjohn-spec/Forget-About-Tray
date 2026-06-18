@@ -262,7 +262,7 @@ test("sponsored permit is tray-specific and paid access remains available", asyn
 });
 
 test("download and physical print are both presented as fulfilment options", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../tray/index.html", import.meta.url), "utf8");
   const appSource = await readFile(new URL("../app.js", import.meta.url), "utf8");
   assert.match(html, /id="chooseUnlockedExport"[\s\S]*?<strong>Download STL<\/strong>/);
   assert.match(html, /id="choosePrintOrder"[\s\S]*?<strong>Have it printed<\/strong>/);
@@ -271,9 +271,9 @@ test("download and physical print are both presented as fulfilment options", asy
 });
 
 test("enabled brand route serves the shared app shell", async () => {
-  const response = await fetch(`${baseUrl}/tray`);
+  const response = await fetch(`${baseUrl}/tray/`);
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /<script src="platform\.js"><\/script>/);
+  assert.match(await response.text(), /<script src="\.\.\/platform\.js"><\/script>/);
 });
 
 test("corporate landing page links to active generators", async () => {
@@ -281,8 +281,8 @@ test("corporate landing page links to active generators", async () => {
   assert.equal(landing.status, 200);
   const html = await landing.text();
   assert.match(html, /Forget About/);
-  for (const route of ["/tray", "/makeup/", "/print/", "/paint/", "/stitch/", "/factory/"]) {
-    assert.match(html, new RegExp(`href="${route.replace("/", "\\/")}`));
+  for (const route of ["/tray/", "/makeup/", "/print/", "/paint/", "/stitch/", "/factory/"]) {
+    assert.match(html, new RegExp(`href="${route.slice(1).replace("/", "\\/")}`));
     const response = await fetch(`${baseUrl}${route}`);
     assert.equal(response.status, 200);
   }

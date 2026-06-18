@@ -30,7 +30,7 @@ test("catalogue covers main and legacy armies with square and rectangular bases"
 
 test("base shape controls and shared catalogue are present", async () => {
   const [html, app] = await Promise.all([
-    readFile(new URL("index.html", root), "utf8"),
+    readFile(new URL("tray/index.html", root), "utf8"),
     readFile(new URL("app.js", root), "utf8")
   ]);
 
@@ -48,7 +48,7 @@ test("base shape controls and shared catalogue are present", async () => {
 
 test("account dropdown and Supabase OAuth controls are wired", async () => {
   const [html, app, account, publicConfigSource] = await Promise.all([
-    readFile(new URL("index.html", root), "utf8"),
+    readFile(new URL("tray/index.html", root), "utf8"),
     readFile(new URL("app.js", root), "utf8"),
     readFile(new URL("account.js", root), "utf8"),
     readFile(new URL("public-config.js", root), "utf8")
@@ -77,7 +77,7 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
 
 test("login surfaces keep shared account actions across brands and factory", async () => {
   const [trayHtml, trayApp, makeupHtml, makeupApp, factoryHtml, factoryApp, architecture] = await Promise.all([
-    readFile(new URL("index.html", root), "utf8"),
+    readFile(new URL("tray/index.html", root), "utf8"),
     readFile(new URL("app.js", root), "utf8"),
     readFile(new URL("makeup/index.html", root), "utf8"),
     readFile(new URL("makeup/makeup.js", root), "utf8"),
@@ -190,7 +190,7 @@ test("makeup and factory OAuth keep users on the originating app after provider 
 
 test("UAT shell keeps primary actions visible and separates account pages", async () => {
   const [html, css, app] = await Promise.all([
-    readFile(new URL("index.html", root), "utf8"),
+    readFile(new URL("tray/index.html", root), "utf8"),
     readFile(new URL("styles.css", root), "utf8"),
     readFile(new URL("app.js", root), "utf8")
   ]);
@@ -226,7 +226,7 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
 
 test("UAT2 previews, explicit login, factory workflow, and makeup account tools are wired", async () => {
   const [trayHtml, trayApp, account, factoryHtml, factoryApp, makeupHtml, makeupApp] = await Promise.all([
-    readFile(new URL("index.html", root), "utf8"),
+    readFile(new URL("tray/index.html", root), "utf8"),
     readFile(new URL("app.js", root), "utf8"),
     readFile(new URL("account.js", root), "utf8"),
     readFile(new URL("factory/index.html", root), "utf8"),
@@ -280,8 +280,9 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
 });
 
 test("site shell, footer, and prototype generators are present", async () => {
-  const [homeHtml, footerCss, footerJs, printHtml, paintHtml, stitchHtml, printJs, paintJs, stitchJs] = await Promise.all([
+  const [homeHtml, rootIndexHtml, footerCss, footerJs, printHtml, paintHtml, stitchHtml, printJs, paintJs, stitchJs] = await Promise.all([
     readFile(new URL("home.html", root), "utf8"),
+    readFile(new URL("index.html", root), "utf8"),
     readFile(new URL("site-wide.css", root), "utf8"),
     readFile(new URL("site-wide.js", root), "utf8"),
     readFile(new URL("print/index.html", root), "utf8"),
@@ -291,10 +292,11 @@ test("site shell, footer, and prototype generators are present", async () => {
     readFile(new URL("paint/paint.js", root), "utf8"),
     readFile(new URL("stitch/stitch.js", root), "utf8")
   ]);
-  assert.match(homeHtml, /href="\/tray"/);
-  assert.match(homeHtml, /href="\/print\/"/);
-  assert.match(homeHtml, /href="\/paint\/"/);
-  assert.match(homeHtml, /href="\/stitch\/"/);
+  assert.match(rootIndexHtml, /Generator directory/);
+  assert.match(homeHtml, /href="tray\/"/);
+  assert.match(homeHtml, /href="print\/"/);
+  assert.match(homeHtml, /href="paint\/"/);
+  assert.match(homeHtml, /href="stitch\/"/);
   assert.match(footerJs, /help@forget\.im/);
   assert.match(footerJs, /Modern slavery statement/);
   assert.match(footerCss, /\.site-footer/);
