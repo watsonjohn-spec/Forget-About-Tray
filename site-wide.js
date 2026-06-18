@@ -23,23 +23,23 @@
     <section class="site-footer-legal" aria-label="Legal information">
       <details>
         <summary>Terms</summary>
-        <p>Draft terms: designs are provided for personal use unless a commercial licence is agreed. Generated STL files and print orders should be checked before use. We may refuse unsafe, unlawful, infringing, or technically unsuitable print requests.</p>
+        <p>Draft terms: Forget About provides generator tools, downloadable STL files, and access to independent print providers. Generated files are supplied for your own permitted use unless a separate commercial licence is agreed. You are responsible for checking measurements, compatibility, rights to any uploaded or referenced content, and whether a print is suitable for its intended use. We may refuse, remove, cancel, or refund requests that appear unsafe, unlawful, infringing, misleading, abusive, technically unsuitable, or outside a provider's stated capabilities. Print providers remain independent businesses responsible for their own production quality, listings, tax, safety, and customer communications.</p>
       </details>
       <details>
         <summary>Privacy</summary>
-        <p>Draft privacy notice: account, order, address, payment status, and support information is used to operate the service, fulfil orders, prevent abuse, and meet legal duties. Payment details are handled by Stripe.</p>
+        <p>Draft privacy notice: we use account details, saved designs, uploaded file metadata, quote requests, order records, addresses, messages, payment status, support history, device logs, and basic analytics to run the service, generate designs, match print jobs, fulfil orders, prevent abuse, improve the platform, and meet legal duties. We share only what is needed with payment processors, hosting providers, support tools, and the selected print provider. Card details are handled by Stripe, not stored by Forget About. You can ask for help with access, correction, deletion, portability, or objection requests by emailing help@forget.im.</p>
       </details>
       <details>
         <summary>Refunds</summary>
-        <p>Draft refunds policy: marketplace print orders are refundable until a provider starts production. Once production begins, refunds depend on print failure, non-delivery, or a provider/platform decision. Digital STL access is generally non-refundable once delivered.</p>
+        <p>Draft refunds policy: if something looks wrong, contact support first so the provider has a chance to resolve it. Digital STL access is normally final once the file is generated or downloaded, except where the file is not delivered, is corrupted, or statutory rights require otherwise. Marketplace print orders can usually be cancelled before a provider accepts or starts production. After production starts, refunds or reprints are assessed for non-delivery, damage in transit, incorrect material or colour, significant mismatch against the confirmed design, print failure, or provider error. We may ask for photos, order details, and provider comments before deciding whether to refund, reprint, credit, or decline a claim.</p>
       </details>
       <details>
         <summary>Modern slavery statement</summary>
-        <p>Draft statement: Forget About expects suppliers and print providers to avoid forced labour, child labour, human trafficking, and exploitative practices. As the operation grows, provider checks and supplier review records should be formalised.</p>
+        <p>Draft statement: Forget About expects all suppliers, contractors, and print providers to operate without forced labour, child labour, human trafficking, debt bondage, unsafe coercive work, or exploitative recruitment. Providers should comply with local labour, health, safety, immigration, and wage laws, and should be able to explain who performs fulfilment work. We may review providers, request further information, suspend listings, withhold new jobs, or end relationships where modern-slavery risk is not addressed. As the business grows, we will formalise supplier due diligence, provider onboarding checks, incident records, training, and an annual review of higher-risk supply-chain areas.</p>
       </details>
     </section>
     <div class="site-footer-bottom">
-      <span>Copyright ${year} Forget About. Draft legal copy for review before launch.</span>
+      <span>Copyright ${year} Forget About. Draft policy copy for legal review before launch.</span>
       <span>Support: <a href="mailto:help@forget.im">help@forget.im</a></span>
     </div>
   `;

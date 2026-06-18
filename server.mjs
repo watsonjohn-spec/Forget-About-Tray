@@ -998,7 +998,10 @@ async function createMarketplaceQuotes(request, response) {
     const user = await authenticateUser(request);
     const body = await readJson(request);
     const { brand, generator } = requestPlatformContext(request, body);
-    const parameters = generator.normalizeParameters(body.config || body.parameters || {});
+    const rawParameters = body.config || body.parameters || {};
+    const parameters = generator.normalizeParameters(rawParameters);
+    const desiredColourKey = cleanText(rawParameters.desiredColourKey || parameters.desiredColourKey || "", 80);
+    const preferredPrinterProfileId = cleanText(rawParameters.preferredPrinterProfileId || parameters.preferredPrinterProfileId || "", 80);
     const geometry = generator.buildGeometry(parameters);
     const envelope = geometryEnvelope(geometry);
     const [profiles, capabilities] = await Promise.all([
@@ -1024,6 +1027,8 @@ async function createMarketplaceQuotes(request, response) {
       );
       return available
         && capability.material === (parameters.filamentMaterial || "pla")
+        && (!desiredColourKey || desiredColourKey === "all" || capability.colour_key === desiredColourKey)
+        && (!preferredPrinterProfileId || capability.printer_profile_id === preferredPrinterProfileId)
         && Number(capability.max_width_mm) >= envelope.width
         && Number(capability.max_depth_mm) >= envelope.depth
         && Number(capability.max_height_mm) >= envelope.height;

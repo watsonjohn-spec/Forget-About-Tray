@@ -25,7 +25,9 @@ function normalizeParameters(input = {}) {
     filamentMaterial: material,
     filamentKey: String(input.filamentKey || `custom-${material}`).slice(0, 80),
     filamentName: String(input.filamentName || material.toUpperCase()).slice(0, 80),
-    filamentHex: /^#[0-9a-f]{6}$/i.test(input.filamentHex || "") ? input.filamentHex : "#8b9499"
+    filamentHex: /^#[0-9a-f]{6}$/i.test(input.filamentHex || "") ? input.filamentHex : "#8b9499",
+    desiredColourKey: String(input.desiredColourKey || "all").slice(0, 80),
+    preferredPrinterProfileId: String(input.preferredPrinterProfileId || "").slice(0, 80)
   };
 }
 

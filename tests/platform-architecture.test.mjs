@@ -86,8 +86,13 @@ test("uploaded print, paint, and stitch generators are registered brands", () =>
     outerWidth: 40,
     outerDepth: 35,
     height: 12,
-    estimatedWeightGrams: 18
+    estimatedWeightGrams: 18,
+    desiredColourKey: "blue",
+    preferredPrinterProfileId: "printer-123"
   };
+  const normalizedPrint = printContext.generator.normalizeParameters(uploadedConfig);
+  assert.equal(normalizedPrint.desiredColourKey, "blue");
+  assert.equal(normalizedPrint.preferredPrinterProfileId, "printer-123");
   assert.equal(printContext.generator.renderStl(uploadedConfig).toString(), uploadedStl);
 
   const paintContext = resolvePlatformContext({ brandKey: "paint" });
@@ -117,6 +122,14 @@ test("generator contract validates parameters and renders an STL", () => {
   assert.equal(geometryWithBases.boxes.length, geometry.boxes.length + 12);
   assert.ok(geometryWithBases.materialCm3 > geometry.materialCm3);
   assert.match(generator.renderStl(parameters), /^solid movement_tray/);
+  const roundGeometry = generator.buildGeometry({ ...source, baseShape: "circle", baseSize: 32, baseDepth: 99, includeBases: true });
+  assert.equal(roundGeometry.config.baseShape, "circle");
+  assert.equal(roundGeometry.config.baseDepth, 32);
+  assert.ok(roundGeometry.boxes.length > geometryWithBases.boxes.length);
+  assert.match(generator.safeFileName(roundGeometry.config, "Round tray"), /round-tray-4x3-32mm-circle\.stl/);
+  const largeOval = generator.normalizeParameters({ ...source, baseShape: "oval", baseSize: 170, baseDepth: 105 });
+  assert.equal(largeOval.baseShape, "oval");
+  assert.equal(largeOval.baseDepth, 105);
 });
 
 test("movement tray generator renders Really Useful Box storage inserts", () => {

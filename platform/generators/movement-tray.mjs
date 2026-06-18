@@ -87,8 +87,11 @@ function normalizeParameters(input = {}) {
   return {
     columns: numberInRange(input.columns, 1, 12),
     rows: numberInRange(input.rows, 1, 12),
-    baseSize: numberInRange(input.baseSize, 10, 150),
-    baseDepth: numberInRange(input.baseDepth, 10, 150),
+    baseSize: numberInRange(input.baseSize, 10, 200),
+    baseDepth: insertShapeLocksDepth(input.baseShape)
+      ? numberInRange(input.baseSize, 10, 200)
+      : numberInRange(input.baseDepth, 10, 200),
+    baseShape: normalizeInsertBaseShape(input.baseShape, input.baseSize, input.baseDepth),
     gap: numberInRange(input.gap ?? 1, 0, 10),
     clearance: numberInRange(input.clearance ?? 1, 0, 10),
     plateThickness: numberInRange(input.plateThickness ?? 2, 0.8, 10),
@@ -149,14 +152,15 @@ function buildTrayGeometry(config) {
     const baseStartY = outerDepth + 5;
     for (let column = 0; column < config.columns; column += 1) {
       for (let row = 0; row < config.rows; row += 1) {
-        boxes.push({
+        boxes.push(...baseBoxesWithOptionalHole({
           x: column * (config.baseSize + config.gap),
           y: baseStartY + row * (config.baseDepth + config.gap),
           z: 0,
           w: config.baseSize,
           d: config.baseDepth,
-          h: config.plateThickness
-        });
+          h: config.plateThickness,
+          shape: config.baseShape
+        }));
       }
     }
   }
@@ -478,7 +482,8 @@ function safeFileName(parameters, name) {
   const prefix = String(name || "movement-tray").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "movement-tray";
   if (config.mode === storageMode) return `${prefix}-${config.boxKey || "box"}-insert${config.boxInternalLength > config.splitThreshold || config.boxInternalWidth > config.splitThreshold ? "-4-plates" : ""}.stl`;
   const base = config.baseSize === config.baseDepth ? `${config.baseSize}mm` : `${config.baseSize}x${config.baseDepth}mm`;
-  return `${prefix}-${config.columns}x${config.rows}-${base}.stl`;
+  const shapeSuffix = config.baseShape === "square" || config.baseShape === "rectangle" ? "" : `-${config.baseShape}`;
+  return `${prefix}-${config.columns}x${config.rows}-${base}${shapeSuffix}.stl`;
 }
 
 function describe(parameters) {
@@ -487,7 +492,8 @@ function describe(parameters) {
     const unitCount = config.insertUnits.reduce((sum, unit) => sum + unit.count * unit.copies, 0);
     return `${config.boxName} insert for ${unitCount} models${config.insertMagnetHoles ? ", with 2mm insert magnet holes" : ""}${config.includeBases ? ", including printable bases" : ""}`;
   }
-  return `${config.columns} x ${config.rows} tray for ${config.baseSize} x ${config.baseDepth}mm bases${config.includeBases ? ", including printable bases" : ""}`;
+  const shape = config.baseShape ? ` ${config.baseShape}` : "";
+  return `${config.columns} x ${config.rows} tray for ${config.baseSize} x ${config.baseDepth}mm${shape} bases${config.includeBases ? ", including printable bases" : ""}`;
 }
 
 export const movementTrayGenerator = {

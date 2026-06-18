@@ -1,6 +1,7 @@
 (() => {
   let selectedQuoteId = "";
   let quotes = [];
+  let printerFilterId = "";
 
   function apiBase() {
     return document.querySelector('meta[name="checkout-api-url"]').content.trim().replace(/\/$/, "");
@@ -14,18 +15,24 @@
     return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]);
   }
 
+  function visibleQuotes() {
+    return printerFilterId ? quotes.filter((quote) => quote.printerProfileId === printerFilterId) : quotes;
+  }
+
   function render() {
     const container = document.getElementById("quotes");
     const checkout = document.getElementById("checkoutButton");
     if (!container) return;
-    container.innerHTML = quotes.length ? quotes.map((quote) => `
+    const shownQuotes = visibleQuotes();
+    if (selectedQuoteId && !shownQuotes.some((quote) => quote.id === selectedQuoteId)) selectedQuoteId = "";
+    container.innerHTML = shownQuotes.length ? shownQuotes.map((quote) => `
       <article class="${quote.id === selectedQuoteId ? "selected" : ""}">
         <div><strong>${escapeHtml(quote.providerName)}</strong><br><small>${escapeHtml(quote.basedIn)} | ${quote.leadTimeDays} day lead | ${escapeHtml(quote.colourName || quote.colourKey)} | ${quote.estimatedWeightGrams}g</small>
         <details><summary>Breakdown</summary><small>Material ${money(quote.materialCostPence, quote.currency)} | Printer fee ${money(quote.printerFeePence, quote.currency)} | Postage ${money(quote.postagePence, quote.currency)} | Commission ${money(quote.commissionPence, quote.currency)} | Platform ${money(quote.platformFeePence, quote.currency)} | VAT ${money(quote.vatAmountPence, quote.currency)}</small></details></div>
         <strong>${money(quote.totalIncVatPence, quote.currency)}</strong>
         <button class="button button-secondary" data-quote="${escapeHtml(quote.id)}" type="button">${quote.id === selectedQuoteId ? "Selected" : "Select"}</button>
       </article>
-    `).join("") : "<p>No providers match this design yet.</p>";
+    `).join("") : `<p>${printerFilterId ? "That printer has no matching quotes for this design yet." : "No providers match this design yet."}</p>`;
     if (checkout) checkout.disabled = !selectedQuoteId;
   }
 
@@ -41,8 +48,16 @@
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Quotes could not be loaded.");
     quotes = result.quotes || [];
+    if (Object.prototype.hasOwnProperty.call(config, "preferredPrinterProfileId")) {
+      printerFilterId = config.preferredPrinterProfileId || "";
+    }
     render();
     return quotes;
+  }
+
+  function setPrinterFilter(profileId = "") {
+    printerFilterId = profileId;
+    render();
   }
 
   async function checkout() {
@@ -66,5 +81,5 @@
 
   document.getElementById("checkoutButton")?.addEventListener("click", () => checkout().catch((error) => window.generatorAuth?.toast(error.message)));
 
-  window.generatorQuotes = { request, render };
+  window.generatorQuotes = { request, render, setPrinterFilter, quotes: () => quotes.slice() };
 })();

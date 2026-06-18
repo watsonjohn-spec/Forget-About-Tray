@@ -43,16 +43,20 @@
             </div>
             <div class="field-grid">
               <label>Estimated grams<input id="estimatedWeightGrams" type="number" min="1" max="5000" value="25"></label>
-              <label>Material<select id="filamentMaterial"><option value="pla">PLA</option><option value="petg">PETG</option></select></label>
-              <label>Colour name<input id="filamentName" value="Any standard colour"></label>
+              <label>Filament type<select id="filamentMaterial"><option value="pla">PLA</option><option value="petg">PETG</option></select></label>
+              <label>Filament colour<select id="filamentColour"></select></label>
+            </div>
+            <div class="field-grid single-field">
+              <label>Preferred printer<select id="printerPreference" disabled><option value="">Any matching printer</option></select></label>
             </div>
             <button class="button button-primary" id="quoteButton" type="button">Request print quotes</button>
             <small id="uploadStatus">No STL loaded yet.</small>
+            <small id="printerPreferenceStatus">No printer selected.</small>
           </div>
         </section>
         <section class="preview-card">
-          <div class="card-heading"><h2>Print envelope</h2></div>
-          <div class="preview-stage"><svg id="preview" viewBox="0 0 760 420" role="img" aria-label="Uploaded print envelope preview"></svg></div>
+          <div class="card-heading"><h2>Print preview</h2></div>
+          <div class="preview-stage"><svg id="preview" viewBox="0 0 760 420" role="img" aria-label="Uploaded STL preview"></svg></div>
           <div class="stats">
             <div><span>Size</span><strong id="sizeStat">100 x 100 mm</strong></div>
             <div><span>Height</span><strong id="heightStat">30 mm</strong></div>
@@ -69,6 +73,7 @@
     <script src="../account.js"></script>
     <script src="../generator-auth.js"></script>
     <script src="../generator-quotes.js"></script>
+    <script src="../preview-3d.js"></script>
     <script src="print.js"></script>
     <script src="../site-wide.js"></script>
   </body>

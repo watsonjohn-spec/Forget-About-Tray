@@ -36,10 +36,15 @@ test("base shape controls and shared catalogue are present", async () => {
 
   assert.match(html, /data-base-shape="square"/);
   assert.match(html, /data-base-shape="rectangle"/);
+  assert.match(html, /data-base-shape="circle"/);
+  assert.match(html, /data-base-shape="oval"/);
+  for (const width of [32, 75, 90, 105, 160, 170]) assert.match(html, new RegExp(`data-base="${width}"`));
   for (const length of [50, 60, 75, 100, 150]) assert.match(html, new RegExp(`<option value="${length}">${length} mm</option>`));
+  for (const length of [35, 42, 52, 70, 92, 105]) assert.match(html, new RegExp(`<option value="${length}">${length} mm</option>`));
   assert.match(html, /id="openSingleCatalogue"/);
   assert.match(html, /id="catalogueArmyFilter"/);
-  assert.match(app, /if \(state\.baseShape === "square"\) \{\s*state\.baseDepth = state\.baseSize;/);
+  assert.match(app, /function baseDepthForShape\(shape, width, preferred\)/);
+  assert.match(app, /shapeLocksDepth\(state\.baseShape\)/);
   assert.match(app, /input\.getAttribute\("min"\)/);
   assert.match(app, /function rectangleDepth\(width, preferred\)/);
   assert.match(app, /function applyCatalogueEntry\(entry, count = 10\)/);
@@ -225,14 +230,15 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
 });
 
 test("UAT2 previews, explicit login, factory workflow, and makeup account tools are wired", async () => {
-  const [trayHtml, trayApp, account, factoryHtml, factoryApp, makeupHtml, makeupApp] = await Promise.all([
+  const [trayHtml, trayApp, account, factoryHtml, factoryApp, makeupHtml, makeupApp, preview3d] = await Promise.all([
     readFile(new URL("tray/index.html", root), "utf8"),
     readFile(new URL("app.js", root), "utf8"),
     readFile(new URL("account.js", root), "utf8"),
     readFile(new URL("factory/index.html", root), "utf8"),
     readFile(new URL("factory/factory.js", root), "utf8"),
     readFile(new URL("makeup/index.html", root), "utf8"),
-    readFile(new URL("makeup/makeup.js", root), "utf8")
+    readFile(new URL("makeup/makeup.js", root), "utf8"),
+    readFile(new URL("preview-3d.js", root), "utf8")
   ]);
   assert.match(account, /forget-about-active-session/);
   assert.match(account, /sessionStorage\.getItem\(activeSessionKey\)/);
@@ -247,6 +253,9 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(trayApp, /data-storage-field="baseShape"/);
   assert.match(trayApp, /warhammer40000Catalogue/);
   assert.match(trayApp, /Warhammer 40,000/);
+  assert.match(trayApp, /ageOfSigmarCatalogue/);
+  assert.match(trayApp, /Warhammer Age of Sigmar/);
+  assert.match(trayApp, /ovalBaseSizes/);
   assert.match(trayApp, /storageDepthPresets/);
   assert.match(trayApp, /data-storage-move/);
   assert.match(trayApp, /storageValidationMessages/);
@@ -282,10 +291,13 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(trayApp, /data-job-rating/);
   assert.match(trayApp, /data-send-job-message/);
   assert.match(factoryApp, /Decline job and refund buyer/);
+  assert.match(preview3d, /window\.forgetPreview3d/);
+  assert.match(preview3d, /function renderBoxes\(svg, options\)/);
+  assert.match(preview3d, /function cylinderFaces\(cylinder, transform, fallbackColour, opacity, index\)/);
 });
 
 test("site shell, footer, and prototype generators are present", async () => {
-  const [homeHtml, rootIndexHtml, footerCss, footerJs, printHtml, paintHtml, stitchHtml, printJs, paintJs, stitchJs] = await Promise.all([
+  const [homeHtml, rootIndexHtml, footerCss, footerJs, printHtml, paintHtml, stitchHtml, printJs, paintJs, stitchJs, generatorQuotes, serverSource, uploadedPrint] = await Promise.all([
     readFile(new URL("home.html", root), "utf8"),
     readFile(new URL("index.html", root), "utf8"),
     readFile(new URL("site-wide.css", root), "utf8"),
@@ -295,7 +307,10 @@ test("site shell, footer, and prototype generators are present", async () => {
     readFile(new URL("stitch/index.html", root), "utf8"),
     readFile(new URL("print/print.js", root), "utf8"),
     readFile(new URL("paint/paint.js", root), "utf8"),
-    readFile(new URL("stitch/stitch.js", root), "utf8")
+    readFile(new URL("stitch/stitch.js", root), "utf8"),
+    readFile(new URL("generator-quotes.js", root), "utf8"),
+    readFile(new URL("server.mjs", root), "utf8"),
+    readFile(new URL("platform/generators/uploaded-print.mjs", root), "utf8")
   ]);
   assert.match(rootIndexHtml, /Generator directory/);
   assert.match(homeHtml, /href="tray\/"/);
@@ -306,12 +321,31 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerJs, /Modern slavery statement/);
   assert.match(footerCss, /\.site-footer/);
   assert.match(printHtml, /Forget About Print/);
+  assert.match(printHtml, /preview-3d\.js/);
+  assert.match(printHtml, /id="filamentColour"/);
+  assert.match(printHtml, /id="printerPreference"/);
   assert.match(printJs, /stlBase64/);
+  assert.match(printJs, /function parseStlMesh\(buffer\)/);
+  assert.match(printJs, /function parseAsciiStlMesh\(text\)/);
+  assert.match(printJs, /function renderStlMeshPreview\(svg, mesh, colour\)/);
   assert.match(printJs, /parseBinaryBounds/);
+  assert.match(printJs, /forgetPreview3d\.renderBoxes/);
+  assert.match(printJs, /preferredPrinterProfileId: document\.getElementById\("printerPreference"\)\.value/);
+  assert.match(generatorQuotes, /function setPrinterFilter\(profileId = ""\)/);
+  assert.match(serverSource, /preferredPrinterProfileId/);
+  assert.match(serverSource, /desiredColourKey/);
+  assert.match(uploadedPrint, /desiredColourKey/);
+  assert.match(uploadedPrint, /preferredPrinterProfileId/);
   assert.match(paintHtml, /Forget About Paint/);
+  assert.match(paintHtml, /preview-3d\.js/);
   assert.match(paintJs, /paintConfig/);
   assert.match(paintJs, /brushSlots/);
+  assert.match(paintJs, /paintPreviewGeometry/);
+  assert.match(paintJs, /forgetPreview3d\.renderBoxes/);
   assert.match(stitchHtml, /Forget About Stitch/);
+  assert.match(stitchHtml, /preview-3d\.js/);
   assert.match(stitchJs, /stitchConfig/);
   assert.match(stitchJs, /threads: parseThreads/);
+  assert.match(stitchJs, /stitchPreviewGeometry/);
+  assert.match(stitchJs, /forgetPreview3d\.textLabel/);
 });

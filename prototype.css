@@ -50,6 +50,7 @@ main { width:min(1240px,calc(100% - 40px)); margin:0 auto; }
 .card-heading h2 { margin:0; font:600 21px Georgia,serif; }
 .control-body,.quote-body { padding:18px; display:grid; gap:12px; }
 .field-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.field-grid.single-field { grid-template-columns:1fr; }
 .preview-stage { min-height:430px; padding:18px; display:grid; place-items:center; background:radial-gradient(circle,var(--white),var(--paper)); }
 .preview-stage svg { width:100%; max-height:390px; }
 .stats { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid var(--line); }

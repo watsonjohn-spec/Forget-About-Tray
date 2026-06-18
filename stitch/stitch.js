@@ -26,25 +26,65 @@ function stitchConfig() {
   };
 }
 
-function renderStitchPreview() {
-  const config = stitchConfig();
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character]);
+}
+
+function stitchPreviewGeometry(config) {
   const columns = Math.max(1, config.columns);
-  const rows = Math.ceil(config.threads.length / columns);
-  const scale = Math.min(620 / (columns * (config.slotWidth + 4)), 320 / (rows * (config.slotDepth + 4)));
-  const pitchX = (config.slotWidth + 4) * scale;
-  const pitchY = (config.slotDepth + 4) * scale;
-  const x0 = 380 - columns * pitchX / 2;
-  const y0 = 56;
-  const slots = config.threads.map((thread, index) => {
+  const rows = Math.max(1, Math.ceil(config.threads.length / columns));
+  const outerWidth = columns * config.slotWidth + (columns + 1) * config.wallThickness + (columns - 1) * config.gap;
+  const outerDepth = rows * config.slotDepth + (rows + 1) * config.wallThickness + (rows - 1) * config.gap + 14;
+  const boxes = [{ x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: config.plateThickness }];
+  const labels = [];
+  config.threads.forEach((thread, index) => {
     const col = index % columns;
     const row = Math.floor(index / columns);
-    const x = x0 + col * pitchX;
-    const y = y0 + row * pitchY;
-    return `<g><rect x="${x}" y="${y}" width="${config.slotWidth * scale}" height="${config.slotDepth * scale}" rx="5" fill="#f7f2f8" stroke="#563868" stroke-width="1.5"/><text x="${x + config.slotWidth * scale / 2}" y="${y + config.slotDepth * scale + 13}" text-anchor="middle" fill="#30273a" font-size="10" font-weight="800">${thread.number}</text></g>`;
-  }).join("");
-  document.getElementById("preview").innerHTML = `<rect x="${x0 - 14}" y="${y0 - 14}" width="${columns * pitchX + 18}" height="${rows * pitchY + 24}" rx="12" fill="#fffaff" stroke="#8d6aa9" stroke-width="2"/>${slots}`;
+    const x = config.wallThickness + col * (config.slotWidth + config.wallThickness + config.gap);
+    const y = config.wallThickness + row * (config.slotDepth + config.wallThickness + config.gap);
+    boxes.push(
+      { x: x - config.wallThickness, y: y - config.wallThickness, z: config.plateThickness, w: config.slotWidth + config.wallThickness * 2, d: config.wallThickness, h: config.wallHeight },
+      { x: x - config.wallThickness, y: y + config.slotDepth, z: config.plateThickness, w: config.slotWidth + config.wallThickness * 2, d: config.wallThickness, h: config.wallHeight },
+      { x: x - config.wallThickness, y, z: config.plateThickness, w: config.wallThickness, d: config.slotDepth, h: config.wallHeight },
+      { x: x + config.slotWidth, y, z: config.plateThickness, w: config.wallThickness, d: config.slotDepth, h: config.wallHeight }
+    );
+    labels.push({
+      x: x + config.slotWidth / 2,
+      y: Math.min(outerDepth - 5, y + config.slotDepth + 7),
+      z: config.plateThickness + 0.35,
+      number: thread.number
+    });
+  });
+  return { boxes, labels, outerWidth, outerDepth, height: config.plateThickness + config.wallHeight, rows };
+}
+
+function renderStitchPreview() {
+  const config = stitchConfig();
+  const geometry = stitchPreviewGeometry(config);
+  window.forgetPreview3d.renderBoxes(document.getElementById("preview"), {
+    width: geometry.outerWidth,
+    depth: geometry.outerDepth,
+    height: geometry.height,
+    colour: config.filamentHex,
+    boxes: geometry.boxes,
+    padding: 30,
+    overlay: (transform) => geometry.labels.map((label) => window.forgetPreview3d.textLabel(
+      transform,
+      label.x,
+      label.y,
+      label.z,
+      escapeHtml(label.number),
+      `text-anchor="middle" dominant-baseline="middle" fill="#30273a" font-size="10" font-weight="800"`
+    )).join("")
+  });
   document.getElementById("threadStat").textContent = config.threads.length;
-  document.getElementById("rowStat").textContent = rows;
+  document.getElementById("rowStat").textContent = geometry.rows;
   document.getElementById("materialStat").textContent = `${Math.max(15, Math.round(config.threads.length * 2.8))} g est.`;
 }
 

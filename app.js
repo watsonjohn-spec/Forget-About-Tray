@@ -25,6 +25,15 @@ const numericKeys = [
 ];
 const checkboxKeys = ["lipEnabled", "notchesEnabled", "includeBases"];
 const rectangleBaseLengths = [50, 60, 75, 100, 150];
+const circleBaseDiameters = [25, 28.5, 32, 40, 50, 60, 80, 90, 100, 130, 160];
+const ovalBaseSizes = [
+  { width: 60, depth: 35 },
+  { width: 75, depth: 42 },
+  { width: 90, depth: 52 },
+  { width: 105, depth: 70 },
+  { width: 120, depth: 92 },
+  { width: 170, depth: 105 }
+];
 const storageInsertMode = "storage_insert";
 const storageBaseShapes = ["square", "rectangle", "circle", "oval"];
 const reallyUsefulBoxes = [
@@ -138,6 +147,18 @@ function rectangleDepth(width, preferred) {
   return rectangleBaseLengths.find((length) => length > width) || rectangleBaseLengths.find((length) => length !== width);
 }
 
+function baseDepthForShape(shape, width, preferred) {
+  const normalizedShape = normalizeStorageBaseShape(shape, width, preferred);
+  if (shapeLocksDepth(normalizedShape)) return width;
+  if (normalizedShape === "oval") {
+    const preset = ovalBaseSizes.find((base) => Number(base.width) === Number(width));
+    if (preset) return preset.depth;
+    if (preferred && preferred !== width) return preferred;
+    return ovalBaseSizes.find((base) => base.width > width)?.depth || ovalBaseSizes[0].depth;
+  }
+  return rectangleDepth(width, preferred);
+}
+
 function readState() {
   numericKeys.forEach((key) => {
     const input = inputs[key];
@@ -150,20 +171,17 @@ function readState() {
   state.filamentMaterial = filament.material;
   state.filamentName = filament.name;
   state.filamentHex = filament.hex;
-  state.baseShape = document.querySelector("[data-base-shape].active")?.dataset.baseShape || "square";
-  if (state.baseShape === "square") {
-    state.baseDepth = state.baseSize;
-  } else if (!inputs.baseDepth.value || state.baseDepth === state.baseSize) {
-    state.baseDepth = rectangleDepth(state.baseSize, state.baseDepth);
+  state.baseShape = normalizeStorageBaseShape(document.querySelector("[data-base-shape].active")?.dataset.baseShape || "square", state.baseSize, state.baseDepth);
+  state.baseDepth = baseDepthForShape(state.baseShape, state.baseSize, state.baseDepth);
+  if (shapeLocksDepth(state.baseShape) || !inputs.baseDepth.value || inputs.baseDepth.value !== String(state.baseDepth)) {
     inputs.baseDepth.value = state.baseDepth;
   }
 }
 
 function writeState(nextState) {
   state = { ...defaults, ...nextState };
-  state.baseShape = nextState.baseShape || (state.baseSize === state.baseDepth ? "square" : "rectangle");
-  if (state.baseShape === "square") state.baseDepth = state.baseSize;
-  else state.baseDepth = rectangleDepth(state.baseSize, state.baseDepth);
+  state.baseShape = normalizeStorageBaseShape(nextState.baseShape, state.baseSize, state.baseDepth);
+  state.baseDepth = baseDepthForShape(state.baseShape, state.baseSize, state.baseDepth);
   numericKeys.forEach((key) => { inputs[key].value = state[key]; });
   checkboxKeys.forEach((key) => { inputs[key].checked = state[key]; });
   filamentColourInput.value = state.filamentKey || defaults.filamentKey;
@@ -181,7 +199,7 @@ function trayMetrics(config = state) {
   const outerDepth = innerDepth + wall * 2;
   const height = config.plateThickness + (config.lipEnabled ? config.wallHeight : 0);
   const boxes = buildBoxes(config);
-  const baseVolume = config.includeBases ? config.columns * config.rows * config.baseSize * config.baseDepth * config.plateThickness : 0;
+  const baseVolume = config.includeBases ? config.columns * config.rows * storageBaseArea(config.baseSize, config.baseDepth, config.baseShape) * config.plateThickness : 0;
   const volume = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) + baseVolume;
   return { innerWidth, innerDepth, outerWidth, outerDepth, height, boxes, volume };
 }
@@ -442,7 +460,7 @@ function render() {
   document.getElementById("bodyCount").textContent = state.columns * state.rows;
   document.getElementById("exportFilename").textContent = fileName();
   document.getElementById("lipFields").classList.toggle("disabled", !state.lipEnabled);
-  document.getElementById("baseDepthField").hidden = state.baseShape === "square";
+  document.getElementById("baseDepthField").hidden = shapeLocksDepth(state.baseShape);
   document.querySelectorAll("[data-base-shape]").forEach((button) => button.classList.toggle("active", button.dataset.baseShape === state.baseShape));
   document.querySelectorAll("[data-base]").forEach((button) => {
     button.classList.toggle("active", Number(button.dataset.base) === state.baseSize);
@@ -461,86 +479,65 @@ function drawPreview(metrics) {
   const svg = document.getElementById("trayPreview");
   const basesDepth = state.includeBases ? 5 + state.rows * state.baseDepth + (state.rows - 1) * state.gap : 0;
   const previewDepth = metrics.outerDepth + basesDepth;
-  const maxDimension = Math.max(metrics.outerWidth, previewDepth);
-  const scale = 410 / maxDimension;
-  const originX = 380;
-  const originY = 245;
-  const heightScale = Math.max(4, scale * 1.8);
-  const centerX = metrics.outerWidth / 2;
-  const centerY = previewDepth / 2;
-  const project = (x, y, z = 0) => {
-    const dx = x - centerX;
-    const dy = y - centerY;
-    const rotatedX = Math.cos(previewYaw) * dx - Math.sin(previewYaw) * dy;
-    const rotatedY = Math.sin(previewYaw) * dx + Math.cos(previewYaw) * dy;
-    return [
-      originX + rotatedX * scale,
-      originY + rotatedY * scale * Math.sin(previewPitch) - z * heightScale * Math.cos(previewPitch)
-    ];
-  };
-  const points = (values) => values.map(([x, y, z]) => project(x, y, z).join(",")).join(" ");
   const w = metrics.outerWidth;
   const d = metrics.outerDepth;
   const base = state.plateThickness;
-  const top = metrics.height;
-  const filamentTop = shadeHex(state.filamentHex, 35);
-  const filamentMid = state.filamentHex;
-  const filamentSide = shadeHex(state.filamentHex, -35);
-  const filamentDark = shadeHex(state.filamentHex, -65);
-  let markup = `
-    <defs>
-      <linearGradient id="trayTop" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="${filamentTop}"/><stop offset="1" stop-color="${filamentMid}"/></linearGradient>
-      <linearGradient id="traySide" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${filamentSide}"/><stop offset="1" stop-color="${filamentDark}"/></linearGradient>
-      <linearGradient id="trayFront" x1="0" x2="1"><stop offset="0" stop-color="${filamentDark}"/><stop offset="1" stop-color="${filamentSide}"/></linearGradient>
-    </defs>
-    <polygon points="${points([[0,d,0],[w,d,0],[w,d,base],[0,d,base]])}" fill="url(#trayFront)" stroke="${filamentDark}" stroke-width="1.2"/>
-    <polygon points="${points([[w,0,0],[w,d,0],[w,d,base],[w,0,base]])}" fill="url(#traySide)" stroke="${filamentDark}" stroke-width="1.2"/>
-    <polygon points="${points([[0,0,base],[w,0,base],[w,d,base],[0,d,base]])}" fill="url(#trayTop)" stroke="${filamentDark}" stroke-width="1.2"/>
-  `;
+  const boxes = [...metrics.boxes];
+  const cylinders = [];
 
   const wall = state.lipEnabled ? state.wallThickness : 0;
   const xStart = wall + state.clearance;
   const yStart = wall + state.clearance;
-  for (let column = 1; column < state.columns; column += 1) {
-    const x = xStart + column * state.baseSize + (column - 0.5) * state.gap;
-    markup += `<line x1="${project(x, wall, base)[0]}" y1="${project(x, wall, base)[1]}" x2="${project(x, d-wall, base)[0]}" y2="${project(x, d-wall, base)[1]}" stroke="${filamentDark}" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
-  }
-  for (let row = 1; row < state.rows; row += 1) {
-    const y = yStart + row * state.baseDepth + (row - 0.5) * state.gap;
-    markup += `<line x1="${project(wall, y, base)[0]}" y1="${project(wall, y, base)[1]}" x2="${project(w-wall, y, base)[0]}" y2="${project(w-wall, y, base)[1]}" stroke="${filamentDark}" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
-  }
-
   if (state.includeBases) {
     for (let column = 0; column < state.columns; column += 1) {
       for (let row = 0; row < state.rows; row += 1) {
         const x1 = column * (state.baseSize + state.gap);
         const y1 = d + 5 + row * (state.baseDepth + state.gap);
-        const x2 = x1 + state.baseSize;
-        const y2 = y1 + state.baseDepth;
-        markup += `
-          <polygon points="${points([[x1,y2,0],[x2,y2,0],[x2,y2,base],[x1,y2,base]])}" fill="${filamentSide}" stroke="${filamentDark}" stroke-width=".7"/>
-          <polygon points="${points([[x2,y1,0],[x2,y2,0],[x2,y2,base],[x2,y1,base]])}" fill="${filamentDark}" stroke="${filamentDark}" stroke-width=".7"/>
-          <polygon points="${points([[x1,y1,base],[x2,y1,base],[x2,y2,base],[x1,y2,base]])}" fill="${filamentTop}" stroke="${filamentDark}" stroke-width=".7"/>
-        `;
+        if (isRoundBaseShape(state.baseShape)) {
+          cylinders.push({
+            cx: x1 + state.baseSize / 2,
+            cy: y1 + state.baseDepth / 2,
+            z: 0,
+            rx: state.baseSize / 2,
+            ry: state.baseDepth / 2,
+            h: state.plateThickness,
+            previewClass: "preview-loose-base"
+          });
+        } else {
+          boxes.push({ x: x1, y: y1, z: 0, w: state.baseSize, d: state.baseDepth, h: state.plateThickness, previewClass: "preview-loose-base" });
+        }
       }
     }
   }
 
-  if (state.lipEnabled) {
-    const wallBoxes = metrics.boxes.slice(1);
-    wallBoxes.forEach((box) => {
-      const x1 = box.x;
-      const y1 = box.y;
-      const x2 = box.x + box.w;
-      const y2 = box.y + box.d;
-      markup += `
-        <polygon points="${points([[x1,y1,top],[x2,y1,top],[x2,y2,top],[x1,y2,top]])}" fill="${filamentTop}" stroke="${filamentDark}" stroke-width="1"/>
-        <polygon points="${points([[x1,y2,base],[x2,y2,base],[x2,y2,top],[x1,y2,top]])}" fill="${filamentSide}" stroke="${filamentDark}" stroke-width=".8"/>
-        <polygon points="${points([[x2,y1,base],[x2,y2,base],[x2,y2,top],[x2,y1,top]])}" fill="${filamentDark}" stroke="${filamentDark}" stroke-width=".8"/>
-      `;
-    });
-  }
-  svg.innerHTML = markup;
+  window.forgetPreview3d.renderBoxes(svg, {
+    width: Math.max(w, state.columns * state.baseSize + Math.max(0, state.columns - 1) * state.gap),
+    depth: previewDepth,
+    height: metrics.height,
+    yaw: previewYaw,
+    pitch: previewPitch,
+    viewHeight: 450,
+    colour: state.filamentHex,
+    boxes,
+    cylinders,
+    overlay: (transform) => {
+      const filamentDark = window.forgetPreview3d.shadeColour(state.filamentHex, -70);
+      let markup = "";
+      for (let column = 1; column < state.columns; column += 1) {
+        const x = xStart + column * state.baseSize + (column - 0.5) * state.gap;
+        const p1 = transform.project(x, wall, base + 0.05);
+        const p2 = transform.project(x, d - wall, base + 0.05);
+        markup += `<line x1="${p1.x.toFixed(2)}" y1="${p1.y.toFixed(2)}" x2="${p2.x.toFixed(2)}" y2="${p2.y.toFixed(2)}" stroke="${filamentDark}" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
+      }
+      for (let row = 1; row < state.rows; row += 1) {
+        const y = yStart + row * state.baseDepth + (row - 0.5) * state.gap;
+        const p1 = transform.project(wall, y, base + 0.05);
+        const p2 = transform.project(w - wall, y, base + 0.05);
+        markup += `<line x1="${p1.x.toFixed(2)}" y1="${p1.y.toFixed(2)}" x2="${p2.x.toFixed(2)}" y2="${p2.y.toFixed(2)}" stroke="${filamentDark}" stroke-width="0.8" stroke-dasharray="3 4" opacity=".55"/>`;
+      }
+      return markup;
+    }
+  });
 }
 
 function fileName(config = state, prefix = "movement-tray") {
@@ -551,7 +548,9 @@ function fileName(config = state, prefix = "movement-tray") {
   const base = config.baseSize === config.baseDepth
     ? `${formatNumber(config.baseSize)}mm`
     : `${formatNumber(config.baseSize)}x${formatNumber(config.baseDepth)}mm`;
-  return `${slugify(prefix)}-${config.columns}x${config.rows}-${base}.stl`;
+  const shape = normalizeStorageBaseShape(config.baseShape, config.baseSize, config.baseDepth);
+  const shapeSuffix = shape === "square" || shape === "rectangle" ? "" : `-${shape}`;
+  return `${slugify(prefix)}-${config.columns}x${config.rows}-${base}${shapeSuffix}.stl`;
 }
 
 function formatNumber(value) {
@@ -946,8 +945,8 @@ const warhammer40000Catalogue = [
   ["Astra Militarum", "Infantry Squad", 25, 25, "circle"],
   ["Astra Militarum", "Heavy Weapons Squad", 60, 60, "circle"],
   ["Astra Militarum", "Sentinel", 80, 80, "circle"],
-  ["Tyranids", "Termagants", 28, 28, "circle"],
-  ["Tyranids", "Hormagaunts", 28, 28, "circle"],
+  ["Tyranids", "Termagants", 28.5, 28.5, "circle"],
+  ["Tyranids", "Hormagaunts", 28.5, 28.5, "circle"],
   ["Tyranids", "Genestealers", 32, 32, "circle"],
   ["Tyranids", "Tyranid Warriors", 50, 50, "circle"],
   ["Tyranids", "Carnifex", 105, 70, "oval"],
@@ -955,7 +954,7 @@ const warhammer40000Catalogue = [
   ["Orks", "Gretchin", 25, 25, "circle"],
   ["Orks", "Nobz", 32, 32, "circle"],
   ["Orks", "Deff Dread", 60, 60, "circle"],
-  ["Aeldari", "Guardian Defenders", 28, 28, "circle"],
+  ["Aeldari", "Guardian Defenders", 28.5, 28.5, "circle"],
   ["Aeldari", "Wraithguard", 40, 40, "circle"],
   ["Aeldari", "Wraithlord", 60, 60, "circle"],
   ["Chaos Space Marines", "Legionaries", 32, 32, "circle"],
@@ -964,6 +963,42 @@ const warhammer40000Catalogue = [
 ].map(([army, name, width, depth, baseShape]) => ({
   id: `warhammer-40000-${normalizeText(`${army}-${name}`).replace(/\s+/g, "-")}`,
   gameSystem: "Warhammer 40,000",
+  army,
+  name,
+  width,
+  depth,
+  baseShape,
+  aliases: [normalizeText(name)]
+}));
+
+const ageOfSigmarCatalogue = [
+  ["Stormcast Eternals", "Liberators", 40, 40, "circle"],
+  ["Stormcast Eternals", "Vindictors", 40, 40, "circle"],
+  ["Stormcast Eternals", "Sequitors", 40, 40, "circle"],
+  ["Stormcast Eternals", "Prosecutors", 40, 40, "circle"],
+  ["Stormcast Eternals", "Vanguard-Palladors", 90, 52, "oval"],
+  ["Cities of Sigmar", "Freeguild Steelhelms", 25, 25, "circle"],
+  ["Cities of Sigmar", "Freeguild Fusiliers", 28.5, 28.5, "circle"],
+  ["Cities of Sigmar", "Freeguild Cavaliers", 75, 42, "oval"],
+  ["Soulblight Gravelords", "Deathrattle Skeletons", 25, 25, "circle"],
+  ["Soulblight Gravelords", "Deadwalker Zombies", 25, 25, "circle"],
+  ["Soulblight Gravelords", "Blood Knights", 75, 42, "oval"],
+  ["Nighthaunt", "Chainrasps", 25, 25, "circle"],
+  ["Nighthaunt", "Grimghast Reapers", 32, 32, "circle"],
+  ["Nighthaunt", "Spirit Hosts", 50, 50, "circle"],
+  ["Orruk Warclans", "Ardboyz", 32, 32, "circle"],
+  ["Orruk Warclans", "Gore-gruntas", 90, 52, "oval"],
+  ["Gloomspite Gitz", "Stabbas", 25, 25, "circle"],
+  ["Gloomspite Gitz", "Squig Herd", 25, 25, "circle"],
+  ["Seraphon", "Saurus Warriors", 32, 32, "circle"],
+  ["Seraphon", "Aggradon Lancers", 75, 42, "oval"],
+  ["Slaves to Darkness", "Chaos Warriors", 32, 32, "circle"],
+  ["Slaves to Darkness", "Chaos Knights", 75, 42, "oval"],
+  ["Skaven", "Clanrats", 25, 25, "circle"],
+  ["Skaven", "Stormfiends", 60, 60, "circle"]
+].map(([army, name, width, depth, baseShape]) => ({
+  id: `age-of-sigmar-${normalizeText(`${army}-${name}`).replace(/\s+/g, "-")}`,
+  gameSystem: "Warhammer Age of Sigmar",
   army,
   name,
   width,
@@ -1002,6 +1037,7 @@ function allCatalogueEntries() {
   const entries = [
     ...baseCatalogue.map((entry) => normaliseCatalogueEntry(entry, "Warhammer: The Old World")),
     ...warhammer40000Catalogue,
+    ...ageOfSigmarCatalogue,
     ...customCatalogue().map((entry) => normaliseCatalogueEntry(entry, "Custom")),
     ...learned
   ];
@@ -1096,11 +1132,12 @@ function prepareCatalogue(context) {
 
 function applyCatalogueEntry(entry, count = 10) {
   if (catalogueContext === "single") {
+    const baseShape = normalizeStorageBaseShape(entry.baseShape, entry.width, entry.depth);
     writeState({
       ...state,
       baseSize: entry.width,
-      baseDepth: entry.depth,
-      baseShape: entry.width === entry.depth ? "square" : "rectangle"
+      baseDepth: shapeLocksDepth(baseShape) ? entry.width : entry.depth,
+      baseShape
     });
     document.getElementById("catalogueDialog").close();
     showToast(`${entry.name} base applied`);
@@ -1337,7 +1374,7 @@ function recommendationConfig(recommendation) {
     rows: recommendation.rows,
     baseSize: recommendation.baseSize,
     baseDepth: recommendation.baseDepth,
-    baseShape: recommendation.baseShape || (recommendation.baseSize === recommendation.baseDepth ? "square" : "rectangle"),
+    baseShape: normalizeStorageBaseShape(recommendation.baseShape, recommendation.baseSize, recommendation.baseDepth),
     includeBases: Boolean(recommendation.includeBases ?? recommendation.config?.includeBases)
   };
 }
@@ -1549,7 +1586,11 @@ function renderArmyRecommendations() {
     document.getElementById("armyEditMount").append(document.querySelector(".workspace"));
     return;
   }
+  item.baseShape = normalizeStorageBaseShape(item.baseShape, item.baseSize, item.baseDepth);
+  if (shapeLocksDepth(item.baseShape)) item.baseDepth = item.baseSize;
   const ready = item.baseSize > 0 && item.baseDepth > 0;
+  const shapeOptions = storageBaseShapes.map((shape) => `<option value="${shape}" ${shape === item.baseShape ? "selected" : ""}>${storageShapeLabel(shape)}</option>`).join("");
+  const depthLocked = shapeLocksDepth(item.baseShape);
   const capacity = item.columns * item.rows;
   const copyText = item.copies > 1 ? `${item.copies} identical units - print ${item.copies}` : `${item.count} models`;
   container.innerHTML = `
@@ -1563,8 +1604,9 @@ function renderArmyRecommendations() {
         <div class="army-unit-fields">
           <label class="army-mini-field">Columns<input data-army-field="columns" type="number" min="1" max="12" value="${item.columns}"></label>
           <label class="army-mini-field">Rows<input data-army-field="rows" type="number" min="1" max="12" value="${item.rows}"></label>
-          <label class="army-mini-field">Base W<input data-army-field="baseSize" type="number" min="10" max="150" value="${item.baseSize || ""}" placeholder="mm"></label>
-          <label class="army-mini-field">Base D<input data-army-field="baseDepth" type="number" min="10" max="150" value="${item.baseDepth || ""}" placeholder="mm"></label>
+          <label class="army-mini-field">Shape<select data-army-field="baseShape">${shapeOptions}</select></label>
+          <label class="army-mini-field">${item.baseShape === "circle" ? "Diameter" : "Base W"}<input data-army-field="baseSize" type="number" min="10" max="200" value="${item.baseSize || ""}" placeholder="mm"></label>
+          <label class="army-mini-field">${depthLocked ? "Auto D" : item.baseShape === "oval" ? "Oval D" : "Base D"}<input data-army-field="baseDepth" type="number" min="10" max="200" value="${item.baseDepth || ""}" placeholder="mm" ${depthLocked ? "disabled" : ""}></label>
           <label class="army-mini-field army-bases-field">Print bases<input data-army-field="includeBases" type="checkbox" ${recommendationConfig(item).includeBases ? "checked" : ""}></label>
         </div>
         <div class="army-unit-actions">
@@ -1853,13 +1895,9 @@ document.getElementById("trayPreview").addEventListener("pointercancel", () => {
 document.querySelectorAll("[data-base-shape]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("[data-base-shape]").forEach((candidate) => candidate.classList.toggle("active", candidate === button));
-    if (button.dataset.baseShape === "square") {
-      state.baseShape = "square";
-      state.baseDepth = Number(inputs.baseSize.value);
-    } else {
-      state.baseShape = "rectangle";
-      inputs.baseDepth.value = rectangleDepth(Number(inputs.baseSize.value), Number(inputs.baseDepth.value));
-    }
+    state.baseShape = normalizeStorageBaseShape(button.dataset.baseShape, Number(inputs.baseSize.value), Number(inputs.baseDepth.value));
+    state.baseDepth = baseDepthForShape(state.baseShape, Number(inputs.baseSize.value), Number(inputs.baseDepth.value));
+    inputs.baseDepth.value = state.baseDepth;
     render();
   });
 });
@@ -2052,7 +2090,8 @@ document.querySelectorAll("[data-step]").forEach((button) => {
 document.querySelectorAll("[data-base]").forEach((button) => {
   button.addEventListener("click", () => {
     inputs.baseSize.value = button.dataset.base;
-    if (state.baseShape === "square") state.baseDepth = Number(button.dataset.base);
+    state.baseDepth = baseDepthForShape(state.baseShape, Number(button.dataset.base), Number(inputs.baseDepth.value));
+    inputs.baseDepth.value = state.baseDepth;
     render();
   });
 });
@@ -2230,9 +2269,13 @@ document.getElementById("armyResults").addEventListener("input", (event) => {
   if (!field || !card) return;
   const recommendation = armyRecommendations.find((item) => item.id === card.dataset.recommendation);
   if (!recommendation) return;
-  recommendation[field] = field === "includeBases" ? event.target.checked : Number(event.target.value) || 0;
-  if (field === "baseSize" || field === "baseDepth") {
-    recommendation.baseShape = recommendation.baseSize === recommendation.baseDepth ? "square" : "rectangle";
+  if (field === "includeBases") recommendation[field] = event.target.checked;
+  else if (field === "baseShape") recommendation.baseShape = normalizeStorageBaseShape(event.target.value, recommendation.baseSize, recommendation.baseDepth);
+  else recommendation[field] = Number(event.target.value) || 0;
+  if (field === "baseShape" || field === "baseSize" || field === "baseDepth") {
+    recommendation.baseShape = normalizeStorageBaseShape(recommendation.baseShape, recommendation.baseSize, recommendation.baseDepth);
+    if (shapeLocksDepth(recommendation.baseShape)) recommendation.baseDepth = recommendation.baseSize;
+    else if (field === "baseShape" || field === "baseSize") recommendation.baseDepth = baseDepthForShape(recommendation.baseShape, recommendation.baseSize, recommendation.baseDepth);
   }
   const ready = recommendation.baseSize > 0 && recommendation.baseDepth > 0;
   card.querySelectorAll("[data-army-action]").forEach((button) => { button.disabled = !ready; });
