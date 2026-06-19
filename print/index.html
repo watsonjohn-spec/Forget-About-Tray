@@ -35,7 +35,14 @@
           <div class="card-heading"><h2>Upload STL</h2></div>
           <div class="control-body">
             <label>Project name<input id="printName" value="Uploaded print"></label>
-            <label>STL file<input id="stlFile" type="file" accept=".stl,model/stl"></label>
+            <div class="upload-dropzone" id="uploadDropzone">
+              <input class="upload-input" id="stlFile" type="file" accept=".stl,model/stl">
+              <label class="upload-picker" for="stlFile">
+                <span class="upload-badge">STL</span>
+                <span class="upload-copy"><strong>Browse or drop an STL file</strong><small id="uploadFileLabel">No file selected yet. Max 650KB in this prototype.</small></span>
+                <span class="upload-cta">Browse files</span>
+              </label>
+            </div>
             <div class="field-grid">
               <label>Width mm<input id="outerWidth" type="number" min="1" max="1000" value="100"></label>
               <label>Depth mm<input id="outerDepth" type="number" min="1" max="1000" value="100"></label>
@@ -47,14 +54,21 @@
             <div class="field-grid single-field">
               <label>Preferred printer<select id="printerPreference" disabled><option value="">Any matching printer</option></select></label>
             </div>
-            <button class="button button-primary" id="quoteButton" type="button">Request print quotes</button>
+            <div class="upload-actions">
+              <button class="button button-primary" id="quoteButton" type="button">Request print quotes</button>
+              <button class="button button-secondary" id="saveUploadButton" type="button">Save uploaded STL</button>
+            </div>
             <small id="uploadStatus">No STL loaded yet.</small>
             <small id="printerPreferenceStatus">No printer selected.</small>
+            <section class="saved-upload-panel" aria-label="Saved STL uploads">
+              <div class="saved-upload-heading"><h3>Saved uploads</h3><button class="button button-secondary" id="refreshSavedUploads" type="button">Refresh</button></div>
+              <div class="saved-upload-list" id="savedUploads"><div class="empty">Saved STL files will appear here.</div></div>
+            </section>
           </div>
         </section>
         <section class="preview-card">
           <div class="card-heading"><h2>Print preview</h2><div class="preview-toolbar"><label>Colour<select id="filamentColour"></select></label><label>Filament<select id="filamentMaterial"><option value="pla" selected>PLA</option><option value="petg">PETG</option><option value="abs">ABS</option></select></label></div></div>
-          <div class="preview-stage"><div class="preview-angle-controls" aria-label="Rotate preview"><button data-preview-turn="-1" type="button">←</button><button data-preview-reset type="button">Reset</button><button data-preview-turn="1" type="button">→</button></div><svg id="preview" viewBox="0 0 760 420" role="img" aria-label="Uploaded STL preview"></svg></div>
+          <div class="preview-stage"><div class="preview-angle-controls" aria-label="Rotate preview"><button data-preview-turn="-1" type="button">&larr;</button><button data-preview-reset type="button">Reset</button><button data-preview-turn="1" type="button">&rarr;</button></div><svg id="preview" viewBox="0 0 760 420" role="img" aria-label="Uploaded STL preview"></svg></div>
           <div class="stats">
             <div><span>Size</span><strong id="sizeStat">100 x 100 mm</strong></div>
             <div><span>Height</span><strong id="heightStat">30 mm</strong></div>

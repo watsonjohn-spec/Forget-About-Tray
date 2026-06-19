@@ -1,6 +1,6 @@
 const generatorType = "stitch_organizer";
-const version = 2;
-const stitchStyles = ["floss-card", "workstation-tray"];
+const version = 3;
+const stitchStyles = ["thread-slot-tray", "floss-card"];
 
 function numberInRange(value, minimum, maximum, fallback) {
   const number = Number(value ?? fallback);
@@ -21,22 +21,25 @@ function normalizeThread(thread = {}, index) {
 }
 
 function normalizeStyle(style) {
-  return stitchStyles.includes(style) ? style : "workstation-tray";
+  if (style === "workstation-tray") return "thread-slot-tray";
+  return stitchStyles.includes(style) ? style : "thread-slot-tray";
 }
 
 function normalizeParameters(input = {}) {
-  const threads = Array.isArray(input.threads) ? input.threads.slice(0, 120).map(normalizeThread) : [];
+  const threads = Array.isArray(input.threads)
+    ? input.threads.slice(0, 120).map(normalizeThread)
+    : Array.isArray(input.threadRefs)
+      ? input.threadRefs.slice(0, 120).map((reference, index) => normalizeThread(typeof reference === "object" ? reference : { number: reference }, index))
+      : [];
   const fallbackCount = integerInRange(input.threadCount, 1, 120, 24);
   return {
     style: normalizeStyle(input.style),
     projectName: String(input.projectName || "Stitch project tray").slice(0, 120),
     threads: threads.length ? threads : Array.from({ length: fallbackCount }, (_, index) => normalizeThread({}, index)),
-    columns: integerInRange(input.columns, 1, 16, 8),
-    slotWidth: numberInRange(input.slotWidth, 4, 40, 16),
-    slotDepth: numberInRange(input.slotDepth, 8, 80, 34),
+    columns: integerInRange(input.columns, 1, 16, 3),
+    slotWidth: numberInRange(input.slotWidth, 4, 50, 18),
+    slotDepth: numberInRange(input.slotDepth, 8, 90, 42),
     labelTextSize: numberInRange(input.labelTextSize, 5, 18, 10),
-    embeddedTrayWidth: numberInRange(input.embeddedTrayWidth, 60, 260, 150),
-    embeddedTrayDepth: numberInRange(input.embeddedTrayDepth, 40, 200, 95),
     engravingDepth: numberInRange(input.engravingDepth, 0.3, 1.5, 1),
     gap: numberInRange(input.gap, 0, 12, 2),
     plateThickness: numberInRange(input.plateThickness, 1, 10, 2),
@@ -185,20 +188,20 @@ function buildFlossCardGeometry(config) {
   };
 }
 
-function buildWorkstationGeometry(config) {
+function buildThreadSlotTrayGeometry(config) {
   const columns = Math.max(1, config.columns);
   const rows = Math.max(1, Math.ceil(config.threads.length / columns));
-  const labelGutterWidth = Math.max(18, config.labelTextSize * 3.2);
-  const cellWidth = config.slotWidth + labelGutterWidth;
-  const slotAreaWidth = columns * cellWidth + (columns + 1) * config.wallThickness + (columns - 1) * config.gap;
-  const slotAreaDepth = rows * config.slotDepth + (rows + 1) * config.wallThickness + (rows - 1) * config.gap;
-  const trayGap = 18;
-  const outerWidth = 10 + slotAreaWidth + trayGap + config.embeddedTrayWidth + 10;
-  const outerDepth = Math.max(slotAreaDepth + 22, config.embeddedTrayDepth + 32, 112);
+  const margin = 10;
+  const labelBandDepth = Math.max(config.labelTextSize + 7, 15);
+  const cellWidth = Math.max(config.slotWidth + config.wallThickness * 2, config.labelTextSize * 4.6, 34);
+  const cellDepth = config.slotDepth + labelBandDepth + config.wallThickness;
+  const outerWidth = margin * 2 + columns * cellWidth + Math.max(0, columns - 1) * config.gap;
+  const outerDepth = margin * 2 + rows * cellDepth + Math.max(0, rows - 1) * config.gap;
   const engravingDepth = Math.min(config.engravingDepth, Math.max(0.3, config.plateThickness - 0.4));
   const baseBottomHeight = Math.max(0.4, config.plateThickness - engravingDepth);
   const engravingVoids = [];
   const engravedLabels = [];
+  const slots = [];
   const boxes = [
     { x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: baseBottomHeight },
     { x: 0, y: 0, z: config.plateThickness, w: outerWidth, d: config.wallThickness * 2, h: config.wallHeight },
@@ -206,19 +209,20 @@ function buildWorkstationGeometry(config) {
     { x: 0, y: 0, z: config.plateThickness, w: config.wallThickness * 2, d: outerDepth, h: config.wallHeight },
     { x: outerWidth - config.wallThickness * 2, y: 0, z: config.plateThickness, w: config.wallThickness * 2, d: outerDepth, h: config.wallHeight }
   ];
-  const bobbinX = 10;
-  const bobbinY = 10;
   config.threads.forEach((thread, index) => {
     const col = index % columns;
     const row = Math.floor(index / columns);
-    const x = bobbinX + config.wallThickness + col * (cellWidth + config.wallThickness + config.gap);
-    const y = bobbinY + config.wallThickness + row * (config.slotDepth + config.wallThickness + config.gap);
-    const labelCenterX = x + config.slotWidth + labelGutterWidth / 2;
-    const labelCenterY = y + config.slotDepth / 2;
-    const labelMaxWidth = Math.max(10, labelGutterWidth - 3);
+    const cellX = margin + col * (cellWidth + config.gap);
+    const cellY = margin + row * (cellDepth + config.gap);
+    const x = cellX + (cellWidth - config.slotWidth) / 2;
+    const y = cellY;
+    const labelCenterX = cellX + cellWidth / 2;
+    const labelCenterY = y + config.slotDepth + config.wallThickness + labelBandDepth / 2;
+    const labelMaxWidth = Math.max(config.slotWidth, cellWidth - 4);
     const labelVoids = engravingVoidsForText(thread.number, labelCenterX, labelCenterY, config.labelTextSize, labelMaxWidth);
     engravingVoids.push(...labelVoids);
     engravedLabels.push({ text: thread.number, x: labelCenterX, y: labelCenterY, depth: engravingDepth, voids: labelVoids.length });
+    slots.push({ thread: thread.number, x, y, w: config.slotWidth, d: config.slotDepth, labelX: labelCenterX, labelY: labelCenterY });
     boxes.push(
       { x: x - config.wallThickness, y: y - config.wallThickness, z: config.plateThickness, w: config.slotWidth + config.wallThickness * 2, d: config.wallThickness, h: config.wallHeight },
       { x: x - config.wallThickness, y: y + config.slotDepth, z: config.plateThickness, w: config.slotWidth + config.wallThickness * 2, d: config.wallThickness, h: config.wallHeight },
@@ -226,21 +230,12 @@ function buildWorkstationGeometry(config) {
       { x: x + config.slotWidth, y, z: config.plateThickness, w: config.wallThickness, d: config.slotDepth, h: config.wallHeight }
     );
   });
-  const trayX = bobbinX + slotAreaWidth + trayGap;
-  const trayY = Math.max(16, (outerDepth - config.embeddedTrayDepth) / 2);
-  const trayWall = config.wallThickness * 2;
-  boxes.push(
-    { x: trayX, y: trayY, z: config.plateThickness, w: config.embeddedTrayWidth, d: trayWall, h: config.wallHeight },
-    { x: trayX, y: trayY + config.embeddedTrayDepth - trayWall, z: config.plateThickness, w: config.embeddedTrayWidth, d: trayWall, h: config.wallHeight },
-    { x: trayX, y: trayY, z: config.plateThickness, w: trayWall, d: config.embeddedTrayDepth, h: config.wallHeight },
-    { x: trayX + config.embeddedTrayWidth - trayWall, y: trayY, z: config.plateThickness, w: trayWall, d: config.embeddedTrayDepth, h: config.wallHeight }
-  );
   boxes.push(...plateWithRectangularVoids({ x: 0, y: 0, z: baseBottomHeight, w: outerWidth, d: outerDepth, h: engravingDepth, voids: engravingVoids }));
   return {
     config,
     boxes,
+    slots,
     engravedLabels,
-    embeddedTray: { x: trayX, y: trayY, w: config.embeddedTrayWidth, d: config.embeddedTrayDepth },
     outerWidth,
     outerDepth,
     height: config.plateThickness + config.wallHeight,
@@ -250,7 +245,7 @@ function buildWorkstationGeometry(config) {
 
 function buildGeometry(parameters) {
   const config = normalizeParameters(parameters);
-  return config.style === "floss-card" ? buildFlossCardGeometry(config) : buildWorkstationGeometry(config);
+  return config.style === "floss-card" ? buildFlossCardGeometry(config) : buildThreadSlotTrayGeometry(config);
 }
 
 function boxTriangles({ x, y, z, w, d, h }) {
@@ -283,7 +278,7 @@ function safeFileName(parameters, name) {
 function describe(parameters) {
   const config = normalizeParameters(parameters);
   if (config.style === "floss-card") return `Floss card for ${config.threads.length} thread references`;
-  return `Stitch workstation tray for ${config.threads.length} engraved thread references, bobbins, and a ${config.embeddedTrayWidth}x${config.embeddedTrayDepth}mm embedded tray`;
+  return `Thread slot tray for ${config.threads.length} thread references with engraved labels underneath each slot`;
 }
 
 export const stitchOrganizerGenerator = { type: generatorType, version, name: "Stitch organizer", catalogueType: "thread_references", normalizeParameters, buildGeometry, renderStl, safeFileName, describe };

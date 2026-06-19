@@ -2,7 +2,8 @@ let stlBase64 = "";
 let uploadedFileName = "";
 let stlMesh = null;
 let previewTurntable = null;
-const maxPreviewTriangles = 2400;
+let currentUploadRef = crypto.randomUUID();
+let savedUploads = [];
 const filamentColours = [
   { key: "all", name: "Any standard colour", hex: "#8b9499" },
   { key: "black", name: "Black", hex: "#202223" },
@@ -31,6 +32,13 @@ function bytesToBase64(bytes) {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
   }
   return btoa(binary);
+}
+
+function base64ToBytes(base64) {
+  const binary = atob(base64 || "");
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
 }
 
 function readNumber(id) {
@@ -149,43 +157,58 @@ function parseStlMesh(buffer) {
   return parseAsciiStlMesh(text);
 }
 
-function renderStlMeshPreview(svg, mesh, colour, view = {}) {
-  const transform = window.forgetPreview3d.createTransform({
-    width: Math.max(1, mesh.width),
-    depth: Math.max(1, mesh.depth),
-    height: Math.max(1, mesh.height),
+function previewLine(transform, a, b, attributes) {
+  const start = transform.project(a.x, a.y, a.z);
+  const end = transform.project(b.x, b.y, b.z);
+  return `<line x1="${start.x.toFixed(1)}" y1="${start.y.toFixed(1)}" x2="${end.x.toFixed(1)}" y2="${end.y.toFixed(1)}" ${attributes}/>`;
+}
+
+function renderUploadedEnvelopePreview(svg, bounds, colour, view = {}) {
+  const width = Math.max(1, bounds.width);
+  const depth = Math.max(1, bounds.depth);
+  const height = Math.max(1, bounds.height);
+  const baseColour = colour === "#8b9499" ? "#748086" : colour;
+  const boxes = [
+    { x: 0, y: 0, z: 0, w: width, d: depth, h: Math.max(1.2, height * 0.045), previewColour: "#46545b", previewOpacity: 0.7, previewClass: "uploaded-print-base" },
+    { x: width * 0.08, y: depth * 0.08, z: Math.max(1.2, height * 0.045), w: width * 0.84, d: depth * 0.84, h: Math.max(2, height * 0.82), previewColour: baseColour, previewOpacity: 0.72, previewClass: "uploaded-print-body" },
+    { x: 0, y: 0, z: 0, w: width, d: depth, h: height, previewColour: "#aeb8bb", previewOpacity: 0.11, previewClass: "uploaded-print-envelope" }
+  ];
+  window.forgetPreview3d.renderBoxes(svg, {
+    width,
+    depth,
+    height,
     yaw: view.yaw,
     pitch: view.pitch,
-    padding: 30
+    colour: baseColour,
+    boxes,
+    padding: 34,
+    overlay: (transform) => {
+      const guide = `stroke="#1e2b33" stroke-width="1.05" stroke-dasharray="5 5" opacity=".34" vector-effect="non-scaling-stroke"`;
+      const solid = `stroke="#1e2b33" stroke-width="1.1" opacity=".55" vector-effect="non-scaling-stroke"`;
+      const label = escapeHtml(bounds.label || uploadedFileName || "Uploaded STL");
+      const facetText = bounds.facets ? `${bounds.facets.toLocaleString()} facets read for dimensions` : "Clean print envelope preview";
+      return [
+        previewLine(transform, { x: 0, y: 0, z: 0 }, { x: width, y: 0, z: 0 }, solid),
+        previewLine(transform, { x: 0, y: 0, z: 0 }, { x: 0, y: depth, z: 0 }, solid),
+        previewLine(transform, { x: width, y: depth, z: 0 }, { x: width, y: depth, z: height }, guide),
+        previewLine(transform, { x: 0, y: 0, z: height }, { x: width, y: 0, z: height }, guide),
+        previewLine(transform, { x: 0, y: 0, z: height }, { x: 0, y: depth, z: height }, guide),
+        window.forgetPreview3d.textLabel(transform, width / 2, depth + Math.max(12, depth * 0.08), 0, `${width.toFixed(1)} x ${depth.toFixed(1)} x ${height.toFixed(1)} mm`, `text-anchor="middle" fill="#1e2b33" font-size="14" font-weight="900"`),
+        window.forgetPreview3d.textLabel(transform, width / 2, depth / 2, height + Math.max(8, height * 0.12), label, `text-anchor="middle" fill="#1e2b33" font-size="12" font-weight="850" opacity=".86"`),
+        window.forgetPreview3d.textLabel(transform, width / 2, -Math.max(10, depth * 0.06), 0, facetText, `text-anchor="middle" fill="#46545b" font-size="10" font-weight="800" opacity=".72"`)
+      ].join("");
+    }
   });
-  const stride = Math.max(1, Math.ceil(mesh.triangles.length / maxPreviewTriangles));
-  const light = [0.34, -0.54, 0.77];
-  const baseColour = colour === "#8b9499" ? "#9aa5a9" : colour;
-  const triangles = mesh.triangles
-    .filter((_, index) => index % stride === 0)
-    .map((triangle, index) => {
-      const points = triangle.points.map((point) => transform.project(point[0], point[1], point[2]));
-      const normal = triangle.normal || normalForTriangle(triangle.points);
-      const lightAmount = Math.max(0, normal[0] * light[0] + normal[1] * light[1] + normal[2] * light[2]);
-      const fill = window.forgetPreview3d.mixColour(baseColour, "#ffffff", 0.12 + lightAmount * 0.35);
-      const stroke = window.forgetPreview3d.shadeColour(baseColour, -72);
-      const depth = triangle.points.reduce((sum, point) => sum + point[1] + point[2] * 0.18, 0) / 3;
-      return {
-        depth,
-        markup: `<polygon points="${points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ")}" fill="${fill}" stroke="${stroke}" stroke-width=".35" opacity=".94"/>`
-      };
-    })
-    .sort((a, b) => a.depth - b.depth);
-  const shadowWidth = Math.max(70, Math.min(230, transform.scale * Math.max(mesh.width, mesh.depth) * 0.36));
-  const skipped = stride > 1 ? window.forgetPreview3d.textLabel(
-    transform,
-    mesh.width / 2,
-    mesh.depth + Math.max(10, mesh.depth * 0.06),
-    0,
-    `${Math.ceil(mesh.triangles.length / stride)} of ${mesh.triangles.length} facets shown`,
-    `text-anchor="middle" fill="#1e2b33" font-size="12" font-weight="800" opacity=".72"`
-  ) : "";
-  svg.innerHTML = `<ellipse cx="380" cy="378" rx="${shadowWidth.toFixed(1)}" ry="24" fill="#1e2b33" opacity=".14"/>${triangles.map((triangle) => triangle.markup).join("")}${skipped}`;
+}
+
+function renderStlMeshPreview(svg, mesh, colour, view = {}) {
+  renderUploadedEnvelopePreview(svg, {
+    width: mesh.width,
+    depth: mesh.depth,
+    height: mesh.height,
+    facets: mesh.triangles.length,
+    label: uploadedFileName || "Uploaded STL"
+  }, colour, view);
 }
 
 function drawPreview(view = previewTurntable?.state || {}) {
@@ -197,23 +220,7 @@ function drawPreview(view = previewTurntable?.state || {}) {
   if (stlMesh) {
     renderStlMeshPreview(svg, stlMesh, colour, view);
   } else {
-  window.forgetPreview3d.renderBoxes(svg, {
-    width,
-    depth,
-    height,
-    yaw: view.yaw,
-    pitch: view.pitch,
-    colour,
-    boxes: [{ x: 0, y: 0, z: 0, w: width, d: depth, h: height, previewClass: "uploaded-print-envelope" }],
-    overlay: (transform) => window.forgetPreview3d.textLabel(
-      transform,
-      width / 2,
-      depth + Math.max(12, depth * 0.08),
-      0,
-      `${width} x ${depth} x ${height} mm`,
-      `text-anchor="middle" fill="#1e2b33" font-size="15" font-weight="800"`
-    )
-  });
+    renderUploadedEnvelopePreview(svg, { width, depth, height, label: uploadedFileName || "Awaiting STL" }, colour, view);
   }
   document.getElementById("sizeStat").textContent = `${width} x ${depth} mm`;
   document.getElementById("heightStat").textContent = `${height} mm`;
@@ -240,6 +247,7 @@ function parseBinaryBounds(view) {
 async function loadStl(file) {
   if (!file) return;
   if (file.size > 650_000) throw new Error("Prototype upload limit is 650KB until file storage is added.");
+  currentUploadRef = crypto.randomUUID();
   uploadedFileName = file.name;
   const buffer = await file.arrayBuffer();
   stlMesh = parseStlMesh(buffer);
@@ -251,10 +259,81 @@ async function loadStl(file) {
   }
   document.getElementById("estimatedWeightGrams").value = Math.max(5, Math.round(file.size / 32000));
   stlBase64 = bytesToBase64(new Uint8Array(buffer));
+  document.getElementById("uploadFileLabel").textContent = `${file.name} ready to quote or save.`;
   document.getElementById("uploadStatus").textContent = stlMesh
-    ? `${file.name} loaded. ${stlMesh.triangles.length} facets rendered in the preview.`
+    ? `${file.name} loaded. ${stlMesh.triangles.length} facets read for dimensions.`
     : `${file.name} loaded. Check the dimensions and estimated grams before quoting.`;
   previewTurntable.render();
+}
+
+function savedParameters(upload) {
+  return upload.parameters || upload.configuration || {};
+}
+
+function savedMetadata(upload) {
+  return upload.metadata && typeof upload.metadata === "object" ? upload.metadata : {};
+}
+
+function isSavedStlUpload(upload) {
+  const parameters = savedParameters(upload);
+  const metadata = savedMetadata(upload);
+  return Boolean(parameters.stlBase64 || metadata.saved_upload || metadata.uploaded_file_name);
+}
+
+function renderSavedUploads() {
+  document.getElementById("savedUploads").innerHTML = savedUploads.length ? savedUploads.map((upload) => {
+    const parameters = savedParameters(upload);
+    return `<article data-upload-id="${escapeHtml(upload.id || upload.client_ref || "")}">
+      <div><strong>${escapeHtml(upload.name || parameters.name || parameters.uploadedFileName || "Uploaded STL")}</strong><small>${escapeHtml(parameters.uploadedFileName || "STL saved")} | ${Number(parameters.estimatedWeightGrams || 0).toFixed(0)} g | ${Number(parameters.outerWidth || 0).toFixed(1)} x ${Number(parameters.outerDepth || 0).toFixed(1)} x ${Number(parameters.height || 0).toFixed(1)} mm</small></div>
+      <button type="button" data-load-upload="${escapeHtml(upload.id || upload.client_ref || "")}">Load</button>
+    </article>`;
+  }).join("") : `<div class="empty">Saved STL files will appear here.</div>`;
+}
+
+async function refreshSavedUploads() {
+  savedUploads = (await accountService.loadDesigns()).filter(isSavedStlUpload);
+  renderSavedUploads();
+}
+
+function applySavedUpload(upload) {
+  const parameters = savedParameters(upload);
+  currentUploadRef = upload.client_ref || upload.clientRef || upload.id || crypto.randomUUID();
+  uploadedFileName = parameters.uploadedFileName || upload.name || "uploaded-model.stl";
+  stlBase64 = parameters.stlBase64 || "";
+  document.getElementById("printName").value = upload.name || parameters.name || "Uploaded print";
+  document.getElementById("outerWidth").value = Number(parameters.outerWidth || 100).toFixed(1);
+  document.getElementById("outerDepth").value = Number(parameters.outerDepth || 100).toFixed(1);
+  document.getElementById("height").value = Number(parameters.height || 30).toFixed(1);
+  document.getElementById("estimatedWeightGrams").value = Number(parameters.estimatedWeightGrams || 25).toFixed(0);
+  document.getElementById("filamentMaterial").value = parameters.filamentMaterial || "pla";
+  const desiredColour = String(parameters.desiredColourKey || "").replace(/^uploaded-[^-]+-/, "");
+  document.getElementById("filamentColour").value = filamentColours.some((colour) => colour.key === desiredColour) ? desiredColour : "all";
+  stlMesh = null;
+  if (stlBase64) {
+    try {
+      const bytes = base64ToBytes(stlBase64);
+      stlMesh = parseStlMesh(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    } catch {
+      stlMesh = null;
+    }
+  }
+  document.getElementById("uploadFileLabel").textContent = `${uploadedFileName} loaded from saved uploads.`;
+  document.getElementById("uploadStatus").textContent = `${uploadedFileName} loaded from your saved uploads.`;
+  previewTurntable.render();
+}
+
+async function saveUploadedStl() {
+  if (!stlBase64) throw new Error("Upload an STL before saving it.");
+  const name = document.getElementById("printName").value.trim() || uploadedFileName || "Uploaded print";
+  await accountService.upsertDesign({
+    client_ref: currentUploadRef || crypto.randomUUID(),
+    name,
+    generator_version: 1,
+    parameters: config(),
+    metadata: { saved_upload: true, uploaded_file_name: uploadedFileName }
+  });
+  await refreshSavedUploads();
+  window.generatorAuth.toast("Uploaded STL saved");
 }
 
 function populatePrinterPreference(quotes) {
@@ -275,6 +354,21 @@ function populatePrinterPreference(quotes) {
 document.getElementById("stlFile").addEventListener("change", async (event) => {
   try {
     await loadStl(event.target.files[0]);
+  } catch (error) {
+    window.generatorAuth.toast(error.message);
+  }
+});
+
+const uploadDropzone = document.getElementById("uploadDropzone");
+["dragenter", "dragover"].forEach((eventName) => uploadDropzone.addEventListener(eventName, (event) => {
+  event.preventDefault();
+  uploadDropzone.classList.add("dragging");
+}));
+["dragleave", "drop"].forEach((eventName) => uploadDropzone.addEventListener(eventName, () => uploadDropzone.classList.remove("dragging")));
+uploadDropzone.addEventListener("drop", async (event) => {
+  event.preventDefault();
+  try {
+    await loadStl(event.dataTransfer?.files?.[0]);
   } catch (error) {
     window.generatorAuth.toast(error.message);
   }
@@ -301,8 +395,18 @@ document.getElementById("quoteButton").addEventListener("click", async () => {
     window.generatorAuth.toast(error.message);
   }
 });
+document.getElementById("saveUploadButton").addEventListener("click", () => saveUploadedStl().catch((error) => window.generatorAuth.toast(error.message)));
+document.getElementById("refreshSavedUploads").addEventListener("click", () => refreshSavedUploads().catch((error) => window.generatorAuth.toast(error.message)));
+document.getElementById("savedUploads").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-load-upload]");
+  if (!button) return;
+  const upload = savedUploads.find((candidate) => [candidate.id, candidate.client_ref, candidate.clientRef].includes(button.dataset.loadUpload));
+  if (upload) applySavedUpload(upload);
+});
 
-window.generatorAuth.initAuth().catch((error) => { document.getElementById("loginError").textContent = error.message; });
+window.generatorAuth.initAuth()
+  .then((session) => { if (session) refreshSavedUploads().catch(() => {}); })
+  .catch((error) => { document.getElementById("loginError").textContent = error.message; });
 window.generatorCurrentConfig = config;
 window.generatorCurrentName = () => document.getElementById("printName").value.trim() || "Uploaded print";
 previewTurntable = window.forgetPreview3d.createTurntable(document.getElementById("preview"), drawPreview);

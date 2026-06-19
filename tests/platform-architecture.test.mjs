@@ -116,20 +116,24 @@ test("uploaded print, paint, and stitch generators are registered brands", () =>
     { number: "742", name: "Tangerine" }
   ];
   const flossCard = stitchContext.generator.buildGeometry({ style: "floss-card", threads: stitchThreads, slotWidth: 6, slotDepth: 12 });
-  const workstation = stitchContext.generator.buildGeometry({ style: "workstation-tray", threads: stitchThreads, columns: 2, slotWidth: 18, slotDepth: 42, embeddedTrayWidth: 150, embeddedTrayDepth: 95, labelTextSize: 10, engravingDepth: 1 });
+  const threadSlotTray = stitchContext.generator.buildGeometry({ style: "thread-slot-tray", threads: stitchThreads, columns: 2, slotWidth: 18, slotDepth: 42, labelTextSize: 10, engravingDepth: 1 });
   assert.equal(flossCard.config.style, "floss-card");
-  assert.equal(workstation.config.style, "workstation-tray");
+  assert.equal(threadSlotTray.config.style, "thread-slot-tray");
   assert.ok(flossCard.boxes.length > 20);
-  assert.ok(workstation.outerWidth > flossCard.outerWidth);
-  assert.equal(workstation.embeddedTray.w, 150);
-  assert.equal(workstation.embeddedTray.d, 95);
-  assert.equal(workstation.engravedLabels.length, stitchThreads.length);
-  assert.ok(workstation.engravedLabels.every((label) => label.depth === 1 && label.voids > 0));
-  const widerWorkstation = stitchContext.generator.buildGeometry({ style: "workstation-tray", threads: stitchThreads, columns: 2, embeddedTrayWidth: 210, embeddedTrayDepth: 120 });
-  assert.ok(widerWorkstation.outerWidth > workstation.outerWidth);
-  assert.equal(widerWorkstation.embeddedTray.w, 210);
+  assert.ok(threadSlotTray.outerWidth > flossCard.outerWidth);
+  assert.equal(threadSlotTray.slots.length, stitchThreads.length);
+  assert.equal(threadSlotTray.engravedLabels.length, stitchThreads.length);
+  assert.ok(threadSlotTray.engravedLabels.every((label) => label.depth === 1 && label.voids > 0));
+  threadSlotTray.engravedLabels.forEach((label, index) => {
+    const slot = threadSlotTray.slots[index];
+    assert.ok(label.y > slot.y + slot.d);
+  });
+  assert.equal(threadSlotTray.embeddedTray, undefined);
+  const legacyWorkstation = stitchContext.generator.buildGeometry({ style: "workstation-tray", threads: stitchThreads });
+  assert.equal(legacyWorkstation.config.style, "thread-slot-tray");
   assert.match(stitchContext.generator.safeFileName({ style: "floss-card", threads: stitchThreads }, "Threads"), /threads-floss-card-4-threads\.stl/);
-  assert.match(stitchContext.generator.describe({ style: "workstation-tray", threads: stitchThreads, embeddedTrayWidth: 150, embeddedTrayDepth: 95 }), /engraved thread references, bobbins, and a 150x95mm embedded tray/);
+  assert.match(stitchContext.generator.safeFileName({ style: "thread-slot-tray", threads: stitchThreads }, "Threads"), /threads-thread-slot-tray-4-threads\.stl/);
+  assert.match(stitchContext.generator.describe({ style: "thread-slot-tray", threads: stitchThreads }), /engraved labels underneath each slot/);
 
   assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "print"));
   assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "paint"));
