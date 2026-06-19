@@ -10,7 +10,10 @@ const brands = [
     path: "tray",
     aliases: ["forget-about-tray", "forget-about-tray/"],
     name: "Forget About Tray",
+    shortName: "Tray",
     studioName: "Forget About Tray",
+    tagline: { primary: "Build the formation.", secondary: "Print the advantage." },
+    factoryLabel: "Tray",
     defaultGeneratorType: "movement_tray",
     generatorTypes: ["movement_tray"],
     enabled: true,
@@ -32,7 +35,10 @@ const brands = [
     key: "makeup",
     path: "makeup",
     name: "Forget About Makeup",
+    shortName: "Makeup",
     studioName: "Forget About Makeup",
+    tagline: { primary: "Arrange the ritual.", secondary: "Carry it beautifully." },
+    factoryLabel: "Makeup",
     defaultGeneratorType: "makeup_caddy",
     generatorTypes: ["makeup_caddy"],
     enabled: true,
@@ -54,7 +60,10 @@ const brands = [
     key: "print",
     path: "print",
     name: "Forget About Print",
+    shortName: "Print",
     studioName: "Forget About Print",
+    tagline: { primary: "Upload the model.", secondary: "Let the factory quote it." },
+    factoryLabel: "Print",
     defaultGeneratorType: "uploaded_print",
     generatorTypes: ["uploaded_print"],
     enabled: true,
@@ -76,7 +85,10 @@ const brands = [
     key: "paint",
     path: "paint",
     name: "Forget About Paint",
+    shortName: "Paint",
     studioName: "Forget About Paint",
+    tagline: { primary: "Rack the colour.", secondary: "Clear the desk." },
+    factoryLabel: "Paint",
     defaultGeneratorType: "paint_station",
     generatorTypes: ["paint_station"],
     enabled: true,
@@ -98,7 +110,10 @@ const brands = [
     key: "stitch",
     path: "stitch",
     name: "Forget About Stitch",
+    shortName: "Stitch",
     studioName: "Forget About Stitch",
+    tagline: { primary: "Sort the thread.", secondary: "Keep the project moving." },
+    factoryLabel: "Stitch",
     defaultGeneratorType: "stitch_organizer",
     generatorTypes: ["stitch_organizer"],
     enabled: true,
@@ -120,7 +135,10 @@ const brands = [
     key: "crosstitch",
     path: "crosstitch",
     name: "Forget About Crosstitch",
+    shortName: "Crosstitch",
     studioName: "Crosstitch Studio",
+    tagline: { primary: "Sort the pattern.", secondary: "Thread the plan." },
+    factoryLabel: "Crosstitch",
     defaultGeneratorType: null,
     generatorTypes: [],
     enabled: false,
@@ -142,7 +160,10 @@ const brands = [
     key: "board-games",
     path: "board-games",
     name: "Forget About Board Games",
+    shortName: "Board Games",
     studioName: "Board Game Studio",
+    tagline: { primary: "Sort the table.", secondary: "Pack the play." },
+    factoryLabel: "Board Games",
     defaultGeneratorType: null,
     generatorTypes: [],
     enabled: false,
@@ -199,6 +220,18 @@ export function resolvePlatformContext({ brandKey = "tray", generatorType } = {}
   if (!brand.generatorTypes.includes(type)) throw new Error("This generator is not available for the selected brand.");
   const generator = getGenerator(type);
   return { brand, generator };
+}
+
+export function validatePlatformRegistry() {
+  return brands
+    .filter((brand) => brand.enabled)
+    .map((brand) => {
+      const generator = getGenerator(brand.defaultGeneratorType);
+      if (!brand.generatorTypes.includes(generator.type)) throw new Error(`${brand.key} default generator is not registered on the brand.`);
+      if (!generator.capabilities?.printFactory) throw new Error(`${generator.type} must declare print factory capability.`);
+      if (!generator.defaultFilament?.material) throw new Error(`${generator.type} must declare a default filament.`);
+      return { brand, generator };
+    });
 }
 
 export const publicPlatformConfig = {

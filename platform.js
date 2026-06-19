@@ -11,6 +11,10 @@
     if (!activeBrand) return;
     document.body.dataset.brand = activeBrand.key;
     document.body.dataset.generatorType = activeGenerator?.type || "";
+    document.body.dataset.productFamily = activeGenerator?.productFamily || "";
+    document.body.dataset.generatorSupportsUpload = String(Boolean(activeGenerator?.capabilities?.uploadStl));
+    document.body.dataset.generatorSupportsCatalogue = String(Boolean(activeGenerator?.capabilities?.catalogue));
+    document.body.dataset.generatorSupportsFactory = String(Boolean(activeGenerator?.capabilities?.printFactory));
     document.title = activeBrand.studioName;
     const theme = activeBrand.theme || {};
     const variables = {
@@ -32,6 +36,9 @@
     if (themeMeta && theme.themeColor) themeMeta.content = theme.themeColor;
     document.querySelectorAll("[data-brand-name]").forEach((element) => { element.textContent = activeBrand.name; });
     document.querySelectorAll("[data-studio-name]").forEach((element) => { element.textContent = activeBrand.studioName; });
+    document.querySelectorAll("[data-brand-tagline-primary]").forEach((element) => { element.textContent = activeBrand.tagline?.primary || ""; });
+    document.querySelectorAll("[data-brand-tagline-secondary]").forEach((element) => { element.textContent = activeBrand.tagline?.secondary || ""; });
+    document.querySelectorAll("[data-generator-name]").forEach((element) => { element.textContent = activeGenerator?.name || ""; });
     const home = document.getElementById("brandHome");
     if (home) {
       home.href = window.location.pathname;
@@ -52,7 +59,13 @@
     activeBrand: () => activeBrand,
     activeGenerator: () => activeGenerator,
     brandKey: () => activeBrand?.key || "tray",
+    brandLabel: (key = activeBrand?.key) => {
+      const brand = config.brands.find((candidate) => candidate.key === key);
+      return brand?.factoryLabel || brand?.shortName || brand?.name || String(key || "job");
+    },
     generatorType: () => activeGenerator?.type || "movement_tray",
+    generatorCapabilities: () => activeGenerator?.capabilities || {},
+    defaultFilament: () => activeGenerator?.defaultFilament || { material: "pla", key: "all", name: "PLA", hex: "#8b9499" },
     requestHeaders,
     storageKey: (name) => `forget-about:${activeBrand?.key || "tray"}:${activeGenerator?.type || "platform"}:${name}`
   };

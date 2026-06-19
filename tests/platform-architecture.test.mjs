@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { marketplacePolicy, publicPlatformConfig, resolvePlatformContext } from "../platform/registry.mjs";
+import { marketplacePolicy, publicPlatformConfig, resolvePlatformContext, validatePlatformRegistry } from "../platform/registry.mjs";
 import { assertPrintJobTransition, customerCanCancel, filterPrinterQuotes, providerTransferEligible } from "../platform/print-factory.mjs";
 import { defaultPrintTimeModel, estimatedPrintHours, generatedWeightGrams, printTimeLabel, slicerCalibration } from "../platform/print-estimates.mjs";
 import trayLayout from "../platform/tray-layout.js";
@@ -11,10 +11,18 @@ test("movement trays are registered as a versioned generator under the tray bran
   assert.equal(brand.defaultGeneratorType, "movement_tray");
   assert.equal(generator.type, "movement_tray");
   assert.equal(generator.version, 1);
+  assert.equal(brand.factoryLabel, "Tray");
+  assert.equal(brand.tagline.primary, "Build the formation.");
+  assert.equal(generator.defaultFilament.material, "pla");
+  assert.deepEqual(generator.capabilities.variants, ["single_tray", "army_list", "storage_insert"]);
   assert.deepEqual(brand.generatorTypes, ["movement_tray"]);
   assert.throws(() => resolvePlatformContext({ brandKey: "makeup", generatorType: "movement_tray" }));
   assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "makeup"));
   assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "board-games"));
+  const registryChecks = validatePlatformRegistry();
+  assert.equal(registryChecks.length, publicPlatformConfig.brands.filter((candidate) => candidate.enabled).length);
+  assert.ok(publicPlatformConfig.generators.every((candidate) => candidate.defaultFilament?.material));
+  assert.ok(publicPlatformConfig.generators.every((candidate) => candidate.capabilities?.printFactory));
 });
 
 test("makeup caddies are a separate enabled generator under the makeup brand", () => {
@@ -22,6 +30,8 @@ test("makeup caddies are a separate enabled generator under the makeup brand", (
   assert.equal(brand.enabled, true);
   assert.equal(brand.defaultGeneratorType, "makeup_caddy");
   assert.equal(generator.catalogueType, "makeup_products");
+  assert.equal(brand.tagline.secondary, "Carry it beautifully.");
+  assert.deepEqual(generator.capabilities.variants, ["caddy", "staircase", "pegboard"]);
   const parameters = {
     items: [
       { id: "lipstick", brand: "MAC", name: "Lipstick", category: "Lipstick", width: 22, depth: 22, height: 76, clearance: 1.5 },

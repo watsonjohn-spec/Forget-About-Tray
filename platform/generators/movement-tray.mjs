@@ -511,6 +511,18 @@ export const movementTrayGenerator = {
   version,
   name: "Movement tray",
   catalogueType: "old_world_units",
+  productFamily: "tabletop",
+  factoryLabel: "Movement tray",
+  defaultFilament: { material: "pla", key: "pla-bambu-green", name: "Bambu Green", hex: "#00AE42" },
+  capabilities: {
+    savedDesigns: true,
+    stlDownload: true,
+    printFactory: true,
+    catalogue: true,
+    uploadStl: false,
+    variants: ["single_tray", "army_list", "storage_insert"],
+    splitPlates: true
+  },
   normalizeParameters,
   buildGeometry,
   renderStl,

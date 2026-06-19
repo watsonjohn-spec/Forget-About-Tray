@@ -37,8 +37,8 @@ function labelText(value) {
 }
 
 function brandLabel(key) {
-  const labels = { tray: "TRAY", makeup: "MAKEUP", paint: "PAINT", stitch: "STITCH", print: "PRINT" };
-  return labels[key] || String(key || "job").toUpperCase();
+  const brand = window.FORGET_ABOUT_PLATFORM_CONFIG?.brands?.find((candidate) => candidate.key === key);
+  return (brand?.factoryLabel || brand?.shortName || brand?.name || String(key || "job")).toUpperCase();
 }
 
 function jobNextAction(job) {

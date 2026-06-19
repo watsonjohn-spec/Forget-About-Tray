@@ -72,6 +72,18 @@ export const uploadedPrintGenerator = {
   version,
   name: "Uploaded STL print",
   catalogueType: "uploaded_stl",
+  productFamily: "uploaded-print",
+  factoryLabel: "Uploaded STL",
+  defaultFilament: { material: "pla", key: "all", name: "Any standard colour", hex: "#8b9499" },
+  capabilities: {
+    savedDesigns: true,
+    stlDownload: false,
+    printFactory: true,
+    catalogue: false,
+    uploadStl: true,
+    variants: ["uploaded_stl"],
+    splitPlates: false
+  },
   normalizeParameters,
   buildGeometry,
   renderStl,

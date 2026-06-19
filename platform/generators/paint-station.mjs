@@ -138,4 +138,26 @@ function describe(parameters) {
   return `${config.paintType} ${config.layoutMode.replace("-", " ")} for ${config.paintCount} paints and ${config.brushSlots || config.brushStandHoles} brush slots`;
 }
 
-export const paintStationGenerator = { type: generatorType, version, name: "Paint station", catalogueType: "paint_bottles", normalizeParameters, buildGeometry, renderStl, safeFileName, describe };
+export const paintStationGenerator = {
+  type: generatorType,
+  version,
+  name: "Paint station",
+  catalogueType: "paint_bottles",
+  productFamily: "hobby-paint",
+  factoryLabel: "Paint station",
+  defaultFilament: { material: "pla", key: "pla-green", name: "Workshop Green", hex: "#4f7b6f" },
+  capabilities: {
+    savedDesigns: true,
+    stlDownload: true,
+    printFactory: true,
+    catalogue: true,
+    uploadStl: false,
+    variants: ["paint_box", "painting_station"],
+    splitPlates: true
+  },
+  normalizeParameters,
+  buildGeometry,
+  renderStl,
+  safeFileName,
+  describe
+};

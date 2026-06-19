@@ -422,6 +422,18 @@ export const makeupCaddyGenerator = {
   version,
   name: "Makeup caddy",
   catalogueType: "makeup_products",
+  productFamily: "beauty",
+  factoryLabel: "Makeup caddy",
+  defaultFilament: { material: "pla", key: "pla-rose-gold", name: "Rose Gold", hex: "#b76e79" },
+  capabilities: {
+    savedDesigns: true,
+    stlDownload: true,
+    printFactory: true,
+    catalogue: true,
+    uploadStl: false,
+    variants: ["caddy", "staircase", "pegboard"],
+    splitPlates: true
+  },
   normalizeParameters,
   buildGeometry,
   renderStl,

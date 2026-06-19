@@ -242,7 +242,7 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
 });
 
 test("UAT2 previews, explicit login, factory workflow, and makeup account tools are wired", async () => {
-  const [trayHtml, trayApp, account, factoryHtml, factoryApp, makeupHtml, makeupApp, preview3d] = await Promise.all([
+  const [trayHtml, trayApp, account, factoryHtml, factoryApp, makeupHtml, makeupApp, preview3d, platformJs] = await Promise.all([
     readFile(new URL("tray/index.html", root), "utf8"),
     readFile(new URL("app.js", root), "utf8"),
     readFile(new URL("account.js", root), "utf8"),
@@ -250,11 +250,13 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
     readFile(new URL("factory/factory.js", root), "utf8"),
     readFile(new URL("makeup/index.html", root), "utf8"),
     readFile(new URL("makeup/makeup.js", root), "utf8"),
-    readFile(new URL("preview-3d.js", root), "utf8")
+    readFile(new URL("preview-3d.js", root), "utf8"),
+    readFile(new URL("platform.js", root), "utf8")
   ]);
   assert.match(account, /forget-about-active-session/);
   assert.match(account, /sessionStorage\.getItem\(activeSessionKey\)/);
   assert.match(trayHtml, /data-preview-turn="-1"/);
+  assert.match(trayHtml, /data-brand-tagline-primary/);
   assert.match(trayHtml, /id="filamentMaterial"/);
   assert.match(trayApp, /filamentColours\.filter\(\(colour\) => colour\.material === material\)/);
   assert.match(trayApp, /data-army-field="includeBases"/);
@@ -285,11 +287,13 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(factoryApp, /data-job-label/);
   assert.match(factoryApp, /function jobNextAction\(job\)/);
   assert.match(factoryApp, /function filteredTransfers\(transfers\)/);
+  assert.match(factoryApp, /FORGET_ABOUT_PLATFORM_CONFIG\?\.brands/);
   assert.match(factoryApp, /brandLabel\(job\.brand_key\)/);
   assert.match(factoryApp, /renderTimeCalculator/);
   assert.match(factoryApp, /printTimeLabel/);
   assert.match(makeupHtml, /data-layout-mode="staircase"/);
   assert.match(makeupHtml, /data-layout-mode="pegboard"/);
+  assert.match(makeupHtml, /data-brand-tagline-primary/);
   assert.match(makeupHtml, /id="handleEnabled" type="checkbox" checked disabled/);
   assert.match(makeupHtml, /id="balanceCatchalls" type="checkbox" checked/);
   assert.match(makeupHtml, /id="stepRiseField"/);
@@ -326,6 +330,10 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(preview3d, /splitThreshold \|\| 250/);
   assert.match(preview3d, /stage\.dataset\.previewReady = "true"/);
   assert.match(preview3d, /function cylinderFaces\(cylinder, transform, fallbackColour, opacity, index\)/);
+  assert.match(platformJs, /data-brand-tagline-primary/);
+  assert.match(platformJs, /generatorCapabilities: \(\) => activeGenerator\?\.capabilities/);
+  assert.match(platformJs, /defaultFilament: \(\) => activeGenerator\?\.defaultFilament/);
+  assert.match(platformJs, /generatorSupportsFactory/);
 });
 
 test("site shell, footer, and prototype generators are present", async () => {

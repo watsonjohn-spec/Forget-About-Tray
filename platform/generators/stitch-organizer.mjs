@@ -281,4 +281,26 @@ function describe(parameters) {
   return `Thread slot tray for ${config.threads.length} thread references with engraved labels underneath each slot`;
 }
 
-export const stitchOrganizerGenerator = { type: generatorType, version, name: "Stitch organizer", catalogueType: "thread_references", normalizeParameters, buildGeometry, renderStl, safeFileName, describe };
+export const stitchOrganizerGenerator = {
+  type: generatorType,
+  version,
+  name: "Stitch organizer",
+  catalogueType: "thread_references",
+  productFamily: "needlecraft",
+  factoryLabel: "Stitch organiser",
+  defaultFilament: { material: "pla", key: "pla-project-lilac", name: "Project Lilac", hex: "#8d6aa9" },
+  capabilities: {
+    savedDesigns: true,
+    stlDownload: true,
+    printFactory: true,
+    catalogue: false,
+    uploadStl: false,
+    variants: ["thread_slot_tray", "floss_card"],
+    splitPlates: false
+  },
+  normalizeParameters,
+  buildGeometry,
+  renderStl,
+  safeFileName,
+  describe
+};
