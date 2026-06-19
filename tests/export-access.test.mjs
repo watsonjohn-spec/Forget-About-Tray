@@ -13,16 +13,23 @@ const freeUserId = "00000000-0000-4000-8000-000000000001";
 const paidUserId = "00000000-0000-4000-8000-000000000002";
 const concurrentUserId = "00000000-0000-4000-8000-000000000003";
 const profiles = new Map([[freeUserId, false], [paidUserId, true], [concurrentUserId, false]]);
+const orders = [];
 const orderItems = [];
+const orderCustomerSnapshots = [];
 const checkoutRequests = [];
 const printQuotes = [];
 const printJobs = [];
+const printJobEvents = [];
 const providerTransfers = [];
+const providerReviews = [];
+const stripeTransfers = [];
+const refundRequests = [];
 const webhookSecret = "whsec_test_webhook_secret";
 const paymentAccounts = [];
 const stripeAccountRequests = [];
 const printerProfile = {
   id: "10000000-0000-4000-8000-000000000001",
+  user_id: paidUserId,
   display_name: "Prototype Printer",
   description: "Local test provider",
   based_in: "Leeds",
@@ -52,6 +59,117 @@ async function requestJson(request) {
   return JSON.parse(body || "{}");
 }
 
+function eqParam(url, name) {
+  return url.searchParams.get(name)?.replace("eq.", "") || "";
+}
+
+function applyPatch(rows, predicate, patch) {
+  const updated = [];
+  for (const row of rows) {
+    if (predicate(row)) {
+      Object.assign(row, patch);
+      updated.push(row);
+    }
+  }
+  return updated;
+}
+
+function orderRowsForUser(userId, brandKey = "") {
+  return orders
+    .filter((order) => order.user_id === userId && (!brandKey || order.brand_key === brandKey))
+    .map((order) => ({
+      ...order,
+      order_items: orderItems.filter((item) => item.order_id === order.id),
+      order_customer_snapshots: orderCustomerSnapshots.filter((snapshot) => snapshot.order_id === order.id),
+      print_jobs: printJobs
+        .filter((job) => job.order_id === order.id)
+        .map((job) => ({ ...job, print_job_events: printJobEvents.filter((event) => event.print_job_id === job.id) }))
+    }));
+}
+
+function selectedPrintJobs(url) {
+  const id = eqParam(url, "id");
+  const orderId = eqParam(url, "order_id");
+  const customerUserId = eqParam(url, "customer_user_id");
+  const printerProfileId = eqParam(url, "printer_profile_id");
+  const statusFilter = url.searchParams.get("status") || "";
+  return printJobs.filter((job) => (
+    (!id || job.id === id)
+    && (!orderId || job.order_id === orderId)
+    && (!customerUserId || job.customer_user_id === customerUserId)
+    && (!printerProfileId || job.printer_profile_id === printerProfileId)
+    && (!statusFilter.startsWith("neq.") || job.status !== statusFilter.replace("neq.", ""))
+    && (!statusFilter.startsWith("eq.") || job.status === statusFilter.replace("eq.", ""))
+  )).map((job) => ({
+    ...job,
+    orders: orders.find((order) => order.id === job.order_id) || null,
+    print_quotes: printQuotes.find((quote) => quote.id === job.quote_id) || null,
+    print_job_events: printJobEvents.filter((event) => event.print_job_id === job.id)
+  }));
+}
+
+function stripeSignature(rawBody) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = createHmac("sha256", webhookSecret).update(`${timestamp}.${rawBody}`).digest("hex");
+  return `t=${timestamp},v1=${signature}`;
+}
+
+function latestCheckoutMetadata() {
+  const checkout = checkoutRequests.at(-1);
+  return {
+    orderId: checkout.get("metadata[order_id]"),
+    printJobId: checkout.get("metadata[print_job_id]"),
+    quoteId: checkout.get("metadata[quote_id]"),
+    amount: Number(checkout.get("line_items[0][price_data][unit_amount]") || 0),
+    purchaseType: checkout.get("metadata[purchase_type]"),
+    brandKey: checkout.get("metadata[brand_key]"),
+    generatorType: checkout.get("metadata[generator_type]"),
+    printerProfileId: checkout.get("metadata[printer_profile_id]")
+  };
+}
+
+async function postCheckoutCompletedWebhook(metadata, extraSession = {}) {
+  const event = {
+    id: `evt_${metadata.printJobId || metadata.orderId || Date.now()}`,
+    type: "checkout.session.completed",
+    data: {
+      object: {
+        id: `cs_${metadata.orderId || Date.now()}`,
+        payment_status: "paid",
+        amount_total: metadata.amount,
+        payment_intent: `pi_${metadata.orderId || Date.now()}`,
+        created: Math.floor(Date.now() / 1000),
+        metadata: {
+          purchase_type: metadata.purchaseType,
+          user_id: paidUserId,
+          order_id: metadata.orderId,
+          print_job_id: metadata.printJobId,
+          quote_id: metadata.quoteId,
+          brand_key: metadata.brandKey,
+          generator_type: metadata.generatorType,
+          printer_profile_id: metadata.printerProfileId
+        },
+        customer_details: {
+          name: "Paid Customer",
+          email: "paid@example.test",
+          address: { line1: "1 Test Street", city: "Leeds", postal_code: "LS1 1AA", country: "GB" }
+        },
+        shipping_details: {
+          name: "Paid Customer",
+          address: { line1: "1 Test Street", city: "Leeds", postal_code: "LS1 1AA", country: "GB" }
+        },
+        ...extraSession
+      }
+    }
+  };
+  const rawBody = JSON.stringify(event);
+  return fetch(`${baseUrl}/api/stripe/webhook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Stripe-Signature": stripeSignature(rawBody) },
+    body: rawBody
+  });
+}
+
 const mockSupabase = createServer(async (request, response) => {
   const url = new URL(request.url, `http://127.0.0.1:${mockPort}`);
   if (url.pathname === "/v1/checkout/sessions") {
@@ -70,6 +188,22 @@ const mockSupabase = createServer(async (request, response) => {
   }
   if (url.pathname === "/v1/account_links" && request.method === "POST") {
     return sendJson(response, 200, { url: "https://connect.stripe.test/onboarding" });
+  }
+  if (url.pathname === "/v1/transfers" && request.method === "POST") {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    const parameters = new URLSearchParams(body);
+    const saved = { id: `tr_test_${String(stripeTransfers.length + 1).padStart(4, "0")}`, parameters };
+    stripeTransfers.push(saved);
+    return sendJson(response, 200, saved);
+  }
+  if (url.pathname === "/v1/refunds" && request.method === "POST") {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    const parameters = new URLSearchParams(body);
+    const saved = { id: `re_test_${String(refundRequests.length + 1).padStart(4, "0")}`, parameters };
+    refundRequests.push(saved);
+    return sendJson(response, 200, saved);
   }
   if (url.pathname === "/auth/v1/user") {
     const user = userFromToken(request.headers.authorization);
@@ -94,7 +228,16 @@ const mockSupabase = createServer(async (request, response) => {
   }
 
   if (url.pathname === "/rest/v1/printer_profiles") {
-    return sendJson(response, 200, [printerProfile]);
+    if (request.method === "PATCH") {
+      Object.assign(printerProfile, await requestJson(request));
+      return sendJson(response, 200, [printerProfile]);
+    }
+    const id = eqParam(url, "id");
+    const userId = eqParam(url, "user_id");
+    const rows = (!id || id === printerProfile.id) && (!userId || userId === printerProfile.user_id)
+      ? [printerProfile]
+      : [];
+    return sendJson(response, 200, rows);
   }
 
   if (url.pathname === "/rest/v1/printer_capabilities") {
@@ -121,7 +264,8 @@ const mockSupabase = createServer(async (request, response) => {
       paymentAccounts.push(saved);
       return sendJson(response, 200, [saved]);
     }
-    return sendJson(response, 200, paymentAccounts);
+    const printerProfileId = eqParam(url, "printer_profile_id");
+    return sendJson(response, 200, paymentAccounts.filter((account) => !printerProfileId || account.printer_profile_id === printerProfileId));
   }
 
   if (url.pathname === "/rest/v1/print_quotes") {
@@ -135,9 +279,22 @@ const mockSupabase = createServer(async (request, response) => {
     return sendJson(response, 200, id ? printQuotes.filter((quote) => quote.id === id) : printQuotes);
   }
 
-  if (url.pathname === "/rest/v1/print_jobs" && request.method === "POST") {
-    printJobs.push(await requestJson(request));
-    return sendJson(response, 200, {});
+  if (url.pathname === "/rest/v1/print_jobs") {
+    if (request.method === "POST") {
+      printJobs.push(await requestJson(request));
+      return sendJson(response, 200, {});
+    }
+    if (request.method === "PATCH") {
+      const patch = await requestJson(request);
+      const updated = applyPatch(printJobs, (job) => (
+        (!eqParam(url, "id") || job.id === eqParam(url, "id"))
+        && (!eqParam(url, "order_id") || job.order_id === eqParam(url, "order_id"))
+        && (!eqParam(url, "customer_user_id") || job.customer_user_id === eqParam(url, "customer_user_id"))
+        && (!eqParam(url, "printer_profile_id") || job.printer_profile_id === eqParam(url, "printer_profile_id"))
+      ), patch);
+      return sendJson(response, 200, updated);
+    }
+    return sendJson(response, 200, selectedPrintJobs(url));
   }
 
   if (url.pathname === "/rest/v1/stripe_events") {
@@ -147,23 +304,80 @@ const mockSupabase = createServer(async (request, response) => {
   }
 
   if (url.pathname === "/rest/v1/order_customer_snapshots" && request.method === "POST") {
-    await requestJson(request);
-    return sendJson(response, 200, {});
+    const saved = await requestJson(request);
+    const existing = orderCustomerSnapshots.find((snapshot) => snapshot.order_id === saved.order_id);
+    if (existing) Object.assign(existing, saved);
+    else orderCustomerSnapshots.push(saved);
+    return sendJson(response, 200, [saved]);
   }
 
-  if (url.pathname === "/rest/v1/provider_transfers" && request.method === "POST") {
-    providerTransfers.push(await requestJson(request));
-    return sendJson(response, 200, {});
+  if (url.pathname === "/rest/v1/provider_transfers") {
+    if (request.method === "POST") {
+      const saved = await requestJson(request);
+      const existing = providerTransfers.find((transfer) => transfer.print_job_id === saved.print_job_id);
+      if (existing) Object.assign(existing, saved);
+      else providerTransfers.push(saved);
+      return sendJson(response, 200, [saved]);
+    }
+    if (request.method === "PATCH") {
+      const patch = await requestJson(request);
+      const updated = applyPatch(providerTransfers, (transfer) => (
+        (!eqParam(url, "id") || transfer.id === eqParam(url, "id"))
+        && (!eqParam(url, "print_job_id") || transfer.print_job_id === eqParam(url, "print_job_id"))
+        && (!eqParam(url, "printer_profile_id") || transfer.printer_profile_id === eqParam(url, "printer_profile_id"))
+      ), patch);
+      return sendJson(response, 200, updated);
+    }
+    const printerProfileId = eqParam(url, "printer_profile_id");
+    return sendJson(response, 200, providerTransfers.filter((transfer) => !printerProfileId || transfer.printer_profile_id === printerProfileId));
   }
 
-  if (url.pathname === "/rest/v1/orders" && ["POST", "PATCH"].includes(request.method)) {
-    await requestJson(request);
-    return sendJson(response, 200, {});
+  if (url.pathname === "/rest/v1/orders") {
+    if (request.method === "POST") {
+      const saved = await requestJson(request);
+      orders.push(saved);
+      return sendJson(response, 200, [saved]);
+    }
+    if (request.method === "PATCH") {
+      const patch = await requestJson(request);
+      const updated = applyPatch(orders, (order) => (
+        (!eqParam(url, "id") || order.id === eqParam(url, "id"))
+        && (!eqParam(url, "user_id") || order.user_id === eqParam(url, "user_id"))
+      ), patch);
+      return sendJson(response, 200, updated);
+    }
+    return sendJson(response, 200, orderRowsForUser(eqParam(url, "user_id"), eqParam(url, "brand_key")));
   }
 
   if (url.pathname === "/rest/v1/order_items" && request.method === "POST") {
     orderItems.push(await requestJson(request));
     return sendJson(response, 200, {});
+  }
+
+  if (url.pathname === "/rest/v1/print_job_events") {
+    if (request.method === "POST") {
+      const saved = {
+        ...(await requestJson(request)),
+        id: `60000000-0000-4000-8000-${String(printJobEvents.length + 1).padStart(12, "0")}`,
+        created_at: new Date().toISOString()
+      };
+      printJobEvents.push(saved);
+      return sendJson(response, 200, [saved]);
+    }
+    const printJobId = eqParam(url, "print_job_id");
+    return sendJson(response, 200, printJobEvents.filter((event) => !printJobId || event.print_job_id === printJobId));
+  }
+
+  if (url.pathname === "/rest/v1/provider_reviews") {
+    if (request.method === "POST") {
+      const saved = await requestJson(request);
+      const existing = providerReviews.find((review) => review.print_job_id === saved.print_job_id);
+      if (existing) Object.assign(existing, saved);
+      else providerReviews.push(saved);
+      return sendJson(response, 200, [saved]);
+    }
+    const printerProfileId = eqParam(url, "printer_profile_id");
+    return sendJson(response, 200, providerReviews.filter((review) => !printerProfileId || review.printer_profile_id === printerProfileId));
   }
 
   sendJson(response, 404, { message: "mock route not found" });
@@ -181,6 +395,38 @@ async function api(path, token, body, extraHeaders = {}) {
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
+}
+
+function trayPrintConfig(overrides = {}) {
+  return {
+    columns: 2,
+    rows: 2,
+    baseSize: 25,
+    baseDepth: 25,
+    gap: 1,
+    clearance: 1,
+    plateThickness: 2,
+    lipEnabled: true,
+    wallHeight: 3,
+    wallThickness: 1.6,
+    notchesEnabled: false,
+    notchWidth: 2,
+    ...overrides
+  };
+}
+
+async function createPaidMarketplacePrint(name, config = trayPrintConfig()) {
+  const quoteResponse = await api("/api/marketplace/quotes", "paid-token", { config, name });
+  assert.equal(quoteResponse.status, 200);
+  const quoteResult = await quoteResponse.json();
+  assert.equal(quoteResult.quotes.length, 1);
+  const quote = quoteResult.quotes[0];
+  const checkoutResponse = await api("/api/marketplace/checkout/session", "paid-token", { quoteId: quote.id });
+  assert.equal(checkoutResponse.status, 200);
+  const metadata = latestCheckoutMetadata();
+  const webhookResponse = await postCheckoutCompletedWebhook(metadata);
+  assert.equal(webhookResponse.status, 200);
+  return { quote, metadata };
 }
 
 test.before(async () => {
@@ -377,6 +623,81 @@ test("marketplace quotes expose selectable providers and create held print jobs"
   assert.equal(printJobs.at(-1).payout_status, "held");
   assert.equal(providerTransfers.at(-1).status, "held");
   assert.match(checkoutRequests.at(-1).get("payment_intent_data[transfer_group]"), /^PRINT_JOB_/);
+});
+
+test("paid marketplace print jobs progress through customer confirmation and payout release", async () => {
+  const { metadata } = await createPaidMarketplacePrint("Lifecycle tray");
+  const job = printJobs.find((row) => row.id === metadata.printJobId);
+  const order = orders.find((row) => row.id === metadata.orderId);
+  assert.equal(order.status, "paid");
+  assert.equal(job.status, "order_made");
+  assert.equal(job.payout_status, "held");
+  assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.to_status === "order_made"));
+
+  const ordersResponse = await api("/api/account/orders", "paid-token");
+  assert.equal(ordersResponse.status, 200);
+  const accountOrders = await ordersResponse.json();
+  assert.ok(accountOrders.some((row) => row.id === order.id && row.print_jobs.some((printJob) => printJob.id === job.id)));
+
+  const producingResponse = await api(`/api/factory/jobs/${job.id}/status`, "paid-token", { status: "producing", note: "Starting the print." });
+  assert.equal(producingResponse.status, 200);
+  assert.equal(job.status, "producing");
+  assert.ok(order.refund_locked_at);
+
+  const postedResponse = await api(`/api/factory/jobs/${job.id}/status`, "paid-token", {
+    status: "posted",
+    trackingReference: "EVRI-TRACK-1",
+    note: "Posted to the buyer."
+  });
+  assert.equal(postedResponse.status, 200);
+  assert.equal(job.status, "posted");
+  assert.equal(job.tracking_reference, "EVRI-TRACK-1");
+
+  const customerMessageResponse = await api(`/api/account/print-jobs/${job.id}/message`, "paid-token", { note: "Thanks, looking forward to it." });
+  assert.equal(customerMessageResponse.status, 200);
+  assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.event_type === "customer_message"));
+
+  const existingPaymentAccount = paymentAccounts.find((account) => account.printer_profile_id === printerProfile.id);
+  const readyAccount = {
+    printer_profile_id: printerProfile.id,
+    stripe_connected_account_id: "acct_test_factory_provider",
+    transfers_enabled: true,
+    payouts_enabled: true,
+    onboarding_complete: true
+  };
+  if (existingPaymentAccount) Object.assign(existingPaymentAccount, readyAccount);
+  else paymentAccounts.push({ id: "50000000-0000-4000-8000-000000000099", ...readyAccount });
+
+  const completeResponse = await api(`/api/account/print-jobs/${job.id}/complete`, "paid-token", { rating: 5, reviewText: "Great print." });
+  assert.equal(completeResponse.status, 200);
+  const completion = await completeResponse.json();
+  assert.equal(completion.transfer.released, true);
+  assert.equal(job.status, "complete");
+  assert.equal(job.payout_status, "transferred");
+  assert.equal(providerTransfers.find((transfer) => transfer.print_job_id === job.id).status, "transferred");
+  assert.equal(stripeTransfers.at(-1).parameters.get("destination"), "acct_test_factory_provider");
+  assert.equal(stripeTransfers.at(-1).parameters.get("amount"), String(job.provider_share_pence));
+  assert.equal(providerReviews.find((review) => review.print_job_id === job.id).rating, 5);
+  assert.equal(printerProfile.rating_count, providerReviews.length);
+});
+
+test("providers can decline paid jobs before production and trigger a buyer refund", async () => {
+  const { metadata } = await createPaidMarketplacePrint("Decline test tray");
+  const job = printJobs.find((row) => row.id === metadata.printJobId);
+  const order = orders.find((row) => row.id === metadata.orderId);
+  assert.equal(job.status, "order_made");
+  assert.equal(order.status, "paid");
+
+  const declineResponse = await api(`/api/factory/jobs/${job.id}/decline`, "paid-token", { reason: "Printer unavailable." });
+  assert.equal(declineResponse.status, 200);
+  const decline = await declineResponse.json();
+  assert.equal(decline.declined, true);
+  assert.equal(job.status, "refunded");
+  assert.equal(job.payout_status, "reversed");
+  assert.equal(order.status, "refunded");
+  assert.equal(providerTransfers.find((transfer) => transfer.print_job_id === job.id).status, "reversed");
+  assert.equal(refundRequests.at(-1).parameters.get("payment_intent"), order.stripe_payment_intent_id);
+  assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.event_type === "decline"));
 });
 
 test("checkout returns to the originating brand path", async () => {
