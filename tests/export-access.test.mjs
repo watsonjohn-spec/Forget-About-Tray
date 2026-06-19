@@ -195,6 +195,7 @@ test.before(async () => {
       SUPABASE_PUBLISHABLE_KEY: "publishable-test-key",
       SUPABASE_SECRET_KEY: "secret-test-key",
       DOWNLOAD_TOKEN_SECRET: "test-download-secret",
+      TASK_RUNNER_SECRET: "test-task-secret",
       STRIPE_SECRET_KEY: "rk_test_abcdefghijklmnopqrstuvwxyz123456",
       STRIPE_WEBHOOK_SECRET: webhookSecret,
       STRIPE_API_BASE: `http://127.0.0.1:${mockPort}`
@@ -322,6 +323,12 @@ test("node host exposes a deployment health check", async () => {
   const response = await fetch(`${baseUrl}/api/health`);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: "ok", service: "forget-about-platform" });
+});
+
+test("scheduled auto-complete task is protected by a task secret", async () => {
+  const response = await fetch(`${baseUrl}/api/tasks/auto-complete-posted`, { method: "POST" });
+  assert.equal(response.status, 403);
+  assert.match((await response.json()).error, /not authorized/i);
 });
 
 test("physical print checkout preserves the complete tray configuration", async () => {

@@ -4,6 +4,7 @@ import test from "node:test";
 import { marketplacePolicy, publicPlatformConfig, resolvePlatformContext } from "../platform/registry.mjs";
 import { assertPrintJobTransition, customerCanCancel, filterPrinterQuotes, providerTransferEligible } from "../platform/print-factory.mjs";
 import { defaultPrintTimeModel, estimatedPrintHours, generatedWeightGrams, printTimeLabel, slicerCalibration } from "../platform/print-estimates.mjs";
+import trayLayout from "../platform/tray-layout.js";
 
 test("movement trays are registered as a versioned generator under the tray brand", () => {
   const { brand, generator } = resolvePlatformContext({ brandKey: "tray" });
@@ -155,6 +156,20 @@ test("generator contract validates parameters and renders an STL", () => {
   assert.equal(largeOval.baseDepth, 105);
 });
 
+test("tray base layouts are shared between browser preview and server STL generation", async () => {
+  const [html, appSource, generatorSource] = await Promise.all([
+    readFile(new URL("../tray/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../app.js", import.meta.url), "utf8"),
+    readFile(new URL("../platform/generators/movement-tray.mjs", import.meta.url), "utf8")
+  ]);
+  assert.match(html, /platform\/tray-layout\.js/);
+  assert.match(appSource, /window\.trayLayout/);
+  assert.match(generatorSource, /import trayLayout from "\.\.\/tray-layout\.js"/);
+  assert.equal(trayLayout.normalizeTrayOutputMode({ includeBases: true }), "tray-and-bases");
+  assert.equal(trayLayout.trayHasTray({ outputMode: "bases-only" }), false);
+  assert.equal(trayLayout.packedLooseBaseLayout({ columns: 4, rows: 3, baseSize: 25, baseDepth: 25, gap: 1, outputMode: "tray-and-bases" }, 105, 80).placements.length, 12);
+});
+
 test("movement tray generator renders Really Useful Box storage inserts", () => {
   const { generator } = resolvePlatformContext({ brandKey: "tray" });
   const source = {
@@ -234,10 +249,11 @@ test("print estimates are calibrated against the Bambu P1S reference", () => {
 });
 
 test("factory portal keeps completion and payout release outside printer controls", async () => {
-  const [html, factorySource, serverSource, renderBlueprint] = await Promise.all([
+  const [html, factorySource, serverSource, stripeClientSource, renderBlueprint] = await Promise.all([
     readFile(new URL("../factory/index.html", import.meta.url), "utf8"),
     readFile(new URL("../factory/factory.js", import.meta.url), "utf8"),
     readFile(new URL("../server.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../server/stripe-client.mjs", import.meta.url), "utf8"),
     readFile(new URL("../render.yaml", import.meta.url), "utf8")
   ]);
   assert.match(html, /id="factoryLoginForm"/);
@@ -256,6 +272,8 @@ test("factory portal keeps completion and payout release outside printer control
   assert.match(serverSource, /Choose a rating from 1 to 5 before confirming delivery/);
   assert.match(serverSource, /autoCompleteStalePostedJobs/);
   assert.match(serverSource, /PRINT_AUTO_COMPLETE_DAYS/);
+  assert.match(serverSource, /TASK_RUNNER_SECRET/);
+  assert.match(serverSource, /\/api\/tasks\/auto-complete-posted/);
   assert.match(serverSource, /status: "pending_review", accepting_jobs: false/);
   assert.match(serverSource, /\/v2\/core\/accounts/);
   assert.match(serverSource, /include\[0\]=configuration\.recipient&include\[1\]=requirements/);
@@ -266,6 +284,13 @@ test("factory portal keeps completion and payout release outside printer control
   assert.match(serverSource, /assertPrintJobTransition\(job\.status, "complete"\)/);
   assert.match(serverSource, /\/api\/marketplace\/quotes/);
   assert.match(serverSource, /payment_intent_data\[transfer_group\]/);
+  assert.match(serverSource, /createStripeClient/);
+  assert.match(stripeClientSource, /"Stripe-Version": stripeApiVersion/);
+  assert.match(stripeClientSource, /stripeEventVerified/);
+  assert.doesNotMatch(serverSource, /MARKETPLACE_INCLUDE_PENDING !== "false"/);
+  assert.doesNotMatch(serverSource, /DOWNLOAD_TOKEN_SECRET \|\| stripeKey/);
+  assert.doesNotMatch(serverSource, /fetch\(`\$\{stripeApiBase\}\/v1\/checkout\/sessions/);
+  assert.doesNotMatch(serverSource, /const brandEntries =/);
   assert.match(renderBlueprint, /healthCheckPath: \/api\/health/);
   assert.match(renderBlueprint, /SUPABASE_SECRET_KEY/);
   assert.match(renderBlueprint, /STRIPE_SECRET_KEY/);

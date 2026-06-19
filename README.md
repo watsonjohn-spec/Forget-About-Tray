@@ -60,13 +60,13 @@ Makeup catalogue dimensions are deliberately marked approximate because cosmetic
 
 The shared provider portal is available at `/factory/`. Printers create a dedicated email/password account there, complete their marketplace profile, add materials and colours, and manage assigned jobs. Factory accounts use Supabase Auth, so credentials are not hard-coded into the public site. Printer profiles begin in `pending_review`; approve them administratively before setting them active in the marketplace.
 
-`MARKETPLACE_INCLUDE_PENDING=true` lets the first pending-review provider appear during prototype testing. Set it to `false` before accepting live customer orders so only approved, active providers can be selected.
+`MARKETPLACE_INCLUDE_PENDING=false` is the safe default, so only approved active providers are selectable. Set it to `true` only when deliberately testing a pending-review provider.
 
 For a confirmed prototype login, double-click `Create Factory Login.cmd`. It uses the private Supabase admin key already stored in `.env`, creates or resets `factory.prototype@forgetabout.im`, and displays a newly generated password locally. Change `FACTORY_PROTOTYPE_EMAIL` in `.env` if you want a different login address.
 
 The factory payout flow uses Stripe Connect Accounts v2 recipient accounts. A printer starts Stripe onboarding from the Payouts page. The platform uses separate charges and transfers, keeps the provider share held through `order_made`, `producing`, and `posted`, and creates the Stripe transfer only after the customer confirms delivery and completes the order. Customers must leave a 1-5 rating before manually confirming receipt. Providers can decline an `order_made` job before production, which refunds the buyer and reverses the held payout record.
 
-Set `PRINT_AUTO_COMPLETE_DAYS` to control the buyer confirmation window for posted jobs. The default is 14 days. When a posted job is still awaiting buyer confirmation after that window, the server auto-completes it the next time the customer account or factory dashboard is loaded, then releases the provider payout if the connected account can receive transfers.
+Set `PRINT_AUTO_COMPLETE_DAYS` to control the buyer confirmation window for posted jobs. The default is 14 days. Configure a scheduled worker or Render Cron job to call `POST /api/tasks/auto-complete-posted` with `Authorization: Bearer <TASK_RUNNER_SECRET>`. When a posted job is still awaiting buyer confirmation after that window, the task auto-completes it and releases the provider payout if the connected account can receive transfers.
 
 To enable Google and Apple sign-in, open **Supabase Dashboard → Authentication → Providers**, configure Google and Apple, then add the deployed app URL to **Authentication → URL Configuration → Redirect URLs**. Email and password sign-in remains available.
 

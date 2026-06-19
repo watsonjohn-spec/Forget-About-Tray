@@ -5,6 +5,7 @@ import { extname, join, normalize } from "node:path";
 import { marketplacePolicy, publicPlatformConfig, resolvePlatformContext } from "./platform/registry.mjs";
 import { assertPrintJobTransition } from "./platform/print-factory.mjs";
 import { calibratedMaterialCm3, defaultPrintTimeModel, estimatedPrintHours, estimatedWeightGramsFromGeometry } from "./platform/print-estimates.mjs";
+import { createStripeClient } from "./server/stripe-client.mjs";
 
 const port = Number(process.env.PORT || 4173);
 const root = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
@@ -17,9 +18,10 @@ const marketplacePlatformFeePence = Number(process.env.MARKETPLACE_PLATFORM_FEE_
 const marketplaceCommissionPercent = Number(process.env.MARKETPLACE_COMMISSION_PERCENT || 10);
 const marketplaceVatPercent = Number(process.env.MARKETPLACE_VAT_PERCENT || 20);
 const marketplaceQuoteMinutes = Number(process.env.MARKETPLACE_QUOTE_MINUTES || 30);
-const marketplaceIncludePending = process.env.MARKETPLACE_INCLUDE_PENDING !== "false";
+const marketplaceIncludePending = process.env.MARKETPLACE_INCLUDE_PENDING === "true";
 const plaCostPerGramPence = Number(process.env.PLA_COST_PER_GRAM_PENCE || 2);
 const printAutoCompleteDays = Number(process.env.PRINT_AUTO_COMPLETE_DAYS || 14);
+const taskRunnerSecret = process.env.TASK_RUNNER_SECRET || "";
 const unlimitedExportsPrice = Number(process.env.UNLIMITED_EXPORTS_PRICE_PENCE || 500);
 const stripeApiBase = process.env.STRIPE_API_BASE || "https://api.stripe.com";
 const stripeApiVersion = process.env.STRIPE_API_VERSION || "2026-05-27.dahlia";
@@ -32,7 +34,8 @@ const allowedOrigins = (process.env.CHECKOUT_ALLOWED_ORIGIN || "https://watsonjo
 const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || "";
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || "";
-const downloadTokenSecret = process.env.DOWNLOAD_TOKEN_SECRET || stripeKey;
+const allowPrototypeSecretFallback = process.env.ALLOW_PROTOTYPE_SECRET_FALLBACK === "true";
+const downloadTokenSecret = process.env.DOWNLOAD_TOKEN_SECRET || (allowPrototypeSecretFallback ? stripeKey : "");
 const accountDeviceLimit = Number(process.env.ACCOUNT_DEVICE_LIMIT || 3);
 const enforceAccountDeviceLimit = process.env.ENFORCE_ACCOUNT_DEVICE_LIMIT === "true";
 const mimeTypes = {
@@ -42,6 +45,13 @@ const mimeTypes = {
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml"
 };
+const { stripeReady, stripeJson, stripeForm, stripeEventVerified } = createStripeClient({
+  stripeKey,
+  allowLiveStripe,
+  stripeApiBase,
+  stripeApiVersion,
+  stripeWebhookSecret
+});
 
 const standardColours = [
   { key: "all", name: "All standard colours", hex: "#8b9499" },
@@ -183,45 +193,6 @@ function freeDownloadTokenValid(token, userId, config, name, brandKey = "tray", 
   return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
-function stripeReady() {
-  const testKey = stripeKey.startsWith("sk_test_") || stripeKey.startsWith("rk_test_");
-  const liveKey = stripeKey.startsWith("sk_live_") || stripeKey.startsWith("rk_live_");
-  if ((!testKey && !liveKey) || stripeKey.includes("replace_me")) return { ready: false, reason: "Stripe server key is not configured." };
-  if (liveKey && !allowLiveStripe) return { ready: false, reason: "Live Stripe payments are disabled until ALLOW_LIVE_STRIPE=true." };
-  return { ready: true, mode: liveKey ? "live" : "test" };
-}
-
-async function stripeJson(path, options = {}) {
-  const response = await fetch(`${stripeApiBase}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${stripeKey}`,
-      "Stripe-Version": stripeApiVersion,
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    }
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error?.message || body.message || "Stripe request failed.");
-  return body;
-}
-
-async function stripeForm(path, parameters, options = {}) {
-  const response = await fetch(`${stripeApiBase}${path}`, {
-    method: options.method || "POST",
-    headers: {
-      Authorization: `Bearer ${stripeKey}`,
-      "Stripe-Version": stripeApiVersion,
-      "Content-Type": "application/x-www-form-urlencoded",
-      ...(options.headers || {})
-    },
-    body: parameters
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error?.message || body.message || "Stripe request failed.");
-  return body;
-}
-
 function supabaseReady() {
   return Boolean(supabaseUrl && supabasePublishableKey && supabaseSecretKey);
 }
@@ -279,7 +250,6 @@ async function loadPrinterProfile(userId) {
 async function factoryDashboard(request, response) {
   const origin = checkoutOrigin(request);
   try {
-    await autoCompleteStalePostedJobs();
     const user = await authenticateUser(request);
     const profile = await loadPrinterProfile(user.id);
     if (!profile) return sendJson(response, 200, { account: { email: user.email }, profile: null, capabilities: [], jobs: [], transfers: [], paymentAccount: null }, origin);
@@ -306,7 +276,6 @@ async function factoryDashboard(request, response) {
 async function accountOrders(request, response) {
   const origin = checkoutOrigin(request);
   try {
-    await autoCompleteStalePostedJobs();
     const user = await authenticateUser(request);
     const { brand } = requestPlatformContext(request);
     const rows = await supabaseAdmin(`orders?select=*,order_items(*),order_customer_snapshots(*),print_jobs(*,print_job_events(*),print_quotes(*))&user_id=eq.${encodeURIComponent(user.id)}&brand_key=eq.${encodeURIComponent(brand.key)}&order=created_at.desc`);
@@ -578,6 +547,33 @@ async function autoCompleteStalePostedJobs() {
     }
   }
   return completed;
+}
+
+function taskSecretMatches(value) {
+  const provided = Buffer.from(String(value || ""));
+  const expected = Buffer.from(taskRunnerSecret);
+  return Boolean(taskRunnerSecret) && provided.length === expected.length && timingSafeEqual(provided, expected);
+}
+
+async function runAutoCompleteTask(request, response) {
+  if (!taskRunnerSecret) return sendJson(response, 503, { error: "Scheduled task secret is not configured." });
+  const authorization = String(request.headers.authorization || "");
+  const bearer = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const headerSecret = request.headers["x-forget-about-task-secret"];
+  if (!taskSecretMatches(bearer || headerSecret)) return sendJson(response, 403, { error: "Scheduled task is not authorized." });
+  try {
+    const completed = await autoCompleteStalePostedJobs();
+    sendJson(response, 200, {
+      completed: completed.length,
+      results: completed.map((result) => ({
+        jobId: result.job?.id,
+        transferReleased: Boolean(result.transfer?.released),
+        transferReason: result.transfer?.reason || ""
+      }))
+    });
+  } catch (error) {
+    sendJson(response, 500, { error: error.message || "Scheduled task failed." });
+  }
 }
 
 async function completeCustomerPrintJob(request, response, jobId) {
@@ -1240,16 +1236,8 @@ async function createStripeCheckout(request, response) {
     });
     if (user.email) parameters.set("customer_email", user.email);
     allowedCountries.forEach((country, index) => parameters.set(`shipping_address_collection[allowed_countries][${index}]`, country));
-    const stripeResponse = await fetch(`${stripeApiBase}/v1/checkout/sessions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${stripeKey}`,
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: parameters
-    });
-    const session = await stripeResponse.json();
-    if (!stripeResponse.ok || !session.url) throw new Error(session.error?.message || "Stripe Checkout could not be created.");
+    const session = await stripeForm("/v1/checkout/sessions", parameters);
+    if (!session.url) throw new Error("Stripe Checkout could not be created.");
     await createPendingOrder({
       id: orderId,
       userId: user.id,
@@ -1300,16 +1288,8 @@ async function createUnlockCheckout(request, response) {
       "metadata[generator_type]": generator.type
     });
     if (user.email) parameters.set("customer_email", user.email);
-    const stripeResponse = await fetch(`${stripeApiBase}/v1/checkout/sessions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${stripeKey}`,
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: parameters
-    });
-    const session = await stripeResponse.json();
-    if (!stripeResponse.ok || !session.url) throw new Error(session.error?.message || "Stripe Checkout could not be created.");
+    const session = await stripeForm("/v1/checkout/sessions", parameters);
+    if (!session.url) throw new Error("Stripe Checkout could not be created.");
     await createPendingOrder({
       id: orderId,
       userId: user.id,
@@ -1338,11 +1318,7 @@ async function verifyUnlockCheckout(request, response) {
     const body = await readJson(request);
     const sessionId = String(body.sessionId || "");
     if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) throw new Error("Invalid Stripe Checkout session.");
-    const stripeResponse = await fetch(`${stripeApiBase}/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
-      headers: { Authorization: `Bearer ${stripeKey}` }
-    });
-    const session = await stripeResponse.json();
-    if (!stripeResponse.ok) throw new Error(session.error?.message || "Stripe Checkout could not be verified.");
+    const session = await stripeJson(`/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
     if (session.payment_status !== "paid" || session.metadata?.purchase_type !== "unlimited_stl" || session.metadata?.user_id !== user.id
       || session.metadata?.brand_key !== brand.key || session.metadata?.generator_type !== generator.type) {
       return sendJson(response, 402, { error: "The unlimited STL purchase is not paid." }, origin);
@@ -1643,21 +1619,6 @@ async function finalizeCheckoutSession(session) {
   }
 }
 
-function stripeEventVerified(rawBody, signatureHeader) {
-  if (!stripeWebhookSecret || !signatureHeader) return false;
-  const parts = signatureHeader.split(",").map((part) => part.trim().split("="));
-  const timestamp = parts.find(([key]) => key === "t")?.[1];
-  const signatures = parts.filter(([key]) => key === "v1").map(([, value]) => value);
-  if (!timestamp || !signatures.length || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
-  return stripeWebhookSecret.split(",").map((secret) => secret.trim()).filter(Boolean).some((secret) => {
-    const expected = createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest();
-    return signatures.some((signature) => {
-      const received = Buffer.from(signature, "hex");
-      return expected.length === received.length && timingSafeEqual(expected, received);
-    });
-  });
-}
-
 async function handleStripeWebhook(request, response) {
   try {
     const rawBody = await readBody(request);
@@ -1711,6 +1672,10 @@ createServer(async (request, response) => {
   }
   if (request.method === "POST" && pathname === "/api/stripe/webhook") {
     await handleStripeWebhook(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/tasks/auto-complete-posted") {
+    await runAutoCompleteTask(request, response);
     return;
   }
   if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account") || pathname.startsWith("/api/factory") || pathname.startsWith("/api/marketplace"))) {
@@ -1854,7 +1819,7 @@ createServer(async (request, response) => {
   }
 
   const brandRoute = publicPlatformConfig.brands.find((brand) => brand.enabled && (pathname === `/${brand.path}` || pathname === `/${brand.path}/`));
-  if (brandRoute && ["tray", "makeup", "print", "paint", "stitch"].includes(brandRoute.key) && !pathname.endsWith("/")) {
+  if (brandRoute && !pathname.endsWith("/")) {
     response.writeHead(308, { Location: `/${brandRoute.path}/${requestUrl.search}` });
     response.end();
     return;
@@ -1864,14 +1829,7 @@ createServer(async (request, response) => {
     response.end();
     return;
   }
-  const brandEntries = {
-    tray: "tray/index.html",
-    makeup: "makeup/index.html",
-    print: "print/index.html",
-    paint: "paint/index.html",
-    stitch: "stitch/index.html"
-  };
-  const brandEntry = brandEntries[brandRoute?.key] || "index.html";
+  const brandEntry = brandRoute ? `${brandRoute.path}/index.html` : "index.html";
   const relativePath = pathname === "/" ? "index.html" : brandRoute ? brandEntry : pathname === "/factory/" ? "factory/index.html" : pathname.slice(1);
   const filePath = normalize(join(root, relativePath));
 

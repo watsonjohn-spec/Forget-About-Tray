@@ -32,7 +32,7 @@ services:
       - key: MARKETPLACE_QUOTE_MINUTES
         value: "30"
       - key: MARKETPLACE_INCLUDE_PENDING
-        value: "true"
+        value: "false"
       - key: UNLIMITED_EXPORTS_PRICE_PENCE
         value: "500"
       - key: STRIPE_ALLOWED_COUNTRIES
@@ -55,3 +55,7 @@ services:
         sync: false
       - key: DOWNLOAD_TOKEN_SECRET
         generateValue: true
+      - key: TASK_RUNNER_SECRET
+        generateValue: true
+      - key: ALLOW_PROTOTYPE_SECRET_FALLBACK
+        value: "false"
