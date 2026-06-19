@@ -203,6 +203,12 @@
           </div>
           <label>Country code<input id="sharedAccountCountry" type="text" maxlength="2" value="GB" autocomplete="country"></label>
           <button class="button button-primary primary" type="submit">Save profile</button>
+          <section class="shared-privacy-tools" aria-label="Data and privacy tools">
+            <h4>Data and privacy</h4>
+            <p>Download a portable JSON copy of your account data. Deletion requests keep legally required order, VAT, refund, and fulfilment records for their retention period.</p>
+            <button class="button button-secondary secondary" id="sharedDownloadAccountData" type="button">Download account data</button>
+            <button class="button button-secondary secondary danger" id="sharedRequestDeletion" type="button">Request account deletion</button>
+          </section>
         </form>
         <section class="shared-account-page" data-shared-account-page="password" hidden>
           <h3>Change password</h3>
@@ -241,6 +247,8 @@
         toast(error.message);
       }
     });
+    document.getElementById("sharedDownloadAccountData").addEventListener("click", () => downloadSharedAccountData().catch((error) => toast(error.message)));
+    document.getElementById("sharedRequestDeletion").addEventListener("click", () => requestSharedAccountDeletion().catch((error) => toast(error.message)));
     window.accountPasswordFlow?.hydrate(dialog.querySelector("[data-account-password-form]"), { notify: toast });
     document.getElementById("sharedOrdersList").addEventListener("click", (event) => {
       const button = event.target.closest("[data-shared-order-detail]");
@@ -280,6 +288,33 @@
     } catch (error) {
       toast(error.message);
     }
+  }
+
+  function downloadJsonFile(filename, data) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadSharedAccountData() {
+    if (typeof accountService.exportAccountData !== "function") throw new Error("Account data export is not available yet.");
+    const data = await accountService.exportAccountData();
+    const date = new Date().toISOString().slice(0, 10);
+    downloadJsonFile(`forget-about-account-data-${date}.json`, data);
+    toast("Account data export downloaded");
+  }
+
+  async function requestSharedAccountDeletion() {
+    if (!window.confirm("Request account deletion? Legally required order and VAT records will still be retained for their required period.")) return;
+    if (typeof accountService.requestAccountDeletion !== "function") throw new Error("Account deletion requests are not available yet.");
+    const result = await accountService.requestAccountDeletion();
+    toast(result.message || "Account deletion request submitted");
   }
 
   function renderSharedOrders(orders) {

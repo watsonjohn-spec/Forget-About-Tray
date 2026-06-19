@@ -1440,6 +1440,8 @@ async function exportAccountData(request, response) {
     ]);
     sendJson(response, 200, {
       generatedAt: new Date().toISOString(),
+      exportFormat: "forget-about-account-data.v1",
+      retentionNotice: "Order, VAT, payment, refund, and fulfilment records may be retained until their retention_until date even if account deletion is requested.",
       account: { id: user.id, email: user.email },
       profile: profiles?.[0] || null,
       designs: designs || [],
@@ -1452,7 +1454,15 @@ async function exportAccountData(request, response) {
       accountDevices: accountDevices || [],
       printQuotes: printQuotes || [],
       printJobs: printJobs || [],
-      privacyRequests: privacyRequests || []
+      privacyRequests: privacyRequests || [],
+      retainedOrderRecords: (orders || []).map((order) => ({
+        id: order.id,
+        invoiceNumber: order.invoice_number || null,
+        status: order.status,
+        taxPoint: order.tax_point || null,
+        paidAt: order.paid_at || null,
+        retentionUntil: order.retention_until || null
+      }))
     }, origin);
   } catch (error) {
     sendJson(response, 401, { error: error.message }, origin);

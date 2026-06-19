@@ -418,6 +418,16 @@
     }
   }
 
+  async function exportAccountData() {
+    const response = await fetch(`${apiBase()}/api/account/data-export`, { headers: await authHeaders() });
+    return responseJson(response);
+  }
+
+  async function requestAccountDeletion() {
+    const response = await fetch(`${apiBase()}/api/account/deletion-request`, { method: "POST", headers: await authHeaders(), body: "{}" });
+    return responseJson(response);
+  }
+
   async function importLocalData(trays, armies) {
     const marker = `forget-about-cloud-imported-${brandKey()}-${generatorType()}-${user.id}`;
     if (localStorage.getItem(marker) === "true") return;
@@ -476,6 +486,8 @@
     upsertArmyList,
     deleteArmyList,
     loadOrders,
+    exportAccountData,
+    requestAccountDeletion,
     importLocalData,
     authHeaders,
     authType: () => authType,

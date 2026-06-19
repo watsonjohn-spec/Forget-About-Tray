@@ -75,6 +75,8 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.match(account, /async function signInWithProvider\(provider\)/);
   assert.match(account, /async function passwordGrant\(email, password\)/);
   assert.match(account, /The current password is incorrect/);
+  assert.match(account, /async function exportAccountData\(\)/);
+  assert.match(account, /async function requestAccountDeletion\(\)/);
   assert.match(accountPassword, /window\.accountPasswordFlow/);
   assert.match(accountPassword, /id="\$\{ids\.current\}"/);
   assert.match(accountPassword, /accountService\.updatePassword\(currentPassword, newPassword\)/);
@@ -365,6 +367,11 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerJs, /function handleSharedOrderAction\(event\)/);
   assert.match(footerJs, /data-complete-print-job/);
   assert.match(footerJs, /data-send-job-message/);
+  assert.match(footerJs, /Download account data/);
+  assert.match(footerJs, /function downloadSharedAccountData\(\)/);
+  assert.match(footerJs, /function requestSharedAccountDeletion\(\)/);
+  assert.match(footerJs, /accountService\.exportAccountData\(\)/);
+  assert.match(footerJs, /accountService\.requestAccountDeletion\(\)/);
   assert.match(footerJs, /Confirm delivery and complete order/);
   assert.match(footerJs, /sharedOrderStatusTrack/);
   assert.match(footerJs, /window\.forgetSharedShell/);
@@ -402,6 +409,8 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(generatorQuotes, /quoteTimeLabel/);
   assert.match(serverSource, /preferredPrinterProfileId/);
   assert.match(serverSource, /desiredColourKey/);
+  assert.match(serverSource, /forget-about-account-data\.v1/);
+  assert.match(serverSource, /retentionNotice/);
   assert.match(uploadedPrint, /desiredColourKey/);
   assert.match(uploadedPrint, /preferredPrinterProfileId/);
   assert.match(paintHtml, /Forget About Paint/);

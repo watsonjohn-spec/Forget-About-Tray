@@ -16,6 +16,8 @@ const profiles = new Map([[freeUserId, false], [paidUserId, true], [concurrentUs
 const orders = [];
 const orderItems = [];
 const orderCustomerSnapshots = [];
+const designs = [];
+const projects = [];
 const checkoutRequests = [];
 const printQuotes = [];
 const printJobs = [];
@@ -24,6 +26,7 @@ const providerTransfers = [];
 const providerReviews = [];
 const stripeTransfers = [];
 const refundRequests = [];
+const privacyRequests = [];
 const webhookSecret = "whsec_test_webhook_secret";
 const paymentAccounts = [];
 const stripeAccountRequests = [];
@@ -219,12 +222,32 @@ const mockSupabase = createServer(async (request, response) => {
       profiles.set(userId, true);
       return sendJson(response, 200, [{ free_export_used: true }]);
     }
-    return sendJson(response, 200, [{ free_export_used: profiles.get(userId) || false }]);
+    return sendJson(response, 200, [{
+      user_id: userId,
+      email: userId === paidUserId ? "paid@example.test" : "free@example.test",
+      display_name: userId === paidUserId ? "Paid Customer" : null,
+      default_address: { line1: "1 Test Street", city: "Leeds", postcode: "LS1 1AA", country: "GB" },
+      free_export_used: profiles.get(userId) || false
+    }]);
   }
 
   if (url.pathname === "/rest/v1/entitlements") {
     const userId = url.searchParams.get("user_id")?.replace("eq.", "");
     return sendJson(response, 200, userId === paidUserId ? [{ id: "paid-entitlement" }] : []);
+  }
+
+  if (url.pathname === "/rest/v1/designs") {
+    const userId = eqParam(url, "user_id");
+    return sendJson(response, 200, designs.filter((design) => !userId || design.user_id === userId));
+  }
+
+  if (url.pathname === "/rest/v1/projects") {
+    const userId = eqParam(url, "user_id");
+    return sendJson(response, 200, projects.filter((project) => !userId || project.user_id === userId));
+  }
+
+  if (url.pathname === "/rest/v1/tray_designs" || url.pathname === "/rest/v1/army_lists") {
+    return sendJson(response, 200, []);
   }
 
   if (url.pathname === "/rest/v1/printer_profiles") {
@@ -378,6 +401,22 @@ const mockSupabase = createServer(async (request, response) => {
     }
     const printerProfileId = eqParam(url, "printer_profile_id");
     return sendJson(response, 200, providerReviews.filter((review) => !printerProfileId || review.printer_profile_id === printerProfileId));
+  }
+
+  if (url.pathname === "/rest/v1/privacy_requests") {
+    if (request.method === "POST") {
+      const saved = {
+        ...(await requestJson(request)),
+        id: `70000000-0000-4000-8000-${String(privacyRequests.length + 1).padStart(12, "0")}`,
+        status: "requested",
+        requested_at: new Date().toISOString(),
+        completed_at: null
+      };
+      privacyRequests.push(saved);
+      return sendJson(response, 200, [saved]);
+    }
+    const userId = eqParam(url, "user_id");
+    return sendJson(response, 200, privacyRequests.filter((request) => !userId || request.user_id === userId));
   }
 
   sendJson(response, 404, { message: "mock route not found" });
@@ -698,6 +737,42 @@ test("providers can decline paid jobs before production and trigger a buyer refu
   assert.equal(providerTransfers.find((transfer) => transfer.print_job_id === job.id).status, "reversed");
   assert.equal(refundRequests.at(-1).parameters.get("payment_intent"), order.stripe_payment_intent_id);
   assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.event_type === "decline"));
+});
+
+test("account data export returns portable records with retention boundaries", async () => {
+  designs.push({
+    id: "80000000-0000-4000-8000-000000000001",
+    user_id: paidUserId,
+    brand_key: "tray",
+    generator_type: "movement_tray",
+    name: "Saved tray",
+    parameters: { columns: 4, rows: 3 }
+  });
+  projects.push({
+    id: "80000000-0000-4000-8000-000000000002",
+    user_id: paidUserId,
+    brand_key: "tray",
+    generator_type: "movement_tray",
+    project_type: "army_list",
+    name: "Saved army",
+    items: [{ name: "Unit", count: 20 }]
+  });
+  const { metadata } = await createPaidMarketplacePrint("Data export tray");
+
+  const deletionResponse = await api("/api/account/deletion-request", "paid-token", {});
+  assert.equal(deletionResponse.status, 200);
+
+  const response = await fetch(`${baseUrl}/api/account/data-export`, { headers: { Authorization: "Bearer paid-token" } });
+  assert.equal(response.status, 200);
+  const exportData = await response.json();
+  assert.equal(exportData.exportFormat, "forget-about-account-data.v1");
+  assert.match(exportData.retentionNotice, /VAT/);
+  assert.equal(exportData.account.email, "paid@example.test");
+  assert.ok(exportData.designs.some((design) => design.name === "Saved tray"));
+  assert.ok(exportData.projects.some((project) => project.name === "Saved army"));
+  assert.ok(exportData.orders.some((order) => order.id === metadata.orderId && order.order_customer_snapshots.length));
+  assert.ok(exportData.retainedOrderRecords.some((record) => record.id === metadata.orderId && "retentionUntil" in record));
+  assert.ok(exportData.privacyRequests.some((request) => request.request_type === "account_deletion"));
 });
 
 test("checkout returns to the originating brand path", async () => {
