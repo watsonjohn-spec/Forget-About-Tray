@@ -532,7 +532,8 @@
         </form>
         <section class="account-profile-form account-page" id="accountPasswordSection" data-account-page="password" hidden>
           <h3>Change password</h3>
-          <p>Use a unique password with at least eight characters.</p>
+          <p>Enter your current password, then choose a new password with at least eight characters.</p>
+          <label>Current password<input id="accountCurrentPassword" type="password" autocomplete="current-password"></label>
           <label>New password<input id="accountNewPassword" type="password" minlength="8" autocomplete="new-password"></label>
           <label>Confirm password<input id="accountConfirmPassword" type="password" minlength="8" autocomplete="new-password"></label>
           <button class="button button-primary" id="changePasswordButton" type="button">Update password</button>

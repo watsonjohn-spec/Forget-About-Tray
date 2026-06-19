@@ -184,12 +184,22 @@
   }
 
   async function signIn(email, password) {
-    const nextSession = await authRequest("/token?grant_type=password", {
-      method: "POST",
-      body: JSON.stringify({ email, password })
-    });
+    const nextSession = await passwordGrant(email, password);
     storeSession(nextSession);
     return nextSession;
+  }
+
+  async function passwordGrant(email, password) {
+    await loadConfig();
+    const response = await fetch(`${config.supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: config.supabasePublishableKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email, password })
+    });
+    return responseJson(response);
   }
 
   async function signUp(email, password) {
@@ -226,7 +236,22 @@
     });
   }
 
-  async function updatePassword(password) {
+  async function updatePassword(currentPassword, newPassword) {
+    const password = newPassword || currentPassword;
+    if (!newPassword) return authRequest("/user", { method: "PUT", body: JSON.stringify({ password }) });
+    await ensureSession();
+    const email = user?.email || session?.user?.email;
+    if (!email) throw new Error("Sign out and back in before changing your password.");
+    if (!currentPassword) throw new Error("Enter your current password.");
+    try {
+      const verifiedSession = await passwordGrant(email, currentPassword);
+      storeSession(verifiedSession);
+      user = await authRequest("/user");
+      session.user = user;
+      storeSession(session);
+    } catch {
+      throw new Error("The current password is incorrect.");
+    }
     return authRequest("/user", { method: "PUT", body: JSON.stringify({ password }) });
   }
 

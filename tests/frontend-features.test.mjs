@@ -66,10 +66,15 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.match(html, /data-oauth-provider="google"/);
   assert.match(html, /data-oauth-provider="apple"[^>]*hidden/);
   assert.match(html, /id="oauthStatus"/);
-  assert.match(app, /accountService\.updatePassword\(password\)/);
+  assert.match(html, /id="accountCurrentPassword"/);
+  assert.match(html, /id="accountConfirmPassword"/);
+  assert.match(app, /const currentPassword = document\.getElementById\("accountCurrentPassword"\)\.value/);
+  assert.match(app, /accountService\.updatePassword\(currentPassword, password\)/);
   assert.match(app, /accountService\.signInWithProvider\(button\.dataset\.oauthProvider\)/);
   assert.match(app, /accountService\.providerAvailability\(\)/);
   assert.match(account, /async function signInWithProvider\(provider\)/);
+  assert.match(account, /async function passwordGrant\(email, password\)/);
+  assert.match(account, /The current password is incorrect/);
   assert.match(account, /enabledOauthProviders = new Set\(\["google"\]\)/);
   assert.match(account, /window\.MOVEMENT_TRAY_PUBLIC_CONFIG/);
   assert.match(account, /\/auth\/v1\/authorize/);
@@ -219,6 +224,7 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(html, /data-account-page="profile"/);
   assert.match(html, /data-account-page="password"/);
   assert.match(html, /data-account-page="orders"/);
+  assert.match(html, /Current password/);
   assert.doesNotMatch(html, />Isometric preview</);
   assert.doesNotMatch(html, /Your configurations are saved to your workshop account/);
   assert.match(css, /100dvh/);
@@ -281,7 +287,10 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(makeupHtml, /id="stepRiseField"/);
   assert.match(makeupHtml, /id="pegboardFields"/);
   assert.match(makeupHtml, /data-account-tab="orders"/);
+  assert.match(makeupHtml, /id="accountCurrentPassword"/);
+  assert.match(makeupHtml, /id="accountConfirmPassword"/);
   assert.match(makeupApp, /state\.handleEnabled = true/);
+  assert.match(makeupApp, /accountService\.updatePassword\(currentPassword, password\)/);
   assert.match(makeupApp, /balanceCatchalls: true/);
   assert.match(makeupApp, /function caddyCatchalls/);
   assert.match(makeupApp, /function staircaseCatchalls/);
@@ -328,6 +337,8 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(homeHtml, /href="stitch\/"/);
   assert.match(footerJs, /help@forget\.im/);
   assert.match(footerJs, /Modern slavery statement/);
+  assert.match(footerJs, /id="sharedAccountCurrentPassword"/);
+  assert.match(footerJs, /accountService\.updatePassword\(currentPassword, password\)/);
   assert.match(footerCss, /\.site-footer/);
   assert.match(printHtml, /Forget About Print/);
   assert.match(printHtml, /preview-3d\.js/);

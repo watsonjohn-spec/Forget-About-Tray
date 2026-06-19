@@ -150,7 +150,13 @@
           <div class="three-fields"><label>Town or city<input id="accountCity"></label><label>County<input id="accountCounty"></label><label>Postcode<input id="accountPostcode"></label></div>
           <label>Country code<input id="accountCountry" maxlength="2" value="GB"></label><button class="button primary">Save profile</button>
         </form>
-        <section data-account-panel="password" hidden><label>New password<input id="accountNewPassword" type="password" minlength="8"></label><button class="button primary" id="changePassword" type="button">Update password</button></section>
+        <section data-account-panel="password" hidden>
+          <p>Enter your current password, then choose a new password with at least eight characters.</p>
+          <label>Current password<input id="accountCurrentPassword" type="password" autocomplete="current-password"></label>
+          <label>New password<input id="accountNewPassword" type="password" minlength="8" autocomplete="new-password"></label>
+          <label>Confirm password<input id="accountConfirmPassword" type="password" minlength="8" autocomplete="new-password"></label>
+          <button class="button primary" id="changePassword" type="button">Update password</button>
+        </section>
         <section data-account-panel="orders" hidden><button class="button secondary" id="viewOrders" type="button">Refresh order history</button><div id="ordersList"></div><div id="orderDetail"></div></section>
       </div>
     </dialog>

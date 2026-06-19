@@ -192,7 +192,8 @@
         </form>
         <section class="shared-account-page" data-shared-account-page="password" hidden>
           <h3>Change password</h3>
-          <p>Use a unique password with at least eight characters.</p>
+          <p>Enter your current password, then choose a new password with at least eight characters.</p>
+          <label>Current password<input id="sharedAccountCurrentPassword" type="password" autocomplete="current-password"></label>
           <label>New password<input id="sharedAccountNewPassword" type="password" minlength="8" autocomplete="new-password"></label>
           <label>Confirm password<input id="sharedAccountConfirmPassword" type="password" minlength="8" autocomplete="new-password"></label>
           <button class="button button-primary primary" id="sharedChangePasswordButton" type="button">Update password</button>
@@ -231,12 +232,15 @@
       }
     });
     document.getElementById("sharedChangePasswordButton").addEventListener("click", async () => {
+      const currentPassword = document.getElementById("sharedAccountCurrentPassword").value;
       const password = document.getElementById("sharedAccountNewPassword").value;
       const confirmation = document.getElementById("sharedAccountConfirmPassword").value;
+      if (!currentPassword) return toast("Enter your current password.");
       if (password.length < 8) return toast("Use a password with at least 8 characters.");
       if (password !== confirmation) return toast("The new passwords do not match.");
       try {
-        await accountService.updatePassword(password);
+        await accountService.updatePassword(currentPassword, password);
+        document.getElementById("sharedAccountCurrentPassword").value = "";
         document.getElementById("sharedAccountNewPassword").value = "";
         document.getElementById("sharedAccountConfirmPassword").value = "";
         toast("Password updated");
