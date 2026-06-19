@@ -534,6 +534,9 @@
 .shared-privacy-tools { margin-top: 14px; padding-top: 14px; display: grid; gap: 9px; border-top: 1px solid var(--line, #b9c5ae); }
 .shared-privacy-tools h4 { margin: 0; font-size: 13px; }
 .shared-privacy-tools p { margin: 0; color: var(--muted, #627064); font-size: 10px; line-height: 1.55; }
+.shared-security-status { padding: 10px; display: grid; gap: 3px; border: 1px solid color-mix(in srgb, var(--accent-dark, #263c2b) 18%, var(--line, #b9c5ae)); border-radius: 8px; background: color-mix(in srgb, var(--white, #fffdf4) 74%, var(--accent, #5f7d4b) 8%); }
+.shared-security-status strong { font-size: 11px; }
+.shared-security-status span { color: var(--muted, #627064); font-size: 10px; line-height: 1.45; }
 .shared-privacy-tools .danger { color: #8c4638; border-color: color-mix(in srgb, #8c4638 36%, var(--line, #b9c5ae)); }
 .shared-orders-list { display: grid; gap: 8px; }
 .shared-order-card { padding: 11px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; border: 1px solid var(--line, #b9c5ae); border-radius: 9px; background: white; }

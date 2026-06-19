@@ -18,6 +18,7 @@ const orderItems = [];
 const orderCustomerSnapshots = [];
 const designs = [];
 const projects = [];
+const accountDevices = [];
 const checkoutRequests = [];
 const printQuotes = [];
 const printJobs = [];
@@ -248,6 +249,27 @@ const mockSupabase = createServer(async (request, response) => {
 
   if (url.pathname === "/rest/v1/tray_designs" || url.pathname === "/rest/v1/army_lists") {
     return sendJson(response, 200, []);
+  }
+
+  if (url.pathname === "/rest/v1/account_devices") {
+    if (request.method === "POST") {
+      const saved = {
+        ...(await requestJson(request)),
+        id: `90000000-0000-4000-8000-${String(accountDevices.length + 1).padStart(12, "0")}`,
+        first_seen_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString(),
+        revoked_at: null
+      };
+      accountDevices.push(saved);
+      return sendJson(response, 200, [saved]);
+    }
+    if (request.method === "PATCH") {
+      const patch = await requestJson(request);
+      const updated = applyPatch(accountDevices, (device) => !eqParam(url, "id") || device.id === eqParam(url, "id"), patch);
+      return sendJson(response, 200, updated);
+    }
+    const userId = eqParam(url, "user_id");
+    return sendJson(response, 200, accountDevices.filter((device) => (!userId || device.user_id === userId) && !device.revoked_at));
   }
 
   if (url.pathname === "/rest/v1/printer_profiles") {
@@ -773,6 +795,20 @@ test("account data export returns portable records with retention boundaries", a
   assert.ok(exportData.orders.some((order) => order.id === metadata.orderId && order.order_customer_snapshots.length));
   assert.ok(exportData.retainedOrderRecords.some((record) => record.id === metadata.orderId && "retentionUntil" in record));
   assert.ok(exportData.privacyRequests.some((request) => request.request_type === "account_deletion"));
+});
+
+test("account security status reports active devices without exposing device hashes", async () => {
+  const deviceHash = "a".repeat(64);
+  const response = await api("/api/account/security-status", "paid-token", undefined, { "X-Forget-About-Device": deviceHash });
+  assert.equal(response.status, 200);
+  const security = await response.json();
+  assert.equal(security.deviceLimit, 3);
+  assert.equal(security.enforcementEnabled, false);
+  assert.equal(security.activeDeviceCount, 1);
+  assert.equal(security.currentDeviceRegistered, true);
+  assert.equal(security.sharingWarning, false);
+  assert.equal(security.devices[0].current, true);
+  assert.equal(JSON.stringify(security).includes(deviceHash), false);
 });
 
 test("checkout returns to the originating brand path", async () => {

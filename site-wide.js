@@ -206,6 +206,7 @@
           <section class="shared-privacy-tools" aria-label="Data and privacy tools">
             <h4>Data and privacy</h4>
             <p>Download a portable JSON copy of your account data. Deletion requests keep legally required order, VAT, refund, and fulfilment records for their retention period.</p>
+            <div id="sharedSecurityStatus" class="shared-security-status">Checking account security...</div>
             <button class="button button-secondary secondary" id="sharedDownloadAccountData" type="button">Download account data</button>
             <button class="button button-secondary secondary danger" id="sharedRequestDeletion" type="button">Request account deletion</button>
           </section>
@@ -272,7 +273,11 @@
     if (!window.accountService?.isSignedIn?.()) return toast("Sign in to open your account.");
     injectSharedAccountDialog();
     try {
-      const [profile, orders] = await Promise.all([accountService.loadProfile(), accountService.loadOrders()]);
+      const [profile, orders, security] = await Promise.all([
+        accountService.loadProfile(),
+        accountService.loadOrders(),
+        accountService.loadSecurityStatus?.().catch(() => null)
+      ]);
       const address = profile?.default_address || {};
       document.getElementById("sharedAccountEmail").value = accountService.currentUser()?.email || "";
       document.getElementById("sharedAccountDisplayName").value = profile?.display_name || "";
@@ -282,12 +287,30 @@
       document.getElementById("sharedAccountCounty").value = address.county || "";
       document.getElementById("sharedAccountPostcode").value = address.postcode || "";
       document.getElementById("sharedAccountCountry").value = address.country || "GB";
+      renderSharedSecurityStatus(security);
       renderSharedOrders(orders);
       setSharedAccountPage(page);
       document.getElementById("sharedAccountDialog").showModal();
     } catch (error) {
       toast(error.message);
     }
+  }
+
+  function renderSharedSecurityStatus(security) {
+    const element = document.getElementById("sharedSecurityStatus");
+    if (!element) return;
+    if (!security) {
+      element.innerHTML = `<strong>Account sharing controls</strong><span>Security status is unavailable right now.</span>`;
+      return;
+    }
+    const warning = security.sharingWarning
+      ? `This account is above the ${security.deviceLimit}-device warning threshold.`
+      : `Within the ${security.deviceLimit}-device warning threshold.`;
+    const mode = security.enforcementEnabled ? "Hard limit enabled" : "Warning mode";
+    element.innerHTML = `
+      <strong>Account sharing controls</strong>
+      <span>${escapeHtml(security.activeDeviceCount)} active browser${Number(security.activeDeviceCount) === 1 ? "" : "s"} recorded. ${escapeHtml(mode)}. ${escapeHtml(warning)}</span>
+    `;
   }
 
   function downloadJsonFile(filename, data) {

@@ -76,6 +76,7 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.match(account, /async function passwordGrant\(email, password\)/);
   assert.match(account, /The current password is incorrect/);
   assert.match(account, /async function exportAccountData\(\)/);
+  assert.match(account, /async function loadSecurityStatus\(\)/);
   assert.match(account, /async function requestAccountDeletion\(\)/);
   assert.match(accountPassword, /window\.accountPasswordFlow/);
   assert.match(accountPassword, /id="\$\{ids\.current\}"/);
@@ -368,6 +369,9 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerJs, /data-complete-print-job/);
   assert.match(footerJs, /data-send-job-message/);
   assert.match(footerJs, /Download account data/);
+  assert.match(footerJs, /Checking account security/);
+  assert.match(footerJs, /function renderSharedSecurityStatus\(security\)/);
+  assert.match(footerJs, /accountService\.loadSecurityStatus/);
   assert.match(footerJs, /function downloadSharedAccountData\(\)/);
   assert.match(footerJs, /function requestSharedAccountDeletion\(\)/);
   assert.match(footerJs, /accountService\.exportAccountData\(\)/);

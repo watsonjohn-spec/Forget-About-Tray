@@ -1378,6 +1378,34 @@ async function accountExportStatus(request, response) {
   }
 }
 
+async function accountSecurityStatus(request, response) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const currentDeviceHash = /^[a-f0-9]{64}$/.test(String(request.headers["x-forget-about-device"] || ""))
+      ? String(request.headers["x-forget-about-device"])
+      : "";
+    const devices = await optionalSupabaseAdmin(`account_devices?select=id,device_hash,friendly_name,first_seen_at,last_seen_at,revoked_at&user_id=eq.${encodeURIComponent(user.id)}&order=last_seen_at.desc`);
+    const activeDevices = (devices || []).filter((device) => !device.revoked_at);
+    sendJson(response, 200, {
+      deviceLimit: accountDeviceLimit,
+      enforcementEnabled: enforceAccountDeviceLimit,
+      activeDeviceCount: activeDevices.length,
+      currentDeviceRegistered: Boolean(currentDeviceHash && activeDevices.some((device) => device.device_hash === currentDeviceHash)),
+      sharingWarning: activeDevices.length > accountDeviceLimit,
+      devices: activeDevices.map((device) => ({
+        id: device.id,
+        friendlyName: device.friendly_name || "",
+        firstSeenAt: device.first_seen_at,
+        lastSeenAt: device.last_seen_at,
+        current: Boolean(currentDeviceHash && device.device_hash === currentDeviceHash)
+      }))
+    }, origin);
+  } catch (error) {
+    sendJson(response, 401, { error: error.message }, origin);
+  }
+}
+
 async function useFreeExport(request, response) {
   const origin = checkoutOrigin(request);
   try {
@@ -1745,6 +1773,10 @@ createServer(async (request, response) => {
   }
   if (request.method === "GET" && pathname === "/api/account/export-status") {
     await accountExportStatus(request, response);
+    return;
+  }
+  if (request.method === "GET" && pathname === "/api/account/security-status") {
+    await accountSecurityStatus(request, response);
     return;
   }
   if (request.method === "GET" && pathname === "/api/account/orders") {

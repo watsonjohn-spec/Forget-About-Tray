@@ -423,6 +423,11 @@
     return responseJson(response);
   }
 
+  async function loadSecurityStatus() {
+    const response = await fetch(`${apiBase()}/api/account/security-status`, { headers: await authHeaders() });
+    return responseJson(response);
+  }
+
   async function requestAccountDeletion() {
     const response = await fetch(`${apiBase()}/api/account/deletion-request`, { method: "POST", headers: await authHeaders(), body: "{}" });
     return responseJson(response);
@@ -487,6 +492,7 @@
     deleteArmyList,
     loadOrders,
     exportAccountData,
+    loadSecurityStatus,
     requestAccountDeletion,
     importLocalData,
     authHeaders,
