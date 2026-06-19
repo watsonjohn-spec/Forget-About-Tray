@@ -532,11 +532,7 @@
         </form>
         <section class="account-profile-form account-page" id="accountPasswordSection" data-account-page="password" hidden>
           <h3>Change password</h3>
-          <p>Enter your current password, then choose a new password with at least eight characters.</p>
-          <label>Current password<input id="accountCurrentPassword" type="password" autocomplete="current-password"></label>
-          <label>New password<input id="accountNewPassword" type="password" minlength="8" autocomplete="new-password"></label>
-          <label>Confirm password<input id="accountConfirmPassword" type="password" minlength="8" autocomplete="new-password"></label>
-          <button class="button button-primary" id="changePasswordButton" type="button">Update password</button>
+          <div data-account-password-form data-account-password-prefix="account" data-account-password-button-id="changePasswordButton" data-account-password-button-class="button button-primary"></div>
         </section>
         <section class="account-orders account-page" id="accountOrdersSection" data-account-page="orders" hidden>
           <h3>Purchase history</h3>
@@ -617,6 +613,7 @@
     <script src="../public-config.js"></script>
     <script src="../platform.js"></script>
     <script src="../account.js"></script>
+    <script src="../account-password.js"></script>
     <script src="../catalogue.js"></script>
     <script src="../preview-3d.js"></script>
     <script src="../print-estimates.js"></script>

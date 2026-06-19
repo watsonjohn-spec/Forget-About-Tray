@@ -965,21 +965,7 @@ document.getElementById("makeupProfileForm").addEventListener("submit", async (e
     toast("Profile saved");
   } catch (error) { toast(error.message); }
 });
-document.getElementById("changePassword").addEventListener("click", async () => {
-  const currentPassword = document.getElementById("accountCurrentPassword").value;
-  const password = document.getElementById("accountNewPassword").value;
-  const confirmation = document.getElementById("accountConfirmPassword").value;
-  if (!currentPassword) return toast("Enter your current password");
-  if (password.length < 8) return toast("Use a password with at least 8 characters");
-  if (password !== confirmation) return toast("The new passwords do not match");
-  try {
-    await accountService.updatePassword(currentPassword, password);
-    document.getElementById("accountCurrentPassword").value = "";
-    document.getElementById("accountNewPassword").value = "";
-    document.getElementById("accountConfirmPassword").value = "";
-    toast("Password updated");
-  } catch (error) { toast(error.message); }
-});
+window.accountPasswordFlow?.hydrate(document.querySelector("#accountDialog [data-account-password-form]"), { notify: toast });
 document.getElementById("viewOrders").addEventListener("click", () => refreshOrders().catch((error) => toast(error.message)));
 document.getElementById("ordersList").addEventListener("click", (event) => { const button = event.target.closest("[data-order-detail]"); if (button) showOrderDetail(button.dataset.orderDetail); });
 document.getElementById("orderDetail").addEventListener("click", async (event) => {

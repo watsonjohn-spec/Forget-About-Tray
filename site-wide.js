@@ -192,11 +192,7 @@
         </form>
         <section class="shared-account-page" data-shared-account-page="password" hidden>
           <h3>Change password</h3>
-          <p>Enter your current password, then choose a new password with at least eight characters.</p>
-          <label>Current password<input id="sharedAccountCurrentPassword" type="password" autocomplete="current-password"></label>
-          <label>New password<input id="sharedAccountNewPassword" type="password" minlength="8" autocomplete="new-password"></label>
-          <label>Confirm password<input id="sharedAccountConfirmPassword" type="password" minlength="8" autocomplete="new-password"></label>
-          <button class="button button-primary primary" id="sharedChangePasswordButton" type="button">Update password</button>
+          <div data-account-password-form data-account-password-prefix="sharedAccount" data-account-password-button-id="sharedChangePasswordButton" data-account-password-button-class="button button-primary primary"></div>
         </section>
         <section class="shared-account-page" data-shared-account-page="orders" hidden>
           <h3>Purchase history</h3>
@@ -231,23 +227,7 @@
         toast(error.message);
       }
     });
-    document.getElementById("sharedChangePasswordButton").addEventListener("click", async () => {
-      const currentPassword = document.getElementById("sharedAccountCurrentPassword").value;
-      const password = document.getElementById("sharedAccountNewPassword").value;
-      const confirmation = document.getElementById("sharedAccountConfirmPassword").value;
-      if (!currentPassword) return toast("Enter your current password.");
-      if (password.length < 8) return toast("Use a password with at least 8 characters.");
-      if (password !== confirmation) return toast("The new passwords do not match.");
-      try {
-        await accountService.updatePassword(currentPassword, password);
-        document.getElementById("sharedAccountCurrentPassword").value = "";
-        document.getElementById("sharedAccountNewPassword").value = "";
-        document.getElementById("sharedAccountConfirmPassword").value = "";
-        toast("Password updated");
-      } catch (error) {
-        toast(error.message);
-      }
-    });
+    window.accountPasswordFlow?.hydrate(dialog.querySelector("[data-account-password-form]"), { notify: toast });
     document.getElementById("sharedOrdersList").addEventListener("click", (event) => {
       const button = event.target.closest("[data-shared-order-detail]");
       if (button) renderSharedOrderDetail(button.dataset.sharedOrderDetail);

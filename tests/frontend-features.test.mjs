@@ -52,10 +52,11 @@ test("base shape controls and shared catalogue are present", async () => {
 });
 
 test("account dropdown and Supabase OAuth controls are wired", async () => {
-  const [html, app, account, publicConfigSource] = await Promise.all([
+  const [html, app, account, accountPassword, publicConfigSource] = await Promise.all([
     readFile(new URL("tray/index.html", root), "utf8"),
     readFile(new URL("app.js", root), "utf8"),
     readFile(new URL("account.js", root), "utf8"),
+    readFile(new URL("account-password.js", root), "utf8"),
     readFile(new URL("public-config.js", root), "utf8")
   ]);
 
@@ -66,15 +67,17 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.match(html, /data-oauth-provider="google"/);
   assert.match(html, /data-oauth-provider="apple"[^>]*hidden/);
   assert.match(html, /id="oauthStatus"/);
-  assert.match(html, /id="accountCurrentPassword"/);
-  assert.match(html, /id="accountConfirmPassword"/);
-  assert.match(app, /const currentPassword = document\.getElementById\("accountCurrentPassword"\)\.value/);
-  assert.match(app, /accountService\.updatePassword\(currentPassword, password\)/);
+  assert.match(html, /account-password\.js/);
+  assert.match(html, /data-account-password-form/);
+  assert.match(app, /accountPasswordFlow\?\.hydrate/);
   assert.match(app, /accountService\.signInWithProvider\(button\.dataset\.oauthProvider\)/);
   assert.match(app, /accountService\.providerAvailability\(\)/);
   assert.match(account, /async function signInWithProvider\(provider\)/);
   assert.match(account, /async function passwordGrant\(email, password\)/);
   assert.match(account, /The current password is incorrect/);
+  assert.match(accountPassword, /window\.accountPasswordFlow/);
+  assert.match(accountPassword, /id="\$\{ids\.current\}"/);
+  assert.match(accountPassword, /accountService\.updatePassword\(currentPassword, newPassword\)/);
   assert.match(account, /enabledOauthProviders = new Set\(\["google"\]\)/);
   assert.match(account, /window\.MOVEMENT_TRAY_PUBLIC_CONFIG/);
   assert.match(account, /\/auth\/v1\/authorize/);
@@ -224,7 +227,7 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(html, /data-account-page="profile"/);
   assert.match(html, /data-account-page="password"/);
   assert.match(html, /data-account-page="orders"/);
-  assert.match(html, /Current password/);
+  assert.match(html, /data-account-password-form/);
   assert.doesNotMatch(html, />Isometric preview</);
   assert.doesNotMatch(html, /Your configurations are saved to your workshop account/);
   assert.match(css, /100dvh/);
@@ -287,10 +290,10 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(makeupHtml, /id="stepRiseField"/);
   assert.match(makeupHtml, /id="pegboardFields"/);
   assert.match(makeupHtml, /data-account-tab="orders"/);
-  assert.match(makeupHtml, /id="accountCurrentPassword"/);
-  assert.match(makeupHtml, /id="accountConfirmPassword"/);
+  assert.match(makeupHtml, /account-password\.js/);
+  assert.match(makeupHtml, /data-account-password-button-id="changePassword"/);
   assert.match(makeupApp, /state\.handleEnabled = true/);
-  assert.match(makeupApp, /accountService\.updatePassword\(currentPassword, password\)/);
+  assert.match(makeupApp, /accountPasswordFlow\?\.hydrate/);
   assert.match(makeupApp, /balanceCatchalls: true/);
   assert.match(makeupApp, /function caddyCatchalls/);
   assert.match(makeupApp, /function staircaseCatchalls/);
@@ -315,11 +318,12 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
 });
 
 test("site shell, footer, and prototype generators are present", async () => {
-  const [homeHtml, rootIndexHtml, footerCss, footerJs, printHtml, paintHtml, stitchHtml, printJs, paintJs, stitchJs, generatorQuotes, serverSource, uploadedPrint] = await Promise.all([
+  const [homeHtml, rootIndexHtml, footerCss, footerJs, accountPassword, printHtml, paintHtml, stitchHtml, printJs, paintJs, stitchJs, generatorQuotes, serverSource, uploadedPrint] = await Promise.all([
     readFile(new URL("home.html", root), "utf8"),
     readFile(new URL("index.html", root), "utf8"),
     readFile(new URL("site-wide.css", root), "utf8"),
     readFile(new URL("site-wide.js", root), "utf8"),
+    readFile(new URL("account-password.js", root), "utf8"),
     readFile(new URL("print/index.html", root), "utf8"),
     readFile(new URL("paint/index.html", root), "utf8"),
     readFile(new URL("stitch/index.html", root), "utf8"),
@@ -337,10 +341,13 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(homeHtml, /href="stitch\/"/);
   assert.match(footerJs, /help@forget\.im/);
   assert.match(footerJs, /Modern slavery statement/);
-  assert.match(footerJs, /id="sharedAccountCurrentPassword"/);
-  assert.match(footerJs, /accountService\.updatePassword\(currentPassword, password\)/);
+  assert.match(footerJs, /data-account-password-prefix="sharedAccount"/);
+  assert.match(footerJs, /accountPasswordFlow\?\.hydrate/);
+  assert.match(accountPassword, /Current password/);
+  assert.match(accountPassword, /Confirm password/);
   assert.match(footerCss, /\.site-footer/);
   assert.match(printHtml, /Forget About Print/);
+  assert.match(printHtml, /account-password\.js/);
   assert.match(printHtml, /preview-3d\.js/);
   assert.match(printHtml, /print-estimates\.js/);
   assert.match(printHtml, /data-preview-turn="-1"/);
@@ -361,6 +368,7 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(uploadedPrint, /desiredColourKey/);
   assert.match(uploadedPrint, /preferredPrinterProfileId/);
   assert.match(paintHtml, /Forget About Paint/);
+  assert.match(paintHtml, /account-password\.js/);
   assert.match(paintHtml, /preview-3d\.js/);
   assert.match(paintHtml, /print-estimates\.js/);
   assert.match(paintHtml, /data-preview-turn="-1"/);
@@ -371,6 +379,7 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(paintJs, /forgetPreview3d\.createTurntable/);
   assert.match(paintJs, /forgetPrintEstimates\.generatedWeightGrams/);
   assert.match(stitchHtml, /Forget About Stitch/);
+  assert.match(stitchHtml, /account-password\.js/);
   assert.match(stitchHtml, /preview-3d\.js/);
   assert.match(stitchHtml, /print-estimates\.js/);
   assert.match(stitchHtml, /id="layoutStyle"/);

@@ -2180,23 +2180,7 @@ document.getElementById("accountProfileForm").addEventListener("submit", async (
     showToast(error.message);
   }
 });
-document.getElementById("changePasswordButton").addEventListener("click", async () => {
-  const currentPassword = document.getElementById("accountCurrentPassword").value;
-  const password = document.getElementById("accountNewPassword").value;
-  const confirmation = document.getElementById("accountConfirmPassword").value;
-  if (!currentPassword) return showToast("Enter your current password");
-  if (password.length < 8) return showToast("Use a password with at least 8 characters");
-  if (password !== confirmation) return showToast("The new passwords do not match");
-  try {
-    await accountService.updatePassword(currentPassword, password);
-    document.getElementById("accountCurrentPassword").value = "";
-    document.getElementById("accountNewPassword").value = "";
-    document.getElementById("accountConfirmPassword").value = "";
-    showToast("Password updated");
-  } catch (error) {
-    showToast(error.message);
-  }
-});
+window.accountPasswordFlow?.hydrate(document.querySelector("#accountPasswordSection [data-account-password-form]"), { notify: showToast });
 document.getElementById("downloadAccountData").addEventListener("click", async () => {
   try {
     const response = await authorizedFetch("/api/account/data-export");

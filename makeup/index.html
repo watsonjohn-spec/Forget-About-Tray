@@ -151,11 +151,7 @@
           <label>Country code<input id="accountCountry" maxlength="2" value="GB"></label><button class="button primary">Save profile</button>
         </form>
         <section data-account-panel="password" hidden>
-          <p>Enter your current password, then choose a new password with at least eight characters.</p>
-          <label>Current password<input id="accountCurrentPassword" type="password" autocomplete="current-password"></label>
-          <label>New password<input id="accountNewPassword" type="password" minlength="8" autocomplete="new-password"></label>
-          <label>Confirm password<input id="accountConfirmPassword" type="password" minlength="8" autocomplete="new-password"></label>
-          <button class="button primary" id="changePassword" type="button">Update password</button>
+          <div data-account-password-form data-account-password-prefix="account" data-account-password-button-id="changePassword" data-account-password-button-class="button primary"></div>
         </section>
         <section data-account-panel="orders" hidden><button class="button secondary" id="viewOrders" type="button">Refresh order history</button><div id="ordersList"></div><div id="orderDetail"></div></section>
       </div>
@@ -182,6 +178,7 @@
     <script src="../public-config.js"></script>
     <script src="../platform.js"></script>
     <script src="../account.js"></script>
+    <script src="../account-password.js"></script>
     <script src="../print-estimates.js"></script>
     <script src="catalogue.js"></script>
     <script src="makeup.js"></script>
