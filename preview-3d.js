@@ -170,20 +170,90 @@
     return `<text x="${point.x.toFixed(2)}" y="${point.y.toFixed(2)}" ${attributes}>${label}</text>`;
   }
 
+  function lineMarkup(transform, start, end, attributes = "") {
+    const a = transform.project(start.x, start.y, start.z || 0);
+    const b = transform.project(end.x, end.y, end.z || 0);
+    return `<line x1="${a.x.toFixed(2)}" y1="${a.y.toFixed(2)}" x2="${b.x.toFixed(2)}" y2="${b.y.toFixed(2)}" ${attributes}/>`;
+  }
+
+  function millimetres(value) {
+    const number = Number(value) || 0;
+    return `${Number.isInteger(number) ? number : number.toFixed(1)} mm`;
+  }
+
+  function dimensionOverlay(transform, options = {}) {
+    const width = Number(options.width || transform.width);
+    const depth = Number(options.depth || transform.depth);
+    const height = Number(options.height || transform.height);
+    if (options.showDimensions === false || width <= 0 || depth <= 0) return "";
+    const z = Math.max(0.1, height + Math.max(1.2, height * 0.04));
+    const stroke = options.dimensionStroke || "#263c2b";
+    const text = options.dimensionText || "#1e2921";
+    const line = `stroke="${stroke}" stroke-width="1.05" stroke-dasharray="4 4" opacity=".54" vector-effect="non-scaling-stroke"`;
+    const label = `fill="${text}" font-size="11" font-weight="900" paint-order="stroke" stroke="rgba(255,255,255,.78)" stroke-width="3" stroke-linejoin="round"`;
+    return [
+      lineMarkup(transform, { x: 0, y: 0, z }, { x: width, y: 0, z }, line),
+      lineMarkup(transform, { x: width, y: 0, z }, { x: width, y: depth, z }, line),
+      lineMarkup(transform, { x: width, y: depth, z: 0 }, { x: width, y: depth, z }, line),
+      textLabel(transform, width / 2, -Math.max(8, depth * 0.04), z, millimetres(width), `text-anchor="middle" ${label}`),
+      textLabel(transform, width + Math.max(8, width * 0.035), depth / 2, z, millimetres(depth), `text-anchor="middle" ${label}`),
+      height > 1 ? textLabel(transform, width + Math.max(10, width * 0.05), depth + Math.max(10, depth * 0.05), height / 2, millimetres(height), `text-anchor="middle" ${label}`) : ""
+    ].join("");
+  }
+
+  function plateSplitOverlay(transform, options = {}) {
+    if (options.showPlateSplits === false) return "";
+    const width = Number(options.width || transform.width);
+    const depth = Number(options.depth || transform.depth);
+    const height = Number(options.height || transform.height);
+    const threshold = Math.max(80, Number(options.splitThreshold || 250));
+    const columns = Math.max(1, Math.ceil(width / threshold));
+    const rows = Math.max(1, Math.ceil(depth / threshold));
+    if (columns === 1 && rows === 1) return "";
+    const z = height + Math.max(1.8, height * 0.07);
+    const stroke = options.splitStroke || "#9a6a2d";
+    const line = `stroke="${stroke}" stroke-width="1.35" stroke-dasharray="7 5" opacity=".72" vector-effect="non-scaling-stroke"`;
+    const lines = [];
+    for (let column = 1; column < columns; column += 1) {
+      const x = width * column / columns;
+      lines.push(lineMarkup(transform, { x, y: 0, z }, { x, y: depth, z }, line));
+    }
+    for (let row = 1; row < rows; row += 1) {
+      const y = depth * row / rows;
+      lines.push(lineMarkup(transform, { x: 0, y, z }, { x: width, y, z }, line));
+    }
+    lines.push(textLabel(
+      transform,
+      width / 2,
+      depth + Math.max(18, depth * 0.08),
+      z,
+      `${columns * rows} print plates`,
+      `text-anchor="middle" fill="${stroke}" font-size="11" font-weight="900" paint-order="stroke" stroke="rgba(255,255,255,.82)" stroke-width="3"`
+    ));
+    return lines.join("");
+  }
+
   function renderBoxes(svg, options) {
     const boxes = options.boxes || [];
     const cylinders = options.cylinders || [];
     const transform = createTransform({ ...options, boxes, cylinders });
     const colour = options.colour || "#777777";
     const opacity = options.opacity || 1;
+    const stage = svg.closest?.(".preview-stage");
+    if (stage) {
+      stage.dataset.previewReady = "true";
+      stage.style.setProperty("--preview-accent", colour);
+    }
     const faces = [
       ...boxes.flatMap((box, index) => boxFaces(box, transform, colour, opacity, index)),
       ...cylinders.flatMap((cylinder, index) => cylinderFaces(cylinder, transform, colour, opacity, boxes.length + index))
     ].sort((a, b) => a.depth - b.depth);
     const shadowWidth = Math.max(90, Math.min(250, transform.scale * Math.max(transform.width, transform.depth) * 0.36));
     const shadow = `<ellipse cx="${(options.viewWidth || 760) / 2}" cy="${(options.viewHeight || 420) - 42}" rx="${shadowWidth.toFixed(1)}" ry="24" fill="#1e2b33" opacity=".14"/>`;
+    const dimensions = dimensionOverlay(transform, options);
+    const splitLines = plateSplitOverlay(transform, options);
     const overlay = typeof options.overlay === "function" ? options.overlay(transform) : (options.overlay || "");
-    svg.innerHTML = `${shadow}${faces.map((face) => face.markup).join("")}${overlay}`;
+    svg.innerHTML = `${shadow}${faces.map((face) => face.markup).join("")}${splitLines}${dimensions}${overlay}`;
     return { transform, faces };
   }
 
@@ -225,8 +295,10 @@
   window.forgetPreview3d = {
     createTurntable,
     createTransform,
+    dimensionOverlay,
     ellipsePolygon,
     mixColour,
+    plateSplitOverlay,
     renderBoxes,
     shadeColour,
     textLabel

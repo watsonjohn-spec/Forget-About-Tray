@@ -9,12 +9,12 @@ This board tracks the current development workstreams. GitHub issue links are th
 | Print Factory MVP | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/1 | First slice complete: cleaned factory status/payout filters, brand markers, order detail labels, and shared customer order actions. |
 | Shared Generator Shell | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/2 | First slice complete: exposed `window.forgetSharedShell` and documented the shared account/order shell rule. |
 | Core Customer Journey Hardening | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/3 | First slice complete: lifecycle checks now cover Stripe-confirmed print orders, factory production/posting, customer messaging, customer rating, provider payout release, and provider-decline refunds. |
+| Preview Quality and Visual Trust | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/4 | First slice complete: shared preview renderer now adds drag hints, filament accenting, dimension callouts, and 250mm split-plate guides across generator previews. |
 
 ## Backlog
 
 | Workstream | GitHub card | Notes |
 | --- | --- | --- |
-| Preview Quality and Visual Trust | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/4 | Improve lighting, labels, dimension callouts, colour/material selectors, rotation, and plate split indicators. |
 | Productise Generators by Brand | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/5 | Prioritise Tray, Uploaded Print, Makeup, Stitch, then Paint. |
 | Storage, Data Retention, GDPR and VAT Records | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/6 | Move file storage beyond JSON design records and keep order/VAT/privacy records clean. |
 | Monetisation, Entitlements and Abuse Protection | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/7 | Brand-configurable entitlements, sharing controls, sponsor configuration, and transparent fee breakdowns. |

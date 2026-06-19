@@ -321,6 +321,10 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(preview3d, /window\.forgetPreview3d/);
   assert.match(preview3d, /function createTurntable\(svg, render, options = \{\}\)/);
   assert.match(preview3d, /function renderBoxes\(svg, options\)/);
+  assert.match(preview3d, /function dimensionOverlay\(transform, options = \{\}\)/);
+  assert.match(preview3d, /function plateSplitOverlay\(transform, options = \{\}\)/);
+  assert.match(preview3d, /splitThreshold \|\| 250/);
+  assert.match(preview3d, /stage\.dataset\.previewReady = "true"/);
   assert.match(preview3d, /function cylinderFaces\(cylinder, transform, fallbackColour, opacity, index\)/);
 });
 
@@ -360,6 +364,8 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(accountPassword, /Current password/);
   assert.match(accountPassword, /Confirm password/);
   assert.match(footerCss, /\.site-footer/);
+  assert.match(footerCss, /Drag to rotate - arrows nudge view/);
+  assert.match(footerCss, /--preview-accent/);
   assert.match(printHtml, /Forget About Print/);
   assert.match(printHtml, /account-password\.js/);
   assert.match(printHtml, /preview-3d\.js/);
