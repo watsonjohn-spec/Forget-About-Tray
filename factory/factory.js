@@ -32,6 +32,25 @@ function money(pence, currency = "gbp") {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: String(currency || "gbp").toUpperCase() }).format(Number(pence || 0) / 100);
 }
 
+function labelText(value) {
+  return String(value || "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function brandLabel(key) {
+  const labels = { tray: "TRAY", makeup: "MAKEUP", paint: "PAINT", stitch: "STITCH", print: "PRINT" };
+  return labels[key] || String(key || "job").toUpperCase();
+}
+
+function jobNextAction(job) {
+  if (job.status === "order_made") return "Accept or decline";
+  if (job.status === "producing") return "Add tracking and post";
+  if (job.status === "posted") return "Await buyer confirmation";
+  if (job.status === "complete") return "Complete";
+  if (job.status === "refunded") return "Refunded";
+  if (job.status === "cancelled") return "Cancelled";
+  return labelText(job.status || "pending");
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]);
 }
@@ -138,7 +157,7 @@ function setTab(tab) {
 function renderProfile() {
   const profile = factoryDashboardState.profile;
   const localSettings = providerLocalSettings();
-  document.getElementById("factoryProfileStatus").textContent = profile ? profile.status.replace("_", " ") : "Setup required";
+  document.getElementById("factoryProfileStatus").textContent = profile ? labelText(profile.status) : "Setup required";
   document.getElementById("factoryAcceptingStatus").textContent = profile?.accepting_jobs ? "Accepting jobs" : profile ? "Not accepting jobs" : "Profile setup required";
   document.getElementById("printerDisplayName").value = profile?.display_name || "";
   document.getElementById("printerBasedIn").value = profile?.based_in || "";
@@ -154,8 +173,8 @@ function renderCapabilities() {
   const capabilities = factoryDashboardState.capabilities;
   document.getElementById("factoryCapabilities").innerHTML = capabilities.length ? capabilities.map((capability) => `
     <article class="capability-card">
-      <div><h3><span class="colour-chip" style="background:${escapeHtml(capability.colour_hex || "#cccccc")}"></span> ${escapeHtml(capability.colour_name)} · ${escapeHtml(capability.material.toUpperCase())}</h3>
-      <p>${capability.max_width_mm} × ${capability.max_depth_mm} × ${capability.max_height_mm} mm · Printer fee ${money(capability.base_price_pence)} per print · ${capability.grams_per_hour || printEstimateTools().defaultPrintTimeModel.gramsPerHour} g/hour · ${escapeHtml(postageServices.find((service) => service.key === capability.postage_service)?.name || capability.postage_service || "Postage")} ${money(capability.postage_pence)}</p></div>
+      <div><h3><span class="colour-chip" style="background:${escapeHtml(capability.colour_hex || "#cccccc")}"></span> ${escapeHtml(capability.colour_name)} | ${escapeHtml(capability.material.toUpperCase())}</h3>
+      <p>${capability.max_width_mm} x ${capability.max_depth_mm} x ${capability.max_height_mm} mm | Printer fee ${money(capability.base_price_pence)} per print | ${capability.grams_per_hour || printEstimateTools().defaultPrintTimeModel.gramsPerHour} g/hour | ${escapeHtml(postageServices.find((service) => service.key === capability.postage_service)?.name || capability.postage_service || "Postage")} ${money(capability.postage_pence)}</p></div>
       <button class="button button-secondary" data-remove-capability="${escapeHtml(capability.id)}" type="button">Remove</button>
     </article>
   `).join("") : '<div class="empty-state">Add at least one material and colour before the profile can receive marketplace jobs.</div>';
@@ -193,28 +212,6 @@ function jobStatusFinancials(jobs) {
   });
 }
 
-function billingStatusMarkup(jobs) {
-  return `<section class="billing-status-grid">${jobStatusFinancials(jobs).map((item) => `
-    <article><span>${escapeHtml(item.status.replaceAll("_", " "))}</span><strong>${money(item.providerShare)}</strong><small>${item.count} job${item.count === 1 ? "" : "s"} | customer total ${money(item.customerTotal)}</small></article>
-  `).join("")}</section>`;
-}
-
-function renderJobs() {
-  const jobs = factoryDashboardState.jobs.filter((job) => job.status !== "pending_payment");
-  const active = jobs.filter((job) => ["order_made", "producing", "posted"].includes(job.status));
-  document.getElementById("activeJobCount").textContent = active.length;
-  document.getElementById("factoryJobs").innerHTML = jobs.length ? jobs.map((job) => `
-    <article class="job-card brand-${escapeHtml(job.brand_key)}" data-job-id="${escapeHtml(job.id)}">
-      <span class="job-brand-marker">${job.brand_key === "makeup" ? "MAKEUP" : "TRAY"}</span>
-      <div><h3>${escapeHtml(job.design_snapshot?.name || job.generator_type.replaceAll("_", " "))}</h3>
-      <p>Status: <strong>${escapeHtml(job.status.replaceAll("_", " "))}</strong> · ${escapeHtml(job.colour_key)} · ${jobWeightGrams(job) || "?"}g · ${jobPrintHours(job) ? printTimeLabel(jobPrintHours(job)) : "time pending"}</p>
-      <p>Provider payout ${money(job.provider_share_pence)} · Created ${new Date(job.created_at).toLocaleString()}${job.tracking_reference ? ` · Tracking ${escapeHtml(job.tracking_reference)}` : ""}</p></div>
-      <button class="button button-primary" data-open-job="${escapeHtml(job.id)}" type="button">Open order</button>
-    </article>
-  `).join("") : '<div class="empty-state">No assigned jobs yet. Approved profiles with active capabilities become selectable by customers.</div>';
-  if (jobs.length) document.getElementById("factoryJobs").insertAdjacentHTML("afterbegin", billingStatusMarkup(jobs));
-}
-
 function filteredJobs(jobs) {
   const status = document.getElementById("jobStatusFilter")?.value || "";
   const brand = document.getElementById("jobBrandFilter")?.value || "";
@@ -240,7 +237,7 @@ function filteredJobs(jobs) {
 
 function drillableBillingStatusMarkup(jobs) {
   return `<section class="billing-status-grid">${jobStatusFinancials(jobs).map((item) => `
-    <article data-status-drill="${escapeHtml(item.status)}"><span>${escapeHtml(item.status.replaceAll("_", " "))}</span><strong>${money(item.providerShare)}</strong><small>${item.count} job${item.count === 1 ? "" : "s"} | customer total ${money(item.customerTotal)}</small></article>
+    <article data-status-drill="${escapeHtml(item.status)}"><span>${escapeHtml(labelText(item.status))}</span><strong>${money(item.providerShare)}</strong><small>${item.count} job${item.count === 1 ? "" : "s"} | customer total ${money(item.customerTotal)}</small></article>
   `).join("")}</section>`;
 }
 
@@ -251,9 +248,9 @@ function renderJobs() {
   document.getElementById("activeJobCount").textContent = active.length;
   document.getElementById("factoryJobs").innerHTML = jobs.length ? jobs.map((job) => `
     <article class="job-card brand-${escapeHtml(job.brand_key)}" data-job-id="${escapeHtml(job.id)}">
-      <span class="job-brand-marker">${escapeHtml(String(job.brand_key || "job").toUpperCase())}</span>
+      <span class="job-brand-marker">${escapeHtml(brandLabel(job.brand_key))}</span>
       <div><h3>${escapeHtml(job.design_snapshot?.name || job.generator_type.replaceAll("_", " "))}</h3>
-      <p>Status: <strong>${escapeHtml(job.status.replaceAll("_", " "))}</strong> | ${escapeHtml(job.colour_key)} | ${jobWeightGrams(job) || "?"}g | ${jobPrintHours(job) ? printTimeLabel(jobPrintHours(job)) : "time pending"}</p>
+      <p>Status: <strong>${escapeHtml(labelText(job.status))}</strong> | Next: ${escapeHtml(jobNextAction(job))} | ${escapeHtml(job.colour_key)} | ${jobWeightGrams(job) || "?"}g | ${jobPrintHours(job) ? printTimeLabel(jobPrintHours(job)) : "time pending"}</p>
       <p>Provider payout ${money(job.provider_share_pence)} | Created ${new Date(job.created_at).toLocaleString()}${job.tracking_reference ? ` | Tracking ${escapeHtml(job.tracking_reference)}` : ""}</p></div>
       <button class="button button-primary" data-open-job="${escapeHtml(job.id)}" type="button">Open order</button>
     </article>
@@ -267,7 +264,7 @@ function eventTitle(event) {
   if (type === "customer_message") return "Message from buyer";
   if (type === "decline") return "Declined and refunded";
   if (type === "auto_complete") return "Automatically completed";
-  return escapeHtml(String(event.to_status || "").replaceAll("_", " "));
+  return labelText(event.to_status || "status");
 }
 
 function renderJobEvents(events) {
@@ -281,7 +278,6 @@ function showJobDetail(jobId) {
   const snapshot = Array.isArray(order?.order_customer_snapshots) ? order.order_customer_snapshots[0] : order?.order_customer_snapshots;
   const address = snapshot?.delivery_address || {};
   const events = Array.isArray(job.print_job_events) ? job.print_job_events : [];
-  const quote = jobQuote(job);
   const actionPanel = job.status === "order_made" ? `
     <section class="job-action-panel">
       <h3>Accept or decline this job</h3>
@@ -299,7 +295,7 @@ function showJobDetail(jobId) {
   const postedPanel = job.status === "posted" ? `<section class="job-action-panel"><h3>Awaiting buyer confirmation</h3><p>The buyer must rate the transaction before confirming receipt. If they do not respond, the platform auto-completes the order after the configured confirmation window.</p></section>` : "";
   document.getElementById("jobDialogTitle").textContent = job.design_snapshot?.name || `${job.brand_key} order`;
   document.getElementById("jobDialogContent").innerHTML = `
-    <div class="job-detail-hero brand-${escapeHtml(job.brand_key)}"><strong>${job.brand_key === "makeup" ? "MAKEUP" : "TRAY"}</strong><span>${escapeHtml(job.status.replaceAll("_", " "))}</span></div>
+    <div class="job-detail-hero brand-${escapeHtml(job.brand_key)}"><strong>${escapeHtml(brandLabel(job.brand_key))}</strong><span>${escapeHtml(labelText(job.status))}</span></div>
     <div class="job-detail-grid">
       <div><span>Colour</span><strong>${escapeHtml(job.colour_key)}</strong></div>
       <div><span>Material estimate</span><strong>${jobWeightGrams(job) || "?"} g</strong></div>
@@ -326,29 +322,6 @@ function showJobDetail(jobId) {
   if (!dialog.open) dialog.showModal();
 }
 
-function renderPayouts() {
-  const transfers = factoryDashboardState.transfers;
-  const jobs = factoryDashboardState.jobs;
-  const held = jobs.filter((job) => job.payout_status === "held").reduce((total, job) => total + Number(job.provider_share_pence || 0), 0);
-  document.getElementById("heldPayoutTotal").textContent = money(held);
-  const payment = factoryDashboardState.paymentAccount;
-  document.getElementById("connectStatus").textContent = payment?.onboarding_complete ? "Stripe Connect ready" : "Stripe Connect not onboarded";
-  document.getElementById("factoryPayouts").innerHTML = transfers.length ? transfers.map((transfer) => `
-    <article class="payout-card"><div><strong>${money(transfer.amount_pence, transfer.currency)}</strong><p>${escapeHtml(transfer.status)} · Created ${new Date(transfer.created_at).toLocaleDateString()}</p></div><span class="status-pill">${escapeHtml(transfer.status)}</span></article>
-  `).join("") : '<div class="empty-state">No provider transfers yet. A held transfer is released only after its print job reaches complete.</div>';
-}
-
-function renderDashboard() {
-  renderProfile();
-  renderCapabilities();
-  renderJobs();
-  renderPayouts();
-  const payoutPanel = document.getElementById("factoryPayouts");
-  if (payoutPanel && factoryDashboardState.jobs.length) {
-    payoutPanel.insertAdjacentHTML("afterbegin", billingStatusMarkup(factoryDashboardState.jobs));
-  }
-}
-
 function filteredPayoutJobs(jobs) {
   const status = document.getElementById("payoutStatusFilter")?.value || "";
   const brand = document.getElementById("payoutBrandFilter")?.value || "";
@@ -361,21 +334,44 @@ function filteredPayoutJobs(jobs) {
   });
 }
 
+function transferJob(transfer) {
+  return factoryDashboardState.jobs.find((job) => job.id === transfer.print_job_id);
+}
+
+function filteredTransfers(transfers) {
+  const status = document.getElementById("payoutStatusFilter")?.value || "";
+  const brand = document.getElementById("payoutBrandFilter")?.value || "";
+  const search = (document.getElementById("payoutSearchFilter")?.value || "").trim().toLowerCase();
+  return transfers.filter((transfer) => {
+    const job = transferJob(transfer);
+    const statusMatch = !status || transfer.status === status;
+    const brandMatch = !brand || job?.brand_key === brand;
+    const haystack = [
+      transfer.id,
+      transfer.status,
+      transfer.currency,
+      transfer.created_at,
+      transfer.stripe_transfer_id,
+      job?.id,
+      job?.brand_key,
+      job?.status,
+      job?.design_snapshot?.name,
+      jobOrder(job || {})?.invoice_number
+    ].filter(Boolean).join(" ").toLowerCase();
+    return statusMatch && brandMatch && (!search || haystack.includes(search));
+  });
+}
+
 function renderPayouts() {
   const allJobs = factoryDashboardState.jobs;
   const jobs = filteredPayoutJobs(allJobs);
-  const transfers = factoryDashboardState.transfers.filter((transfer) => {
-    const status = document.getElementById("payoutStatusFilter")?.value || "";
-    const search = (document.getElementById("payoutSearchFilter")?.value || "").trim().toLowerCase();
-    const haystack = [transfer.id, transfer.status, transfer.currency, transfer.created_at].filter(Boolean).join(" ").toLowerCase();
-    return (!status || transfer.status === status) && (!search || haystack.includes(search));
-  });
+  const transfers = filteredTransfers(factoryDashboardState.transfers);
   const held = allJobs.filter((job) => job.payout_status === "held").reduce((total, job) => total + Number(job.provider_share_pence || 0), 0);
   document.getElementById("heldPayoutTotal").textContent = money(held);
   const payment = factoryDashboardState.paymentAccount;
   document.getElementById("connectStatus").textContent = payment?.onboarding_complete ? "Stripe Connect ready" : "Stripe Connect not onboarded";
   document.getElementById("factoryPayouts").innerHTML = transfers.length ? transfers.map((transfer) => `
-    <article class="payout-card"><div><strong>${money(transfer.amount_pence, transfer.currency)}</strong><p>${escapeHtml(transfer.status)} | Created ${new Date(transfer.created_at).toLocaleDateString()}</p></div><span class="status-pill">${escapeHtml(transfer.status)}</span></article>
+    <article class="payout-card"><div><strong>${money(transfer.amount_pence, transfer.currency)}</strong><p>${escapeHtml(labelText(transfer.status))} | Created ${new Date(transfer.created_at).toLocaleDateString()}${transferJob(transfer)?.design_snapshot?.name ? ` | ${escapeHtml(transferJob(transfer).design_snapshot.name)}` : ""}</p></div><span class="status-pill">${escapeHtml(labelText(transfer.status))}</span></article>
   `).join("") : '<div class="empty-state">No provider transfers match these filters yet.</div>';
   document.getElementById("factoryPayouts").insertAdjacentHTML("afterbegin", drillableBillingStatusMarkup(jobs));
 }
@@ -394,7 +390,7 @@ async function loadDashboard() {
 
 async function initializeFactory() {
   document.getElementById("capabilityColourName").innerHTML = standardColours.map((colour) => `<option value="${colour.key}">${colour.name}</option>`).join("");
-  document.getElementById("capabilityPostage").innerHTML = postageServices.map((service) => `<option value="${service.key}">${service.name} · ${money(service.pricePence)} · ${service.days} day${service.days === 1 ? "" : "s"}</option>`).join("");
+  document.getElementById("capabilityPostage").innerHTML = postageServices.map((service) => `<option value="${service.key}">${service.name} | ${money(service.pricePence)} | ${service.days} day${service.days === 1 ? "" : "s"}</option>`).join("");
   document.getElementById("printerModel").innerHTML = commonPrinters.map((printer) => `<option value="${printer.key}">${printer.name} - ${printer.width} x ${printer.depth} x ${printer.height} mm</option>`).join("");
   document.getElementById("printerModel").value = providerLocalSettings().printerModel || "bambu-a1";
   applyPrinterPreset();

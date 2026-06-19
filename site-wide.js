@@ -63,6 +63,10 @@
     return new Intl.NumberFormat("en-GB", { style: "currency", currency: String(currency || "gbp").toUpperCase() }).format(Number(pence || 0) / 100);
   }
 
+  function labelText(value) {
+    return String(value || "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
   function toast(message) {
     if (window.generatorAuth?.toast) return window.generatorAuth.toast(message);
     const target = document.getElementById("toast") || document.getElementById("factoryToast");
@@ -70,6 +74,16 @@
     target.textContent = message;
     target.classList.add("visible");
     setTimeout(() => target.classList.remove("visible"), 2600);
+  }
+
+  async function accountFetch(path, options = {}) {
+    const response = await fetch(`${document.querySelector('meta[name="checkout-api-url"]').content.trim().replace(/\/$/, "")}${path}`, {
+      ...options,
+      headers: { ...(await accountService.authHeaders()), ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) }
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Account request failed.");
+    return result;
   }
 
   function sponsorMarkup(sponsor, theme) {
@@ -232,6 +246,9 @@
       const button = event.target.closest("[data-shared-order-detail]");
       if (button) renderSharedOrderDetail(button.dataset.sharedOrderDetail);
     });
+    document.getElementById("sharedOrderDetail").addEventListener("click", (event) => {
+      handleSharedOrderAction(event).catch((error) => toast(error.message));
+    });
   }
 
   function setSharedAccountPage(page) {
@@ -269,7 +286,7 @@
     sharedOrders = Array.isArray(orders) ? orders : [];
     document.getElementById("sharedOrdersList").innerHTML = sharedOrders.length ? sharedOrders.map((order) => `
       <article class="shared-order-card">
-        <div><strong>${escapeHtml(order.invoice_number || "Pending invoice")}</strong><small>${escapeHtml(String(order.status || "pending").replaceAll("_", " "))} · ${escapeHtml(order.brand_key || pageKey())}</small></div>
+        <div><strong>${escapeHtml(order.invoice_number || "Pending invoice")}</strong><small>${escapeHtml(labelText(order.status || "pending"))} | ${escapeHtml(order.brand_key || pageKey())}</small></div>
         <strong>${money(order.total_inc_vat, order.currency)}</strong>
         <button class="button button-secondary secondary" type="button" data-shared-order-detail="${escapeHtml(order.id)}">View details</button>
       </article>
@@ -277,30 +294,116 @@
     document.getElementById("sharedOrderDetail").hidden = true;
   }
 
+  function sharedOrderEventTitle(event) {
+    const type = event.event_type || "status";
+    if (type === "provider_message") return "Message from printer";
+    if (type === "customer_message") return "Message to printer";
+    if (type === "decline") return "Declined and refunded";
+    if (type === "auto_complete") return "Automatically completed";
+    return labelText(event.to_status || "status");
+  }
+
+  function sharedOrderStatusTrack(job, currentStatus) {
+    const statuses = ["order_made", "producing", "posted", "complete"];
+    const currentIndex = statuses.indexOf(currentStatus);
+    if (!job || currentIndex < 0) return `<p class="order-status-note">Order status: <strong>${escapeHtml(labelText(currentStatus || "pending"))}</strong></p>`;
+    return `<div class="order-status-track">${statuses.map((status, index) => `<span class="${index <= currentIndex ? "done" : ""}">${escapeHtml(labelText(status))}</span>`).join("")}</div>`;
+  }
+
+  function sharedOrderActions(job) {
+    if (!job || ["complete", "refunded", "cancelled"].includes(job.status)) return "";
+    const messageForm = `<div class="order-message-form"><label>Message printer<textarea data-customer-job-message rows="3" placeholder="Ask a question or add order information before completion"></textarea></label><button class="button button-secondary secondary" type="button" data-send-job-message="${escapeHtml(job.id)}">Send message</button></div>`;
+    const ratingForm = job.status === "posted"
+      ? `<div class="order-rating-form"><h5>Confirm receipt</h5><p>Rate this print before completing the order. Completion releases the printer payout.</p><label>Rating<select data-job-rating required><option value="">Choose rating</option><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Okay</option><option value="2">2 - Poor</option><option value="1">1 - Bad</option></select></label><label>Review note<textarea data-job-review rows="3" placeholder="Optional note about the print"></textarea></label><button class="button button-primary primary" type="button" data-complete-print-job="${escapeHtml(job.id)}">Confirm delivery and complete order</button></div>`
+      : "";
+    return `${messageForm}${ratingForm}`;
+  }
+
+  async function reloadSharedOrders(selectedOrderId = "") {
+    const orders = await accountService.loadOrders();
+    renderSharedOrders(orders);
+    if (selectedOrderId) renderSharedOrderDetail(selectedOrderId);
+  }
+
+  async function handleSharedOrderAction(event) {
+    const completeButton = event.target.closest("[data-complete-print-job]");
+    const messageButton = event.target.closest("[data-send-job-message]");
+    if (!completeButton && !messageButton) return;
+    const button = completeButton || messageButton;
+    button.disabled = true;
+    try {
+      const activeOrderId = document.querySelector("[data-shared-order-active]")?.dataset.sharedOrderActive || "";
+      if (messageButton) {
+        const note = messageButton.closest(".order-message-form").querySelector("[data-customer-job-message]").value;
+        await accountFetch(`/api/account/print-jobs/${encodeURIComponent(messageButton.dataset.sendJobMessage)}/message`, {
+          method: "POST",
+          body: JSON.stringify({ note })
+        });
+        await reloadSharedOrders(activeOrderId);
+        toast("Message sent");
+        return;
+      }
+      const form = completeButton.closest(".order-rating-form");
+      const rating = Number(form.querySelector("[data-job-rating]").value);
+      if (!rating || !window.confirm("Confirm that this printed order has arrived? This records your rating and releases the printer payout.")) {
+        button.disabled = false;
+        return;
+      }
+      const result = await accountFetch(`/api/account/print-jobs/${encodeURIComponent(completeButton.dataset.completePrintJob)}/complete`, {
+        method: "POST",
+        body: JSON.stringify({ rating, reviewText: form.querySelector("[data-job-review]").value })
+      });
+      await reloadSharedOrders(activeOrderId);
+      toast(result.transfer?.released ? "Order completed and printer payout released" : "Order completed; printer payout remains held for review");
+    } catch (error) {
+      button.disabled = false;
+      throw error;
+    }
+  }
+
   function renderSharedOrderDetail(orderId) {
     const order = sharedOrders.find((candidate) => candidate.id === orderId);
     if (!order) return;
     const job = Array.isArray(order.print_jobs) ? order.print_jobs[0] : order.print_jobs;
     const items = Array.isArray(order.order_items) ? order.order_items : [];
+    const snapshot = Array.isArray(order.order_customer_snapshots) ? order.order_customer_snapshots[0] : order.order_customer_snapshots;
+    const events = Array.isArray(job?.print_job_events) ? job.print_job_events : [];
+    const currentStatus = job?.status || order.status || "pending";
     const detail = document.getElementById("sharedOrderDetail");
     detail.hidden = false;
     detail.innerHTML = `
-      <h3>${escapeHtml(order.invoice_number || "Pending invoice")}</h3>
+      <h3 data-shared-order-active="${escapeHtml(order.id)}">${escapeHtml(order.invoice_number || "Pending invoice")}</h3>
+      ${sharedOrderStatusTrack(job, currentStatus)}
       <div class="shared-order-grid">
-        <div><span>Status</span><strong>${escapeHtml(String(job?.status || order.status || "pending").replaceAll("_", " "))}</strong></div>
+        <div><span>Status</span><strong>${escapeHtml(labelText(currentStatus))}</strong></div>
         <div><span>Total</span><strong>${money(order.total_inc_vat, order.currency)}</strong></div>
         <div><span>Ordered</span><strong>${order.paid_at || order.created_at ? new Date(order.paid_at || order.created_at).toLocaleString() : "Pending"}</strong></div>
         <div><span>Tracking</span><strong>${escapeHtml(job?.tracking_reference || "Not posted")}</strong></div>
       </div>
-      ${items.map((item) => `<p><strong>${escapeHtml(item.description || "Printed design")}</strong> · quantity ${item.quantity || 1}</p>`).join("") || "<p>No line items were returned for this order.</p>"}
+      <div class="order-detail-items">
+        ${items.map((item) => `<p><strong>${escapeHtml(item.description || "Printed design")}</strong><br><small>Quantity ${item.quantity || 1} | ${money(item.total_inc_vat || 0, order.currency)}</small></p>`).join("") || "<p>No line items were returned for this order.</p>"}
+      </div>
+      <div class="shared-order-grid">
+        <div><span>Delivery postcode</span><strong>${escapeHtml(snapshot?.delivery_address?.postal_code || snapshot?.delivery_address?.postcode || "Not recorded")}</strong></div>
+        <div><span>Brand</span><strong>${escapeHtml(order.brand_key || pageKey())}</strong></div>
+        <div><span>Generator</span><strong>${escapeHtml(labelText(order.generator_type || "generator"))}</strong></div>
+        <div><span>Refund lock</span><strong>${job?.producing_at ? "Production started" : "Before production"}</strong></div>
+      </div>
+      ${sharedOrderActions(job)}
+      ${events.length ? `<div class="order-events"><h5>Messages and status history</h5>${events.map((event) => `<p class="event-${escapeHtml(event.event_type || "status")}"><strong>${escapeHtml(sharedOrderEventTitle(event))}</strong><span>${escapeHtml(event.note || "")}</span><small>${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</div>` : ""}
     `;
+    detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   function enhancePrototypeTopbar() {
     const key = pageKey();
-    if (!["paint", "stitch", "print"].includes(key)) return;
+    if (!["paint", "stitch", "print"].includes(key)) return false;
     const topbar = document.querySelector(".topbar");
-    if (!topbar || topbar.querySelector(".brand-intro")) return;
+    if (!topbar) return false;
+    if (topbar.querySelector(".brand-intro")) {
+      document.body.dataset.sharedGeneratorShell = "true";
+      return true;
+    }
     const brand = topbar.querySelector(".brand");
     brand?.setAttribute("href", "../");
     const [strong, em] = generatorTagline(key);
@@ -352,6 +455,8 @@
       menu.hidden = true;
       document.getElementById("sharedAccountButton")?.setAttribute("aria-expanded", "false");
     });
+    document.body.dataset.sharedGeneratorShell = "true";
+    return true;
   }
 
   function normalizeExistingAccountButtons() {
@@ -403,6 +508,14 @@
     `;
     document.body.append(footer);
   }
+
+  window.forgetSharedShell = {
+    loadAccount: loadSharedAccount,
+    savePreset: saveSharedPreset,
+    exportGenerator: exportSharedGenerator,
+    enhanceTopbar: enhancePrototypeTopbar,
+    renderOrders: renderSharedOrders
+  };
 
   decorateSponsors();
   normalizeExistingAccountButtons();

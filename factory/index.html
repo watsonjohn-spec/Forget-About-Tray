@@ -55,7 +55,7 @@
         </div>
         <div class="hero-metrics">
           <div><span>Active jobs</span><strong id="activeJobCount">0</strong></div>
-          <div><span>Held payouts</span><strong id="heldPayoutTotal">£0.00</strong></div>
+          <div><span>Held payouts</span><strong id="heldPayoutTotal">&pound;0.00</strong></div>
           <div><span>Rating</span><strong id="factoryRating">New</strong></div>
         </div>
       </section>
@@ -72,7 +72,7 @@
         <div class="factory-filters">
           <label>Status<select id="jobStatusFilter"><option value="">All statuses</option><option value="order_made">Order made</option><option value="producing">Producing</option><option value="posted">Posted</option><option value="complete">Complete</option><option value="cancelled">Cancelled</option><option value="refunded">Refunded</option></select></label>
           <label>Brand<select id="jobBrandFilter"><option value="">All brands</option><option value="tray">Tray</option><option value="makeup">Makeup</option><option value="paint">Paint</option><option value="stitch">Stitch</option><option value="print">Print</option></select></label>
-          <label>Payout<select id="jobPayoutFilter"><option value="">Any payout state</option><option value="held">Held</option><option value="released">Released</option><option value="cancelled">Cancelled</option></select></label>
+          <label>Payout<select id="jobPayoutFilter"><option value="">Any payout state</option><option value="held">Held</option><option value="ready">Ready</option><option value="transferred">Transferred</option><option value="failed">Failed</option><option value="reversed">Reversed</option></select></label>
           <label>Search<input id="jobSearchFilter" type="search" placeholder="Order, colour, status"></label>
         </div>
         <div class="job-grid" id="factoryJobs"></div>
@@ -101,7 +101,7 @@
           <label>Max width mm<input id="capabilityMaxWidth" type="number" min="1" max="1000" value="256"></label>
           <label>Max depth mm<input id="capabilityMaxDepth" type="number" min="1" max="1000" value="256"></label>
           <label>Max height mm<input id="capabilityMaxHeight" type="number" min="1" max="1000" value="256"></label>
-          <label>Printer fee per print £<input id="capabilityBasePrice" type="number" min="0" step="0.01" value="8.00"></label>
+          <label>Printer fee per print &pound;<input id="capabilityBasePrice" type="number" min="0" step="0.01" value="8.00"></label>
           <label>Printing speed grams/hour<input id="capabilityGramsPerHour" type="number" min="1" max="1000" step="1" value="48"></label>
           <label>Postage service<select id="capabilityPostage"></select></label>
           <button class="button button-primary" type="submit">Add capability</button>
@@ -125,7 +125,7 @@
         <div class="section-heading"><div><p class="eyebrow">Financials</p><h2>Held and completed payouts</h2></div><span class="status-pill" id="connectStatus">Stripe Connect not onboarded</span></div>
         <p class="factory-note">Payouts are held while a job is producing or posted. They become eligible only after the order reaches complete.</p>
         <div class="factory-filters">
-          <label>Status<select id="payoutStatusFilter"><option value="">All payout states</option><option value="held">Held</option><option value="eligible">Eligible</option><option value="paid">Paid</option><option value="failed">Failed</option></select></label>
+          <label>Status<select id="payoutStatusFilter"><option value="">All payout states</option><option value="held">Held</option><option value="ready">Ready</option><option value="transferred">Transferred</option><option value="failed">Failed</option><option value="reversed">Reversed</option></select></label>
           <label>Brand<select id="payoutBrandFilter"><option value="">All brands</option><option value="tray">Tray</option><option value="makeup">Makeup</option><option value="paint">Paint</option><option value="stitch">Stitch</option><option value="print">Print</option></select></label>
           <label>Search<input id="payoutSearchFilter" type="search" placeholder="Invoice or order"></label>
         </div>
@@ -138,7 +138,7 @@
     </main>
 
     <dialog class="job-dialog" id="factoryJobDialog">
-      <div class="job-dialog-heading"><div><p class="eyebrow">Production order</p><h2 id="jobDialogTitle">Job details</h2></div><button type="button" id="closeJobDialog">×</button></div>
+      <div class="job-dialog-heading"><div><p class="eyebrow">Production order</p><h2 id="jobDialogTitle">Job details</h2></div><button type="button" id="closeJobDialog">&times;</button></div>
       <div class="job-dialog-content" id="jobDialogContent"></div>
     </dialog>
 

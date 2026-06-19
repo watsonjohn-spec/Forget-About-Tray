@@ -279,8 +279,13 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(factoryHtml, /id="factoryCalcTime"/);
   assert.match(factoryHtml, /value="78\.78"/);
   assert.match(factoryHtml, /id="capabilityPostage"/);
+  assert.match(factoryHtml, /value="transferred">Transferred/);
+  assert.match(factoryHtml, /value="reversed">Reversed/);
   assert.match(factoryApp, /status !== "pending_payment"/);
   assert.match(factoryApp, /data-job-label/);
+  assert.match(factoryApp, /function jobNextAction\(job\)/);
+  assert.match(factoryApp, /function filteredTransfers\(transfers\)/);
+  assert.match(factoryApp, /brandLabel\(job\.brand_key\)/);
   assert.match(factoryApp, /renderTimeCalculator/);
   assert.match(factoryApp, /printTimeLabel/);
   assert.match(makeupHtml, /data-layout-mode="staircase"/);
@@ -345,6 +350,13 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerJs, /Modern slavery statement/);
   assert.match(footerJs, /data-account-password-prefix="sharedAccount"/);
   assert.match(footerJs, /accountPasswordFlow\?\.hydrate/);
+  assert.match(footerJs, /function handleSharedOrderAction\(event\)/);
+  assert.match(footerJs, /data-complete-print-job/);
+  assert.match(footerJs, /data-send-job-message/);
+  assert.match(footerJs, /Confirm delivery and complete order/);
+  assert.match(footerJs, /sharedOrderStatusTrack/);
+  assert.match(footerJs, /window\.forgetSharedShell/);
+  assert.match(footerJs, /sharedGeneratorShell/);
   assert.match(accountPassword, /Current password/);
   assert.match(accountPassword, /Confirm password/);
   assert.match(footerCss, /\.site-footer/);

@@ -17,6 +17,12 @@ Authentication and checkout return URLs preserve the entry path, so the same bra
 
 Login surfaces must stay functionally and structurally identical across customer generators and the shared print factory. Email/password sign-in, enabled OAuth providers, account creation, password reset, provider-status messaging, and recovery handling are shared account behavior; only palette, surface name, and logo mark should vary.
 
+## Shared Generator Shell
+
+Customer generators should use the shared shell for account menus, order history, customer/printer messaging, delivery confirmation, rating, save preset, export/print routing, sponsor placement, and footer/legal surfaces wherever practical. Generator-specific code should own only parameter inputs, catalogue interpretation, preview geometry, and STL generation.
+
+The current browser shell is exposed through `window.forgetSharedShell` in `site-wide.js`. New generator pages should prefer this shared path before adding local copies of account or order-management behavior.
+
 ## Generator Contract
 
 Each server-side generator module must provide:
