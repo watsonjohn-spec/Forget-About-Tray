@@ -301,6 +301,8 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(makeupApp, /outerWidth = Math\.max\(\.\.\.sideLengths\) \+ state\.wallThickness \* 2/);
   assert.match(makeupApp, /state\.layoutMode === "pegboard"/);
   assert.match(makeupApp, /splitPegboardBoxes/);
+  assert.match(makeupApp, /pegboard-backplate/);
+  assert.match(makeupApp, /rear-slot-drop/);
   assert.match(makeupApp, /function previewTransform\(metric\)/);
   assert.match(makeupApp, /function visibleBoxFaces\(box, transform, colour, opacity, boxIndex\)/);
   assert.match(makeupApp, /\.sort\(\(a, b\) => a\.depth - b\.depth\)/);
@@ -385,9 +387,14 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(stitchHtml, /id="layoutStyle"/);
   assert.match(stitchHtml, /value="floss-card"/);
   assert.match(stitchHtml, /value="workstation-tray"/);
+  assert.match(stitchHtml, /id="embeddedTrayWidth"/);
+  assert.match(stitchHtml, /id="embeddedTrayDepth"/);
+  assert.match(stitchHtml, /id="engravingDepth"/);
   assert.match(stitchHtml, /data-preview-turn="-1"/);
   assert.match(stitchJs, /stitchConfig/);
   assert.match(stitchJs, /threads: parseThreads/);
+  assert.match(stitchJs, /embeddedTrayWidth/);
+  assert.match(stitchJs, /engravedLabels/);
   assert.match(stitchJs, /function flossCardPreviewGeometry\(config\)/);
   assert.match(stitchJs, /function workstationPreviewGeometry\(config\)/);
   assert.match(stitchJs, /stitchPreviewGeometry/);

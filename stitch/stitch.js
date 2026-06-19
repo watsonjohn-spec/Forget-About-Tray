@@ -11,8 +11,8 @@ const filamentColours = [
 ];
 
 const stitchStyleDefaults = {
-  "floss-card": { columns: 2, slotWidth: 6, slotDepth: 12 },
-  "workstation-tray": { columns: 6, slotWidth: 16, slotDepth: 34 }
+  "floss-card": { columns: 2, slotWidth: 6, slotDepth: 12, embeddedTrayWidth: 150, embeddedTrayDepth: 95, engravingDepth: 1 },
+  "workstation-tray": { columns: 2, slotWidth: 18, slotDepth: 42, embeddedTrayWidth: 150, embeddedTrayDepth: 95, engravingDepth: 1 }
 };
 
 const threadPreviewColours = [
@@ -54,6 +54,9 @@ function stitchConfig() {
     slotWidth: Number(document.getElementById("slotWidth").value || 16),
     slotDepth: Number(document.getElementById("slotDepth").value || 34),
     labelTextSize: Number(document.getElementById("threadLabelSize").value || 10),
+    embeddedTrayWidth: Number(document.getElementById("embeddedTrayWidth").value || 150),
+    embeddedTrayDepth: Number(document.getElementById("embeddedTrayDepth").value || 95),
+    engravingDepth: Number(document.getElementById("engravingDepth").value || 1),
     gap: 2,
     wallThickness: 1.6,
     wallHeight: 10,
@@ -82,11 +85,13 @@ function threadColour(index) {
 function workstationPreviewGeometry(config) {
   const columns = Math.max(1, config.columns);
   const rows = Math.max(1, Math.ceil(config.threads.length / columns));
-  const slotAreaWidth = columns * config.slotWidth + (columns + 1) * config.wallThickness + (columns - 1) * config.gap;
+  const labelGutterWidth = Math.max(18, config.labelTextSize * 3.2);
+  const cellWidth = config.slotWidth + labelGutterWidth;
+  const slotAreaWidth = columns * cellWidth + (columns + 1) * config.wallThickness + (columns - 1) * config.gap;
   const slotAreaDepth = rows * config.slotDepth + (rows + 1) * config.wallThickness + (rows - 1) * config.gap;
-  const toolWidth = Math.max(96, Math.min(170, slotAreaWidth * 0.92));
-  const outerWidth = slotAreaWidth + toolWidth + 28;
-  const outerDepth = Math.max(slotAreaDepth + 22, 112);
+  const trayGap = 18;
+  const outerWidth = 10 + slotAreaWidth + trayGap + config.embeddedTrayWidth + 10;
+  const outerDepth = Math.max(slotAreaDepth + 22, config.embeddedTrayDepth + 32, 112);
   const boxes = [
     { x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: config.plateThickness },
     { x: 0, y: 0, z: config.plateThickness, w: outerWidth, d: config.wallThickness * 2, h: config.wallHeight },
@@ -98,11 +103,14 @@ function workstationPreviewGeometry(config) {
   const bobbinY = 10;
   const previewBoxes = [];
   const labels = [];
+  const engravedLabels = [];
   config.threads.forEach((thread, index) => {
     const col = index % columns;
     const row = Math.floor(index / columns);
-    const x = bobbinX + config.wallThickness + col * (config.slotWidth + config.wallThickness + config.gap);
+    const x = bobbinX + config.wallThickness + col * (cellWidth + config.wallThickness + config.gap);
     const y = bobbinY + config.wallThickness + row * (config.slotDepth + config.wallThickness + config.gap);
+    const labelCenterX = x + config.slotWidth + labelGutterWidth / 2;
+    const labelCenterY = y + config.slotDepth / 2;
     boxes.push(
       { x: x - config.wallThickness, y: y - config.wallThickness, z: config.plateThickness, w: config.slotWidth + config.wallThickness * 2, d: config.wallThickness, h: config.wallHeight },
       { x: x - config.wallThickness, y: y + config.slotDepth, z: config.plateThickness, w: config.slotWidth + config.wallThickness * 2, d: config.wallThickness, h: config.wallHeight },
@@ -120,21 +128,22 @@ function workstationPreviewGeometry(config) {
       previewOpacity: 0.48,
       previewClass: "preview-thread-bobbin"
     });
-    labels.push({ x: x + config.slotWidth / 2, y: y + 5, z: config.plateThickness + config.wallHeight + 0.6, text: thread.number, fill: "#fffdf4", size: config.labelTextSize });
+    engravedLabels.push({ text: thread.number, x: labelCenterX, y: labelCenterY, depth: config.engravingDepth });
+    labels.push({ x: labelCenterX, y: labelCenterY, z: config.plateThickness + 0.9, text: thread.number, fill: "#30273a", size: config.labelTextSize });
   });
-  const toolX = bobbinX + slotAreaWidth + 16;
-  const toolY = 16;
-  const toolD = outerDepth - 32;
+  const trayX = bobbinX + slotAreaWidth + trayGap;
+  const trayY = Math.max(16, (outerDepth - config.embeddedTrayDepth) / 2);
+  const trayWall = config.wallThickness * 2;
   boxes.push(
-    { x: toolX, y: toolY, z: config.plateThickness, w: toolWidth, d: config.wallThickness * 2, h: config.wallHeight },
-    { x: toolX, y: toolY + toolD - config.wallThickness * 2, z: config.plateThickness, w: toolWidth, d: config.wallThickness * 2, h: config.wallHeight },
-    { x: toolX, y: toolY, z: config.plateThickness, w: config.wallThickness * 2, d: toolD, h: config.wallHeight },
-    { x: toolX + toolWidth - config.wallThickness * 2, y: toolY, z: config.plateThickness, w: config.wallThickness * 2, d: toolD, h: config.wallHeight },
-    { x: toolX + 10, y: toolY + toolD * 0.58, z: config.plateThickness + 0.1, w: toolWidth - 20, d: config.wallThickness, h: config.wallHeight * 0.55 }
+    { x: trayX, y: trayY, z: config.plateThickness, w: config.embeddedTrayWidth, d: trayWall, h: config.wallHeight },
+    { x: trayX, y: trayY + config.embeddedTrayDepth - trayWall, z: config.plateThickness, w: config.embeddedTrayWidth, d: trayWall, h: config.wallHeight },
+    { x: trayX, y: trayY, z: config.plateThickness, w: trayWall, d: config.embeddedTrayDepth, h: config.wallHeight },
+    { x: trayX + config.embeddedTrayWidth - trayWall, y: trayY, z: config.plateThickness, w: trayWall, d: config.embeddedTrayDepth, h: config.wallHeight },
+    { x: trayX + trayWall, y: trayY + trayWall, z: config.plateThickness + 0.08, w: config.embeddedTrayWidth - trayWall * 2, d: config.embeddedTrayDepth - trayWall * 2, h: 0.2, previewColour: "#efece4", previewOpacity: 0.42 }
   );
-  labels.push({ x: toolX + toolWidth / 2, y: toolY + 11, z: config.plateThickness + config.wallHeight + 0.8, text: "tools", fill: "#30273a" });
+  labels.push({ x: trayX + config.embeddedTrayWidth / 2, y: trayY + 12, z: config.plateThickness + config.wallHeight + 0.8, text: "embedded tray", fill: "#30273a", size: 10 });
   const materialCm3 = boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
-  return { style: "Workstation", boxes, previewBoxes, labels, holes: [], threadPaths: [], outerWidth, outerDepth, height: config.plateThickness + config.wallHeight + 12, rows, materialCm3 };
+  return { style: "Workstation", boxes, previewBoxes, labels, engravedLabels, holes: [], threadPaths: [], embeddedTray: { x: trayX, y: trayY, w: config.embeddedTrayWidth, d: config.embeddedTrayDepth }, outerWidth, outerDepth, height: config.plateThickness + config.wallHeight + 12, rows, materialCm3 };
 }
 
 function flossCardPreviewGeometry(config) {
@@ -225,13 +234,18 @@ function renderStitchPreview(view = previewTurntable?.state || {}) {
 }
 
 function applyStyleDefaults() {
-  const defaults = stitchStyleDefaults[document.getElementById("layoutStyle").value] || stitchStyleDefaults["workstation-tray"];
+  const style = document.getElementById("layoutStyle").value;
+  const defaults = stitchStyleDefaults[style] || stitchStyleDefaults["workstation-tray"];
+  const isFlossCard = style === "floss-card";
   document.getElementById("columns").value = defaults.columns;
   document.getElementById("slotWidth").value = defaults.slotWidth;
   document.getElementById("slotDepth").value = defaults.slotDepth;
-  document.getElementById("columnsLabel").textContent = defaults.columns === 2 ? "Hole columns" : "Bobbin columns";
-  document.getElementById("slotWidthLabel").textContent = defaults.columns === 2 ? "Hole diameter" : "Slot width";
-  document.getElementById("slotDepthLabel").textContent = defaults.columns === 2 ? "Hole spacing" : "Slot depth";
+  document.getElementById("embeddedTrayWidth").value = defaults.embeddedTrayWidth;
+  document.getElementById("embeddedTrayDepth").value = defaults.embeddedTrayDepth;
+  document.getElementById("engravingDepth").value = defaults.engravingDepth;
+  document.getElementById("columnsLabel").textContent = isFlossCard ? "Hole columns" : "Bobbin columns";
+  document.getElementById("slotWidthLabel").textContent = isFlossCard ? "Hole diameter" : "Slot width";
+  document.getElementById("slotDepthLabel").textContent = isFlossCard ? "Hole spacing" : "Slot depth";
   previewTurntable.render();
 }
 
@@ -240,7 +254,7 @@ document.getElementById("filamentMaterial").addEventListener("change", () => {
   previewTurntable.render();
 });
 populateColours();
-["projectName", "threads", "columns", "slotWidth", "slotDepth", "threadLabelSize", "filamentColour", "filamentMaterial"].forEach((id) => document.getElementById(id).addEventListener("input", () => previewTurntable.render()));
+["projectName", "threads", "columns", "slotWidth", "slotDepth", "threadLabelSize", "embeddedTrayWidth", "embeddedTrayDepth", "engravingDepth", "filamentColour", "filamentMaterial"].forEach((id) => document.getElementById(id).addEventListener("input", () => previewTurntable.render()));
 document.getElementById("layoutStyle").addEventListener("change", applyStyleDefaults);
 document.getElementById("quoteButton").addEventListener("click", async () => {
   try {

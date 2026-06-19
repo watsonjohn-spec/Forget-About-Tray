@@ -50,12 +50,12 @@ function normalizeParameters(input = {}) {
   };
 }
 
-function splitPegboardBoxes(boxes, sheetWidth, sheetDepth, hookDepth, baseThickness, baseZ = 0) {
+function splitPegboardBoxes(boxes, sheetWidth, sheetDepth, mountDepth, baseThickness, baseZ = 0) {
   const chunkSize = 250;
   const chunkCols = Math.ceil(sheetWidth / chunkSize);
   const chunkRows = Math.ceil(sheetDepth / chunkSize);
   if (chunkCols === 1 && chunkRows === 1) {
-    return { boxes, outerWidth: sheetWidth, outerDepth: sheetDepth + hookDepth, chunkCount: 1 };
+    return { boxes, outerWidth: sheetWidth, outerDepth: sheetDepth + mountDepth, chunkCount: 1 };
   }
 
   const spacing = 18;
@@ -68,7 +68,7 @@ function splitPegboardBoxes(boxes, sheetWidth, sheetDepth, hookDepth, baseThickn
   for (let row = 0; row < chunkRows; row += 1) {
     for (let column = 0; column < chunkCols; column += 1) {
       const outputX = column * (chunkWidth + spacing);
-      const outputY = row * (chunkDepth + hookDepth + spacing) + hookDepth;
+      const outputY = row * (chunkDepth + mountDepth + spacing) + mountDepth;
       output.push({ x: outputX, y: outputY, z: baseZ, w: chunkWidth, d: chunkDepth, h: baseThickness, kind: "base" });
       if (column < chunkCols - 1) output.push({ x: outputX + chunkWidth - tabDepth / 2, y: outputY + chunkDepth / 2 - tab / 2, z: baseZ, w: tabDepth, d: tab, h: baseThickness, kind: "jigsaw" });
       if (row < chunkRows - 1) output.push({ x: outputX + chunkWidth / 2 - tab / 2, y: outputY + chunkDepth - tabDepth / 2, z: baseZ, w: tab, d: tabDepth, h: baseThickness, kind: "jigsaw" });
@@ -77,20 +77,20 @@ function splitPegboardBoxes(boxes, sheetWidth, sheetDepth, hookDepth, baseThickn
 
   boxes.filter((box) => box.kind !== "base").forEach((box) => {
     const centreX = Math.max(0, Math.min(sheetWidth - 0.001, box.x + box.w / 2));
-    const centreY = Math.max(0, Math.min(sheetDepth - 0.001, box.y - hookDepth + box.d / 2));
+    const centreY = Math.max(0, Math.min(sheetDepth - 0.001, box.y - mountDepth + box.d / 2));
     const column = Math.max(0, Math.min(chunkCols - 1, Math.floor(centreX / chunkWidth)));
     const row = Math.max(0, Math.min(chunkRows - 1, Math.floor(centreY / chunkDepth)));
     const sourceX = column * chunkWidth;
-    const sourceY = hookDepth + row * chunkDepth;
+    const sourceY = mountDepth + row * chunkDepth;
     const outputX = column * (chunkWidth + spacing);
-    const outputY = row * (chunkDepth + hookDepth + spacing) + hookDepth;
+    const outputY = row * (chunkDepth + mountDepth + spacing) + mountDepth;
     output.push({ ...box, x: outputX + box.x - sourceX, y: outputY + box.y - sourceY });
   });
 
   return {
     boxes: output,
     outerWidth: chunkCols * chunkWidth + (chunkCols - 1) * spacing,
-    outerDepth: chunkRows * (chunkDepth + hookDepth) + (chunkRows - 1) * spacing,
+    outerDepth: chunkRows * (chunkDepth + mountDepth) + (chunkRows - 1) * spacing,
     chunkCount: chunkCols * chunkRows
   };
 }
@@ -138,34 +138,36 @@ function itemLayout(config) {
     const rowDepths = Array.from({ length: rows }, (_, row) => Math.max(24, ...cells.filter((cell) => cell.row === row).map((cell) => cell.cellDepth)));
     const columnOffsets = columnWidths.map((_, column) => columnWidths.slice(0, column).reduce((sum, width) => sum + width, 0));
     const rowOffsets = rowDepths.map((_, row) => rowDepths.slice(0, row).reduce((sum, depth) => sum + depth, 0));
-    const hookDepth = Math.max(9, t * 4);
-    const hookWidth = 4.2;
+    const mountDepth = Math.max(16, t * 8);
+    const hookRailWidth = Math.max(12, t * 7);
+    const hookBladeWidth = 4.2;
     const hookBladeDepth = 4;
-    const hookDrop = Math.max(14, t * 8);
-    const hookCatchDepth = 10;
-    const hookCatchHeight = 3;
-    const baseZ = hookDrop;
+    const hookDrop = Math.max(18, t * 10);
+    const hookLipDepth = Math.max(8, t * 5);
+    const hookLipHeight = Math.max(3, t * 1.75);
+    const baseZ = hookDrop + hookLipHeight;
     const outerWidth = columnWidths.reduce((sum, width) => sum + width, 0);
     const sheetDepth = rowDepths.reduce((sum, depth) => sum + depth, 0);
     const positions = cells.map((cell) => ({
       ...cell,
       x: columnOffsets[cell.column] + t,
-      y: rowOffsets[cell.row] + t,
+      y: mountDepth + rowOffsets[cell.row] + t,
       z: 0
     }));
     const hookCount = Math.max(2, Math.min(10, Math.floor(outerWidth / config.pegboardHookSpacing) + 1));
     return {
       positions,
       outerWidth,
-      outerDepth: sheetDepth + hookDepth,
+      outerDepth: sheetDepth + mountDepth,
       sheetWidth: outerWidth,
       sheetDepth,
-      hookDepth,
-      hookWidth,
+      mountDepth,
+      hookRailWidth,
+      hookBladeWidth,
       hookBladeDepth,
       hookDrop,
-      hookCatchDepth,
-      hookCatchHeight,
+      hookLipDepth,
+      hookLipHeight,
       baseZ,
       hookCount
     };
@@ -272,7 +274,7 @@ function buildGeometry(parameters) {
   const { positions, outerWidth, outerDepth } = layout;
   if (config.layoutMode === "pegboard") {
     const t = config.wallThickness;
-    const boxes = [{ x: 0, y: 0, z: layout.baseZ, w: layout.sheetWidth, d: layout.sheetDepth, h: config.baseThickness, kind: "base" }];
+    const boxes = [{ x: 0, y: layout.mountDepth, z: layout.baseZ, w: layout.sheetWidth, d: layout.sheetDepth, h: config.baseThickness, kind: "base" }];
     positions.forEach((position) => {
       const h = Math.max(8, position.height * 2 / 3);
       const z = layout.baseZ + config.baseThickness;
@@ -283,15 +285,20 @@ function buildGeometry(parameters) {
         { x: position.x + position.slotWidth, y: position.y, z, w: t, d: position.slotDepth, h, kind: "wall" }
       );
     });
+    const railHeight = layout.baseZ + config.baseThickness + Math.max(14, t * 8);
     for (let hook = 0; hook < layout.hookCount; hook += 1) {
-      const hookX = layout.hookCount === 1 ? layout.sheetWidth / 2 - layout.hookWidth / 2 : (hook * (layout.sheetWidth - layout.hookWidth)) / (layout.hookCount - 1);
-      const hookY = layout.sheetDepth + 2;
+      const railX = layout.hookCount === 1
+        ? layout.sheetWidth / 2 - layout.hookRailWidth / 2
+        : (hook * (layout.sheetWidth - layout.hookRailWidth)) / (layout.hookCount - 1);
+      const bladeX = railX + layout.hookRailWidth / 2 - layout.hookBladeWidth / 2;
       boxes.push(
-        { x: hookX, y: hookY, z: 0, w: layout.hookWidth, d: layout.hookBladeDepth, h: layout.hookDrop, kind: "hook" },
-        { x: hookX, y: hookY + layout.hookBladeDepth - config.wallThickness, z: 0, w: layout.hookWidth, d: layout.hookCatchDepth, h: layout.hookCatchHeight, kind: "hook" }
+        { x: railX, y: 0, z: 0, w: layout.hookRailWidth, d: layout.mountDepth, h: railHeight, kind: "pegboard-backplate" },
+        { x: bladeX, y: 0, z: 0, w: layout.hookBladeWidth, d: layout.hookBladeDepth, h: layout.hookDrop, kind: "hook" },
+        { x: bladeX, y: layout.hookBladeDepth, z: 0, w: layout.hookBladeWidth, d: layout.hookLipDepth, h: layout.hookLipHeight, kind: "hook" },
+        { x: bladeX, y: layout.hookBladeDepth, z: layout.hookDrop - layout.hookLipHeight, w: layout.hookBladeWidth, d: layout.hookLipDepth * 0.65, h: layout.hookLipHeight, kind: "hook" }
       );
     }
-    const split = splitPegboardBoxes(boxes, layout.sheetWidth, layout.sheetDepth, layout.hookDepth, config.baseThickness, layout.baseZ);
+    const split = splitPegboardBoxes(boxes, layout.sheetWidth, layout.sheetDepth, layout.mountDepth, config.baseThickness, layout.baseZ);
     const materialCm3 = split.boxes.reduce((sum, box) => sum + box.w * box.d * box.h, 0) / 1000;
     const height = Math.max(...split.boxes.map((box) => box.z + box.h));
     return {
@@ -301,11 +308,14 @@ function buildGeometry(parameters) {
       outerWidth: split.outerWidth,
       outerDepth: split.outerDepth,
       assembledWidth: layout.sheetWidth,
-      assembledDepth: layout.sheetDepth + layout.hookDepth,
+      assembledDepth: layout.sheetDepth + layout.mountDepth,
       height,
       materialCm3,
       hookCount: layout.hookCount,
-      connectorWidth: layout.hookWidth,
+      connectorStyle: "rear-slot-drop",
+      connectorDepth: layout.mountDepth,
+      connectorWidth: layout.hookBladeWidth,
+      connectorBackplateWidth: layout.hookRailWidth,
       connectorDrop: layout.hookDrop,
       chunkCount: split.chunkCount
     };

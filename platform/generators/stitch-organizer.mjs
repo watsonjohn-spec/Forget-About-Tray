@@ -29,10 +29,15 @@ function normalizeParameters(input = {}) {
   const fallbackCount = integerInRange(input.threadCount, 1, 120, 24);
   return {
     style: normalizeStyle(input.style),
+    projectName: String(input.projectName || "Stitch project tray").slice(0, 120),
     threads: threads.length ? threads : Array.from({ length: fallbackCount }, (_, index) => normalizeThread({}, index)),
     columns: integerInRange(input.columns, 1, 16, 8),
     slotWidth: numberInRange(input.slotWidth, 4, 40, 16),
     slotDepth: numberInRange(input.slotDepth, 8, 80, 34),
+    labelTextSize: numberInRange(input.labelTextSize, 5, 18, 10),
+    embeddedTrayWidth: numberInRange(input.embeddedTrayWidth, 60, 260, 150),
+    embeddedTrayDepth: numberInRange(input.embeddedTrayDepth, 40, 200, 95),
+    engravingDepth: numberInRange(input.engravingDepth, 0.3, 1.5, 1),
     gap: numberInRange(input.gap, 0, 12, 2),
     plateThickness: numberInRange(input.plateThickness, 1, 10, 2),
     wallThickness: numberInRange(input.wallThickness, 1, 6, 1.6),
@@ -85,6 +90,65 @@ function plateWithCircularVoids({ x = 0, y = 0, z = 0, w, d, h, voids = [], stri
   return boxes;
 }
 
+function plateWithRectangularVoids({ x = 0, y = 0, z = 0, w, d, h, voids = [], stripHeight = 1.2 }) {
+  const boxes = [];
+  const strips = Math.max(12, Math.ceil(d / stripHeight));
+  const actualStrip = d / strips;
+  for (let index = 0; index < strips; index += 1) {
+    const stripY = y + index * actualStrip;
+    const stripEnd = stripY + actualStrip;
+    const intervals = voids.flatMap((voidShape) => {
+      const voidY = Number(voidShape.y);
+      const voidEnd = voidY + Number(voidShape.d);
+      if (voidEnd <= stripY || voidY >= stripEnd) return [];
+      return [[Math.max(0, Number(voidShape.x) - x), Math.min(w, Number(voidShape.x) + Number(voidShape.w) - x)]];
+    });
+    const merged = mergeIntervals(intervals);
+    let cursor = 0;
+    merged.forEach(([start, end]) => {
+      if (start > cursor + 0.05) boxes.push({ x: x + cursor, y: stripY, z, w: start - cursor, d: actualStrip, h });
+      cursor = Math.max(cursor, end);
+    });
+    if (cursor < w - 0.05) boxes.push({ x: x + cursor, y: stripY, z, w: w - cursor, d: actualStrip, h });
+  }
+  return boxes;
+}
+
+const glyphSegments = {
+  "0": "abcedf", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd", "6": "afgecd", "7": "abc", "8": "abcdefg", "9": "abfgcd",
+  A: "abcefg", B: "cdefg", C: "afed", D: "bcdeg", E: "afged", F: "afge", G: "afedc", H: "bcefg", I: "bc", J: "bcde", K: "efg", L: "fed", M: "abcef", N: "ceg", O: "abcedf", P: "abfge", Q: "abcfged", R: "abfgec", S: "afgcd", T: "afg", U: "bcdef", V: "cde", W: "bcdef", X: "fgbc", Y: "fbgcd", Z: "abged"
+};
+
+function glyphSegmentRects(character, x, y, size) {
+  const segments = glyphSegments[character] || glyphSegments[String(character).toUpperCase()] || "g";
+  const width = size * 0.62;
+  const height = size;
+  const t = Math.max(0.45, size * 0.13);
+  const half = height / 2;
+  const rects = {
+    a: { x: x + t, y, w: width - t * 2, d: t },
+    b: { x: x + width - t, y: y + t, w: t, d: half - t },
+    c: { x: x + width - t, y: y + half, w: t, d: half - t },
+    d: { x: x + t, y: y + height - t, w: width - t * 2, d: t },
+    e: { x, y: y + half, w: t, d: half - t },
+    f: { x, y: y + t, w: t, d: half - t },
+    g: { x: x + t, y: y + half - t / 2, w: width - t * 2, d: t }
+  };
+  return [...segments].map((segment) => rects[segment]).filter(Boolean);
+}
+
+function engravingVoidsForText(text, centerX, centerY, requestedSize, maxWidth) {
+  const clean = String(text || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "?";
+  const charAdvance = requestedSize * 0.78;
+  const scale = Math.min(1, maxWidth / Math.max(charAdvance, clean.length * charAdvance));
+  const size = Math.max(4.5, requestedSize * scale);
+  const advance = size * 0.78;
+  const totalWidth = clean.length * advance - size * 0.16;
+  const startX = centerX - totalWidth / 2;
+  const startY = centerY - size / 2;
+  return [...clean].flatMap((character, index) => glyphSegmentRects(character, startX + index * advance, startY, size));
+}
+
 function buildFlossCardGeometry(config) {
   const perSide = Math.max(1, Math.ceil(config.threads.length / 2));
   const holeDiameter = Math.max(4, Math.min(12, config.slotWidth));
@@ -124,13 +188,19 @@ function buildFlossCardGeometry(config) {
 function buildWorkstationGeometry(config) {
   const columns = Math.max(1, config.columns);
   const rows = Math.max(1, Math.ceil(config.threads.length / columns));
-  const slotAreaWidth = columns * config.slotWidth + (columns + 1) * config.wallThickness + (columns - 1) * config.gap;
+  const labelGutterWidth = Math.max(18, config.labelTextSize * 3.2);
+  const cellWidth = config.slotWidth + labelGutterWidth;
+  const slotAreaWidth = columns * cellWidth + (columns + 1) * config.wallThickness + (columns - 1) * config.gap;
   const slotAreaDepth = rows * config.slotDepth + (rows + 1) * config.wallThickness + (rows - 1) * config.gap;
-  const toolWidth = Math.max(96, Math.min(170, slotAreaWidth * 0.92));
-  const outerWidth = slotAreaWidth + toolWidth + 28;
-  const outerDepth = Math.max(slotAreaDepth + 22, 112);
+  const trayGap = 18;
+  const outerWidth = 10 + slotAreaWidth + trayGap + config.embeddedTrayWidth + 10;
+  const outerDepth = Math.max(slotAreaDepth + 22, config.embeddedTrayDepth + 32, 112);
+  const engravingDepth = Math.min(config.engravingDepth, Math.max(0.3, config.plateThickness - 0.4));
+  const baseBottomHeight = Math.max(0.4, config.plateThickness - engravingDepth);
+  const engravingVoids = [];
+  const engravedLabels = [];
   const boxes = [
-    { x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: config.plateThickness },
+    { x: 0, y: 0, z: 0, w: outerWidth, d: outerDepth, h: baseBottomHeight },
     { x: 0, y: 0, z: config.plateThickness, w: outerWidth, d: config.wallThickness * 2, h: config.wallHeight },
     { x: 0, y: outerDepth - config.wallThickness * 2, z: config.plateThickness, w: outerWidth, d: config.wallThickness * 2, h: config.wallHeight },
     { x: 0, y: 0, z: config.plateThickness, w: config.wallThickness * 2, d: outerDepth, h: config.wallHeight },
@@ -141,8 +211,14 @@ function buildWorkstationGeometry(config) {
   config.threads.forEach((thread, index) => {
     const col = index % columns;
     const row = Math.floor(index / columns);
-    const x = bobbinX + config.wallThickness + col * (config.slotWidth + config.wallThickness + config.gap);
+    const x = bobbinX + config.wallThickness + col * (cellWidth + config.wallThickness + config.gap);
     const y = bobbinY + config.wallThickness + row * (config.slotDepth + config.wallThickness + config.gap);
+    const labelCenterX = x + config.slotWidth + labelGutterWidth / 2;
+    const labelCenterY = y + config.slotDepth / 2;
+    const labelMaxWidth = Math.max(10, labelGutterWidth - 3);
+    const labelVoids = engravingVoidsForText(thread.number, labelCenterX, labelCenterY, config.labelTextSize, labelMaxWidth);
+    engravingVoids.push(...labelVoids);
+    engravedLabels.push({ text: thread.number, x: labelCenterX, y: labelCenterY, depth: engravingDepth, voids: labelVoids.length });
     boxes.push(
       { x: x - config.wallThickness, y: y - config.wallThickness, z: config.plateThickness, w: config.slotWidth + config.wallThickness * 2, d: config.wallThickness, h: config.wallHeight },
       { x: x - config.wallThickness, y: y + config.slotDepth, z: config.plateThickness, w: config.slotWidth + config.wallThickness * 2, d: config.wallThickness, h: config.wallHeight },
@@ -150,19 +226,21 @@ function buildWorkstationGeometry(config) {
       { x: x + config.slotWidth, y, z: config.plateThickness, w: config.wallThickness, d: config.slotDepth, h: config.wallHeight }
     );
   });
-  const toolX = bobbinX + slotAreaWidth + 16;
-  const toolY = 16;
-  const toolD = outerDepth - 32;
+  const trayX = bobbinX + slotAreaWidth + trayGap;
+  const trayY = Math.max(16, (outerDepth - config.embeddedTrayDepth) / 2);
+  const trayWall = config.wallThickness * 2;
   boxes.push(
-    { x: toolX, y: toolY, z: config.plateThickness, w: toolWidth, d: config.wallThickness * 2, h: config.wallHeight },
-    { x: toolX, y: toolY + toolD - config.wallThickness * 2, z: config.plateThickness, w: toolWidth, d: config.wallThickness * 2, h: config.wallHeight },
-    { x: toolX, y: toolY, z: config.plateThickness, w: config.wallThickness * 2, d: toolD, h: config.wallHeight },
-    { x: toolX + toolWidth - config.wallThickness * 2, y: toolY, z: config.plateThickness, w: config.wallThickness * 2, d: toolD, h: config.wallHeight },
-    { x: toolX + 10, y: toolY + toolD * 0.58, z: config.plateThickness, w: toolWidth - 20, d: config.wallThickness, h: config.wallHeight * 0.55 }
+    { x: trayX, y: trayY, z: config.plateThickness, w: config.embeddedTrayWidth, d: trayWall, h: config.wallHeight },
+    { x: trayX, y: trayY + config.embeddedTrayDepth - trayWall, z: config.plateThickness, w: config.embeddedTrayWidth, d: trayWall, h: config.wallHeight },
+    { x: trayX, y: trayY, z: config.plateThickness, w: trayWall, d: config.embeddedTrayDepth, h: config.wallHeight },
+    { x: trayX + config.embeddedTrayWidth - trayWall, y: trayY, z: config.plateThickness, w: trayWall, d: config.embeddedTrayDepth, h: config.wallHeight }
   );
+  boxes.push(...plateWithRectangularVoids({ x: 0, y: 0, z: baseBottomHeight, w: outerWidth, d: outerDepth, h: engravingDepth, voids: engravingVoids }));
   return {
     config,
     boxes,
+    engravedLabels,
+    embeddedTray: { x: trayX, y: trayY, w: config.embeddedTrayWidth, d: config.embeddedTrayDepth },
     outerWidth,
     outerDepth,
     height: config.plateThickness + config.wallHeight,
@@ -205,7 +283,7 @@ function safeFileName(parameters, name) {
 function describe(parameters) {
   const config = normalizeParameters(parameters);
   if (config.style === "floss-card") return `Floss card for ${config.threads.length} thread references`;
-  return `Stitch workstation tray for ${config.threads.length} thread references, bobbins, tools, and phone`;
+  return `Stitch workstation tray for ${config.threads.length} engraved thread references, bobbins, and a ${config.embeddedTrayWidth}x${config.embeddedTrayDepth}mm embedded tray`;
 }
 
 export const stitchOrganizerGenerator = { type: generatorType, version, name: "Stitch organizer", catalogueType: "thread_references", normalizeParameters, buildGeometry, renderStl, safeFileName, describe };

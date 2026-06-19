@@ -68,10 +68,15 @@ test("makeup caddies are a separate enabled generator under the makeup brand", (
   assert.equal(pegboard.positions.length, 12);
   assert.equal(pegboard.catchalls, undefined);
   const pegboardHooks = pegboard.boxes.filter((box) => box.kind === "hook");
+  const pegboardBackplates = pegboard.boxes.filter((box) => box.kind === "pegboard-backplate");
   const pegboardBases = pegboard.boxes.filter((box) => box.kind === "base");
+  assert.equal(pegboard.connectorStyle, "rear-slot-drop");
   assert.ok(pegboardHooks.length > 0);
+  assert.ok(pegboardBackplates.length > 0);
   assert.ok(pegboardHooks.every((box) => box.w <= 4.5));
-  assert.ok(Math.max(...pegboardHooks.map((box) => box.z + box.h)) <= Math.min(...pegboardBases.map((box) => box.z)) + 2.1);
+  assert.ok(pegboardHooks.every((box) => box.y >= 0 && box.y + box.d <= pegboard.connectorDepth + 0.01));
+  assert.ok(pegboard.positions.every((position) => position.y >= pegboard.connectorDepth));
+  assert.ok(Math.min(...pegboardBases.map((box) => box.y)) >= pegboard.connectorDepth);
   assert.ok(pegboard.chunkCount > 1);
   assert.match(generator.safeFileName({ ...parameters, layoutMode: "pegboard" }, "Skadis makeup"), /pegboard\.stl$/);
   assert.match(generator.describe({ ...parameters, layoutMode: "pegboard" }), /pegboard makeup sheet/);
@@ -111,13 +116,20 @@ test("uploaded print, paint, and stitch generators are registered brands", () =>
     { number: "742", name: "Tangerine" }
   ];
   const flossCard = stitchContext.generator.buildGeometry({ style: "floss-card", threads: stitchThreads, slotWidth: 6, slotDepth: 12 });
-  const workstation = stitchContext.generator.buildGeometry({ style: "workstation-tray", threads: stitchThreads, columns: 2, slotWidth: 16, slotDepth: 34 });
+  const workstation = stitchContext.generator.buildGeometry({ style: "workstation-tray", threads: stitchThreads, columns: 2, slotWidth: 18, slotDepth: 42, embeddedTrayWidth: 150, embeddedTrayDepth: 95, labelTextSize: 10, engravingDepth: 1 });
   assert.equal(flossCard.config.style, "floss-card");
   assert.equal(workstation.config.style, "workstation-tray");
   assert.ok(flossCard.boxes.length > 20);
   assert.ok(workstation.outerWidth > flossCard.outerWidth);
+  assert.equal(workstation.embeddedTray.w, 150);
+  assert.equal(workstation.embeddedTray.d, 95);
+  assert.equal(workstation.engravedLabels.length, stitchThreads.length);
+  assert.ok(workstation.engravedLabels.every((label) => label.depth === 1 && label.voids > 0));
+  const widerWorkstation = stitchContext.generator.buildGeometry({ style: "workstation-tray", threads: stitchThreads, columns: 2, embeddedTrayWidth: 210, embeddedTrayDepth: 120 });
+  assert.ok(widerWorkstation.outerWidth > workstation.outerWidth);
+  assert.equal(widerWorkstation.embeddedTray.w, 210);
   assert.match(stitchContext.generator.safeFileName({ style: "floss-card", threads: stitchThreads }, "Threads"), /threads-floss-card-4-threads\.stl/);
-  assert.match(stitchContext.generator.describe({ style: "workstation-tray", threads: stitchThreads }), /bobbins, tools, and phone/);
+  assert.match(stitchContext.generator.describe({ style: "workstation-tray", threads: stitchThreads, embeddedTrayWidth: 150, embeddedTrayDepth: 95 }), /engraved thread references, bobbins, and a 150x95mm embedded tray/);
 
   assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "print"));
   assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "paint"));

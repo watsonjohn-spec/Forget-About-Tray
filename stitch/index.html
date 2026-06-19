@@ -21,7 +21,8 @@
           <label>Project name<input id="projectName" value="Stitch project tray"></label>
           <label>Generation style<select id="layoutStyle"><option value="workstation-tray">Workstation tray</option><option value="floss-card">Floss card</option></select></label>
           <label>Thread references<textarea id="threads" rows="10">310 Black&#10;321 Red&#10;Blanc White&#10;742 Tangerine&#10;820 Royal Blue&#10;906 Green</textarea></label>
-          <div class="field-grid"><label><span id="columnsLabel">Bobbin columns</span><input id="columns" type="number" min="1" max="16" value="6"></label><label><span id="slotWidthLabel">Slot width</span><input id="slotWidth" type="number" min="4" max="40" value="16"></label><label><span id="slotDepthLabel">Slot depth</span><input id="slotDepth" type="number" min="8" max="80" value="34"></label></div>
+          <div class="field-grid"><label><span id="columnsLabel">Bobbin columns</span><input id="columns" type="number" min="1" max="16" value="2"></label><label><span id="slotWidthLabel">Slot width</span><input id="slotWidth" type="number" min="4" max="40" value="18"></label><label><span id="slotDepthLabel">Slot depth</span><input id="slotDepth" type="number" min="8" max="80" value="42"></label></div>
+          <div class="field-grid"><label>Embedded tray width<input id="embeddedTrayWidth" type="number" min="60" max="260" value="150"></label><label>Embedded tray depth<input id="embeddedTrayDepth" type="number" min="40" max="200" value="95"></label><label>Engraving depth<input id="engravingDepth" type="number" min="0.3" max="1.5" step="0.1" value="1"></label></div>
           <div class="field-grid single-field"><label>Printed reference text size<input id="threadLabelSize" type="range" min="7" max="16" value="10"></label></div>
           <button class="button button-primary" id="quoteButton" type="button">Request print quotes</button>
         </div></section>
