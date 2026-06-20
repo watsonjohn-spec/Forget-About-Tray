@@ -358,6 +358,7 @@
     if (type === "customer_message") return "Message to printer";
     if (type === "decline") return "Declined and refunded";
     if (type === "delivery_chaser") return "Delivery confirmation reminder";
+    if (type === "customer_escalation") return "Escalated by buyer";
     if (type === "auto_complete") return "Automatically completed";
     return labelText(event.to_status || "status");
   }
@@ -411,10 +412,13 @@
   function sharedOrderActions(job) {
     if (!job || ["complete", "refunded", "cancelled"].includes(job.status)) return "";
     const messageForm = `<div class="order-message-form"><label>Message printer<textarea data-customer-job-message rows="3" placeholder="Ask a question or add order information before completion"></textarea></label><button class="button button-secondary secondary" type="button" data-send-job-message="${escapeHtml(job.id)}">Send message</button></div>`;
+    const escalationForm = job.status === "posted"
+      ? `<div class="order-escalation-form"><label>Delivery problem or escalation<textarea data-job-escalation rows="3" placeholder="Tell us what has not arrived or what needs reviewing"></textarea></label><button class="button button-secondary secondary danger" type="button" data-escalate-print-job="${escapeHtml(job.id)}">Escalate delivery issue</button></div>`
+      : "";
     const ratingForm = job.status === "posted"
       ? `<div class="order-rating-form"><h5>Confirm receipt</h5><p>Rate this print before completing the order. Completion releases the printer payout.</p><label>Rating<select data-job-rating required><option value="">Choose rating</option><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Okay</option><option value="2">2 - Poor</option><option value="1">1 - Bad</option></select></label><label>Review note<textarea data-job-review rows="3" placeholder="Optional note about the print"></textarea></label><button class="button button-primary primary" type="button" data-complete-print-job="${escapeHtml(job.id)}">Confirm delivery and complete order</button></div>`
       : "";
-    return `${messageForm}${ratingForm}`;
+    return `${messageForm}${escalationForm}${ratingForm}`;
   }
 
   async function reloadSharedOrders(selectedOrderId = "") {
@@ -426,11 +430,22 @@
   async function handleSharedOrderAction(event) {
     const completeButton = event.target.closest("[data-complete-print-job]");
     const messageButton = event.target.closest("[data-send-job-message]");
-    if (!completeButton && !messageButton) return;
-    const button = completeButton || messageButton;
+    const escalateButton = event.target.closest("[data-escalate-print-job]");
+    if (!completeButton && !messageButton && !escalateButton) return;
+    const button = completeButton || messageButton || escalateButton;
     button.disabled = true;
     try {
       const activeOrderId = document.querySelector("[data-shared-order-active]")?.dataset.sharedOrderActive || "";
+      if (escalateButton) {
+        const reason = escalateButton.closest(".order-escalation-form").querySelector("[data-job-escalation]").value;
+        await accountFetch(`/api/account/print-jobs/${encodeURIComponent(escalateButton.dataset.escalatePrintJob)}/escalate`, {
+          method: "POST",
+          body: JSON.stringify({ reason })
+        });
+        await reloadSharedOrders(activeOrderId);
+        toast("Delivery issue escalated");
+        return;
+      }
       if (messageButton) {
         const note = messageButton.closest(".order-message-form").querySelector("[data-customer-job-message]").value;
         await accountFetch(`/api/account/print-jobs/${encodeURIComponent(messageButton.dataset.sendJobMessage)}/message`, {

@@ -260,6 +260,7 @@ test("marketplace payouts remain held until completion", async () => {
   assert.match(schema, /provider_transfers/);
   assert.match(schema, /refund_locked_at/);
   assert.match(schema, /delivery_chaser/);
+  assert.match(schema, /customer_escalation/);
   assert.match(schema, /email_outbox/);
   assert.match(schema, /enforce_provider_transfer_completion/);
   assert.match(schema, /unique nulls not distinct \(user_id, entitlement_type, brand_key, generator_type\)/);

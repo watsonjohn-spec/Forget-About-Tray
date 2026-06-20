@@ -832,6 +832,46 @@ test("posted jobs receive seven buyer chasers before automatic payout release", 
   assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.event_type === "auto_complete"));
 });
 
+test("buyer escalation prevents automatic payout release", async () => {
+  const { metadata } = await createPaidMarketplacePrint("Escalated delivery tray");
+  const job = printJobs.find((row) => row.id === metadata.printJobId);
+  await api(`/api/factory/jobs/${job.id}/status`, "paid-token", { status: "producing", note: "Starting production." });
+  await api(`/api/factory/jobs/${job.id}/status`, "paid-token", {
+    status: "posted",
+    trackingReference: "RM-ESC-1",
+    note: "Posted to the buyer."
+  });
+  const day = 24 * 60 * 60 * 1000;
+  job.posted_at = new Date(Date.now() - 12 * day).toISOString();
+  for (let index = 1; index <= 7; index += 1) {
+    printJobEvents.push({
+      id: `manual-chaser-${index}`,
+      print_job_id: job.id,
+      actor_user_id: null,
+      from_status: "posted",
+      to_status: "posted",
+      event_type: "delivery_chaser",
+      note: `Delivery confirmation chaser ${index}/7 queued.`,
+      created_at: new Date(Date.now() - (8 - index) * day).toISOString()
+    });
+  }
+
+  const escalationResponse = await api(`/api/account/print-jobs/${job.id}/escalate`, "paid-token", { reason: "The package has not arrived." });
+  assert.equal(escalationResponse.status, 200);
+  assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.event_type === "customer_escalation"));
+
+  const releaseResponse = await fetch(`${baseUrl}/api/tasks/auto-complete-posted`, {
+    method: "POST",
+    headers: { Authorization: "Bearer test-task-secret" }
+  });
+  assert.equal(releaseResponse.status, 200);
+  const release = await releaseResponse.json();
+  assert.equal(release.completed, 0);
+  assert.equal(release.chasers, 0);
+  assert.equal(job.status, "posted");
+  assert.equal(job.payout_status, "held");
+});
+
 test("providers can decline paid jobs before production and trigger a buyer refund", async () => {
   const { metadata } = await createPaidMarketplacePrint("Decline test tray");
   const job = printJobs.find((row) => row.id === metadata.printJobId);

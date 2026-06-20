@@ -735,6 +735,8 @@ async function autoCompleteStalePostedJobs() {
       const expectedDelivery = expectedDeliveryDate(job);
       if (!expectedDelivery || now < expectedDelivery.getTime()) continue;
       const chaserEvents = deliveryChaserEvents(job);
+      const escalated = (Array.isArray(job.print_job_events) ? job.print_job_events : []).some((event) => event.event_type === "customer_escalation");
+      if (escalated) continue;
       const lastChaserAt = chaserEvents.at(-1)?.created_at ? new Date(chaserEvents.at(-1).created_at).getTime() : 0;
       const releaseAt = autoCompleteAfterDate(job);
       if (chaserEvents.length >= printConfirmationChaserDays && releaseAt && now >= releaseAt.getTime()) {
@@ -1039,6 +1041,31 @@ async function addCustomerJobMessage(request, response, jobId) {
     sendJson(response, 200, { saved: true }, origin);
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Message could not be sent." }, origin);
+  }
+}
+
+async function escalateCustomerPrintJob(request, response, jobId) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const jobs = await supabaseAdmin(`print_jobs?select=*&id=eq.${encodeURIComponent(jobId)}&customer_user_id=eq.${encodeURIComponent(user.id)}&limit=1`);
+    const job = jobs?.[0];
+    if (!job) throw new Error("Print job not found.");
+    if (["complete", "refunded", "cancelled"].includes(job.status)) throw new Error("This order is already closed.");
+    const body = await readJson(request);
+    const note = cleanText(body.reason || body.note, 800);
+    if (!note) throw new Error("Tell us what needs escalating.");
+    await createPrintJobEvent({
+      printJobId: job.id,
+      actorUserId: user.id,
+      fromStatus: job.status,
+      toStatus: job.status,
+      note,
+      eventType: "customer_escalation"
+    });
+    sendJson(response, 200, { escalated: true }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Order escalation could not be saved." }, origin);
   }
 }
 
@@ -2081,6 +2108,11 @@ createServer(async (request, response) => {
   const customerMessageJobRoute = pathname.match(/^\/api\/account\/print-jobs\/([0-9a-f-]+)\/message$/i);
   if (request.method === "POST" && customerMessageJobRoute) {
     await addCustomerJobMessage(request, response, customerMessageJobRoute[1]);
+    return;
+  }
+  const customerEscalateJobRoute = pathname.match(/^\/api\/account\/print-jobs\/([0-9a-f-]+)\/escalate$/i);
+  if (request.method === "POST" && customerEscalateJobRoute) {
+    await escalateCustomerPrintJob(request, response, customerEscalateJobRoute[1]);
     return;
   }
 

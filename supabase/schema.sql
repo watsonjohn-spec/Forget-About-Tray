@@ -404,7 +404,7 @@ create table if not exists public.print_job_events (
 alter table public.print_job_events add column if not exists event_type text not null default 'status';
 alter table public.print_job_events drop constraint if exists print_job_events_event_type_check;
 alter table public.print_job_events add constraint print_job_events_event_type_check
-  check (event_type in ('status', 'provider_message', 'customer_message', 'decline', 'auto_complete', 'delivery_chaser'));
+  check (event_type in ('status', 'provider_message', 'customer_message', 'decline', 'auto_complete', 'delivery_chaser', 'customer_escalation'));
 
 create table if not exists public.email_outbox (
   id uuid primary key default gen_random_uuid(),
