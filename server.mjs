@@ -21,6 +21,8 @@ const marketplaceQuoteMinutes = Number(process.env.MARKETPLACE_QUOTE_MINUTES || 
 const marketplaceIncludePending = process.env.MARKETPLACE_INCLUDE_PENDING === "true";
 const plaCostPerGramPence = Number(process.env.PLA_COST_PER_GRAM_PENCE || 2);
 const printAutoCompleteDays = Number(process.env.PRINT_AUTO_COMPLETE_DAYS || 14);
+const printDeliveryFallbackDays = Number(process.env.PRINT_DELIVERY_FALLBACK_DAYS || 3);
+const printConfirmationChaserDays = Number(process.env.PRINT_CONFIRMATION_CHASER_DAYS || 7);
 const taskRunnerSecret = process.env.TASK_RUNNER_SECRET || "";
 const unlimitedExportsPrice = Number(process.env.UNLIMITED_EXPORTS_PRICE_PENCE || 500);
 const stripeApiBase = process.env.STRIPE_API_BASE || "https://api.stripe.com";
@@ -580,6 +582,96 @@ async function createPrintJobEvent(event) {
   }
 }
 
+function oneDayMs() {
+  return 24 * 60 * 60 * 1000;
+}
+
+function nestedRow(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function jobPostageDays(job) {
+  const quote = nestedRow(job.print_quotes);
+  const snapshotDays = job.design_snapshot?.fulfillment?.postageDays;
+  const days = Number(quote?.postage_days || snapshotDays || printDeliveryFallbackDays);
+  return Number.isFinite(days) && days > 0 ? days : printDeliveryFallbackDays;
+}
+
+function expectedDeliveryDate(job) {
+  if (!job.posted_at) return null;
+  return new Date(new Date(job.posted_at).getTime() + jobPostageDays(job) * oneDayMs());
+}
+
+function autoCompleteAfterDate(job) {
+  const expected = expectedDeliveryDate(job);
+  if (!expected) return null;
+  return new Date(expected.getTime() + printConfirmationChaserDays * oneDayMs());
+}
+
+function customerSnapshot(job) {
+  const order = nestedRow(job.orders);
+  return nestedRow(order?.order_customer_snapshots);
+}
+
+function customerEmailForJob(job) {
+  return cleanText(customerSnapshot(job)?.customer_email || job.design_snapshot?.customerEmail || "", 320);
+}
+
+function deliveryChaserEvents(job) {
+  return (Array.isArray(job.print_job_events) ? job.print_job_events : [])
+    .filter((event) => event.event_type === "delivery_chaser")
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+}
+
+async function queueEmailOutbox(row) {
+  const saved = await supabaseAdmin("email_outbox", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      user_id: row.userId || null,
+      print_job_id: row.printJobId || null,
+      recipient_email: row.recipientEmail,
+      email_type: row.emailType,
+      subject: row.subject,
+      body_text: row.bodyText,
+      status: "queued"
+    })
+  });
+  return saved?.[0] || null;
+}
+
+async function sendDeliveryConfirmationChaser(job, chaserNumber) {
+  const recipientEmail = customerEmailForJob(job);
+  if (!recipientEmail) throw new Error("Buyer email is missing, so a confirmation chaser cannot be sent.");
+  const expected = expectedDeliveryDate(job);
+  const releaseAt = autoCompleteAfterDate(job);
+  const expectedLabel = expected ? expected.toLocaleDateString("en-GB", { dateStyle: "medium", timeZone: "Europe/London" }) : "the expected delivery date";
+  const releaseLabel = releaseAt ? releaseAt.toLocaleDateString("en-GB", { dateStyle: "medium", timeZone: "Europe/London" }) : "the final reminder date";
+  const name = cleanText(job.design_snapshot?.name || "your print order", 120);
+  const subject = `Please confirm delivery for ${name}`;
+  const bodyText = [
+    `Your Forget About print order "${name}" was expected to arrive by ${expectedLabel}.`,
+    "Please confirm receipt in your account order history, or reply/escalate if it has not arrived or there is a problem.",
+    `This is reminder ${chaserNumber} of ${printConfirmationChaserDays}. If we do not receive confirmation or an escalation, the order will be marked complete and the printer payout released after ${releaseLabel}.`
+  ].join("\n\n");
+  const email = await queueEmailOutbox({
+    userId: job.customer_user_id,
+    printJobId: job.id,
+    recipientEmail,
+    emailType: "delivery_confirmation_chaser",
+    subject,
+    bodyText
+  });
+  await createPrintJobEvent({
+    printJobId: job.id,
+    fromStatus: job.status,
+    toStatus: job.status,
+    note: `Delivery confirmation chaser ${chaserNumber}/${printConfirmationChaserDays} queued for ${recipientEmail}.`,
+    eventType: "delivery_chaser"
+  });
+  return { jobId: job.id, emailId: email?.id || null, chaserNumber };
+}
+
 async function updateProviderRating(printerProfileId) {
   const rows = await supabaseAdmin(`provider_reviews?select=rating&printer_profile_id=eq.${encodeURIComponent(printerProfileId)}`);
   const count = rows?.length || 0;
@@ -633,21 +725,33 @@ async function completePrintJob(job, { actorUserId = null, note = "Customer conf
 }
 
 async function autoCompleteStalePostedJobs() {
-  if (!Number.isFinite(printAutoCompleteDays) || printAutoCompleteDays <= 0) return [];
-  const cutoff = new Date(Date.now() - printAutoCompleteDays * 24 * 60 * 60 * 1000).toISOString();
-  const jobs = await optionalSupabaseAdmin(`print_jobs?select=*&status=eq.posted&payout_status=eq.held&posted_at=lt.${encodeURIComponent(cutoff)}&order=posted_at.asc&limit=25`);
+  if (!Number.isFinite(printConfirmationChaserDays) || printConfirmationChaserDays <= 0) return { completed: [], chasers: [] };
+  const jobs = await optionalSupabaseAdmin("print_jobs?select=*,print_quotes(*),orders(*,order_customer_snapshots(*)),print_job_events(*)&status=eq.posted&payout_status=eq.held&order=posted_at.asc&limit=50");
   const completed = [];
+  const chasers = [];
+  const now = Date.now();
   for (const job of jobs || []) {
     try {
-      completed.push(await completePrintJob(job, {
-        automatic: true,
-        note: `Automatically completed after ${printAutoCompleteDays} days without buyer confirmation.`
-      }));
+      const expectedDelivery = expectedDeliveryDate(job);
+      if (!expectedDelivery || now < expectedDelivery.getTime()) continue;
+      const chaserEvents = deliveryChaserEvents(job);
+      const lastChaserAt = chaserEvents.at(-1)?.created_at ? new Date(chaserEvents.at(-1).created_at).getTime() : 0;
+      const releaseAt = autoCompleteAfterDate(job);
+      if (chaserEvents.length >= printConfirmationChaserDays && releaseAt && now >= releaseAt.getTime()) {
+        completed.push(await completePrintJob(job, {
+          automatic: true,
+          note: `Automatically completed after expected delivery and ${printConfirmationChaserDays} daily buyer confirmation chasers without confirmation or escalation.`
+        }));
+        continue;
+      }
+      if (chaserEvents.length < printConfirmationChaserDays && (!lastChaserAt || now - lastChaserAt >= oneDayMs())) {
+        chasers.push(await sendDeliveryConfirmationChaser(job, chaserEvents.length + 1));
+      }
     } catch {
       // A failed auto-release should not break ordinary dashboard or account loading.
     }
   }
-  return completed;
+  return { completed, chasers };
 }
 
 function taskSecretMatches(value) {
@@ -663,9 +767,11 @@ async function runAutoCompleteTask(request, response) {
   const headerSecret = request.headers["x-forget-about-task-secret"];
   if (!taskSecretMatches(bearer || headerSecret)) return sendJson(response, 403, { error: "Scheduled task is not authorized." });
   try {
-    const completed = await autoCompleteStalePostedJobs();
+    const { completed, chasers } = await autoCompleteStalePostedJobs();
     sendJson(response, 200, {
       completed: completed.length,
+      chasers: chasers.length,
+      chaserResults: chasers,
       results: completed.map((result) => ({
         jobId: result.job?.id,
         transferReleased: Boolean(result.transfer?.released),
@@ -1139,12 +1245,19 @@ async function createMarketplaceQuotes(request, response) {
       const printDays = Math.max(1, Math.ceil(printHours / 24));
       const handlingDays = Number(profile.lead_time_days);
       const postageDays = Number(capability.postage_days || 3);
+      const fulfillment = {
+        handlingDays,
+        printDays,
+        postageService: capability.postage_service || "",
+        postageDays,
+        leadTimeDays: handlingDays + printDays + postageDays
+      };
       return {
         customer_user_id: user.id,
         printer_profile_id: profile.id,
         brand_key: brand.key,
         generator_type: generator.type,
-        design_snapshot: { ...designSnapshot, estimatedWeightGrams: weightGrams, estimatedPrintHours: Number(printHours.toFixed(1)) },
+        design_snapshot: { ...designSnapshot, estimatedWeightGrams: weightGrams, estimatedPrintHours: Number(printHours.toFixed(1)), fulfillment },
         colour_key: capability.colour_key,
         material: capability.material,
         estimated_weight_grams: weightGrams,
@@ -1162,7 +1275,7 @@ async function createMarketplaceQuotes(request, response) {
         total_inc_vat_pence: providerShare + commission + platformFee + vatAmount,
         provider_share_pence: providerShare,
         currency,
-        lead_time_days: handlingDays + printDays + postageDays,
+        lead_time_days: fulfillment.leadTimeDays,
         expires_at: expiresAt
       };
     });
@@ -1553,7 +1666,7 @@ async function exportAccountData(request, response) {
   try {
     const user = await authenticateUser(request);
     const userFilter = encodeURIComponent(user.id);
-    const [profiles, designs, projects, trays, armies, orders, entitlements, usageAllowances, accountDevices, printQuotes, printJobs, privacyRequests] = await Promise.all([
+    const [profiles, designs, projects, trays, armies, orders, entitlements, usageAllowances, accountDevices, printQuotes, printJobs, emailOutbox, privacyRequests] = await Promise.all([
       supabaseAdmin(`profiles?select=*&user_id=eq.${userFilter}&limit=1`),
       optionalSupabaseAdmin(`designs?select=*&user_id=eq.${userFilter}&order=updated_at.desc`),
       optionalSupabaseAdmin(`projects?select=*&user_id=eq.${userFilter}&order=updated_at.desc`),
@@ -1565,6 +1678,7 @@ async function exportAccountData(request, response) {
       optionalSupabaseAdmin(`account_devices?select=id,friendly_name,first_seen_at,last_seen_at,revoked_at&user_id=eq.${userFilter}`),
       optionalSupabaseAdmin(`print_quotes?select=*&customer_user_id=eq.${userFilter}`),
       optionalSupabaseAdmin(`print_jobs?select=*,print_job_events(*)&customer_user_id=eq.${userFilter}`),
+      optionalSupabaseAdmin(`email_outbox?select=id,print_job_id,recipient_email,email_type,subject,body_text,status,created_at,sent_at,error&user_id=eq.${userFilter}&order=created_at.desc`),
       supabaseAdmin(`privacy_requests?select=id,request_type,status,requested_at,completed_at&user_id=eq.${userFilter}`)
     ]);
     sendJson(response, 200, {
@@ -1583,6 +1697,7 @@ async function exportAccountData(request, response) {
       accountDevices: accountDevices || [],
       printQuotes: printQuotes || [],
       printJobs: printJobs || [],
+      emailOutbox: emailOutbox || [],
       privacyRequests: privacyRequests || [],
       retainedOrderRecords: (orders || []).map((order) => ({
         id: order.id,

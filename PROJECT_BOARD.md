@@ -8,7 +8,7 @@ This board tracks the current development workstreams. GitHub issue links are th
 | --- | --- | --- |
 | Print Factory MVP | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/1 | First slice complete: cleaned factory status/payout filters, brand markers, order detail labels, and shared customer order actions. |
 | Shared Generator Shell | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/2 | First slice complete: exposed `window.forgetSharedShell` and documented the shared account/order shell rule. |
-| Core Customer Journey Hardening | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/3 | First slice complete: lifecycle checks now cover Stripe-confirmed print orders, factory production/posting, customer messaging, customer rating, provider payout release, and provider-decline refunds. |
+| Core Customer Journey Hardening | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/3 | Second slice complete: posted jobs now queue seven daily buyer delivery-confirmation chasers before automatic completion and payout release. |
 | Preview Quality and Visual Trust | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/4 | First slice complete: shared preview renderer now adds drag hints, filament accenting, dimension callouts, and 250mm split-plate guides across generator previews. |
 | Productise Generators by Brand | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/5 | First slice complete: central registry now carries brand taglines, factory labels, generator capability metadata, default filament metadata, and validation for enabled brand/generator pairs. |
 | Storage, Data Retention, GDPR and VAT Records | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/6 | Second slice complete: uploaded STL saves now store the file in private Supabase Storage and keep only storage metadata in the saved design. |
@@ -20,7 +20,7 @@ This board tracks the current development workstreams. GitHub issue links are th
 | --- | --- | --- |
 | Print Factory MVP | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/1 | Add provider-side refund/exception history, richer delivery tracking, and payout reconciliation views. |
 | Shared Generator Shell | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/2 | Continue removing generator-local account/export copies once each branded UI has parity. |
-| Core Customer Journey Hardening | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/3 | Add expected-delivery calculation, daily buyer confirmation chasers for seven days, escalation warning copy, then scheduled payout release if no confirmation arrives. |
+| Core Customer Journey Hardening | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/3 | Wire the email outbox to a real provider, add escalation handling, and show expected-delivery/chaser status in account order detail. |
 | Preview Quality and Visual Trust | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/4 | Add generator-specific visual polish for makeup pegboard/caddy, paint station, stitch tray, and tray storage inserts. |
 | Productise Generators by Brand | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/5 | Use registry metadata to generate the landing directory and reduce hardcoded product tile copy. |
 | Storage, Data Retention, GDPR and VAT Records | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/6 | Add deletion cleanup for stored STL files, legacy embedded-STL migration, and lifecycle rules for old orphaned uploads. |

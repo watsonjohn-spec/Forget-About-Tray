@@ -259,6 +259,8 @@ test("marketplace payouts remain held until completion", async () => {
   assert.match(schema, /payout_status text not null default 'held'/);
   assert.match(schema, /provider_transfers/);
   assert.match(schema, /refund_locked_at/);
+  assert.match(schema, /delivery_chaser/);
+  assert.match(schema, /email_outbox/);
   assert.match(schema, /enforce_provider_transfer_completion/);
   assert.match(schema, /unique nulls not distinct \(user_id, entitlement_type, brand_key, generator_type\)/);
   assert.equal(customerCanCancel("order_made"), true);

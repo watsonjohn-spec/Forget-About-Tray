@@ -29,6 +29,7 @@ const stripeTransfers = [];
 const refundRequests = [];
 const privacyRequests = [];
 const storageObjects = new Map();
+const emailOutbox = [];
 const webhookSecret = "whsec_test_webhook_secret";
 const paymentAccounts = [];
 const stripeAccountRequests = [];
@@ -105,12 +106,15 @@ function selectedPrintJobs(url) {
     && (!printerProfileId || job.printer_profile_id === printerProfileId)
     && (!statusFilter.startsWith("neq.") || job.status !== statusFilter.replace("neq.", ""))
     && (!statusFilter.startsWith("eq.") || job.status === statusFilter.replace("eq.", ""))
-  )).map((job) => ({
-    ...job,
-    orders: orders.find((order) => order.id === job.order_id) || null,
-    print_quotes: printQuotes.find((quote) => quote.id === job.quote_id) || null,
-    print_job_events: printJobEvents.filter((event) => event.print_job_id === job.id)
-  }));
+  )).map((job) => {
+    const order = orders.find((candidate) => candidate.id === job.order_id);
+    return {
+      ...job,
+      orders: order ? { ...order, order_customer_snapshots: orderCustomerSnapshots.filter((snapshot) => snapshot.order_id === order.id) } : null,
+      print_quotes: printQuotes.find((quote) => quote.id === job.quote_id) || null,
+      print_job_events: printJobEvents.filter((event) => event.print_job_id === job.id)
+    };
+  });
 }
 
 function stripeSignature(rawBody) {
@@ -430,6 +434,20 @@ const mockSupabase = createServer(async (request, response) => {
     }
     const printJobId = eqParam(url, "print_job_id");
     return sendJson(response, 200, printJobEvents.filter((event) => !printJobId || event.print_job_id === printJobId));
+  }
+
+  if (url.pathname === "/rest/v1/email_outbox") {
+    if (request.method === "POST") {
+      const saved = {
+        ...(await requestJson(request)),
+        id: `61000000-0000-4000-8000-${String(emailOutbox.length + 1).padStart(12, "0")}`,
+        created_at: new Date().toISOString()
+      };
+      emailOutbox.push(saved);
+      return sendJson(response, 200, [saved]);
+    }
+    const userId = eqParam(url, "user_id");
+    return sendJson(response, 200, emailOutbox.filter((email) => !userId || email.user_id === userId));
   }
 
   if (url.pathname === "/rest/v1/provider_reviews") {
@@ -759,6 +777,59 @@ test("paid marketplace print jobs progress through customer confirmation and pay
   assert.equal(stripeTransfers.at(-1).parameters.get("amount"), String(job.provider_share_pence));
   assert.equal(providerReviews.find((review) => review.print_job_id === job.id).rating, 5);
   assert.equal(printerProfile.rating_count, providerReviews.length);
+});
+
+test("posted jobs receive seven buyer chasers before automatic payout release", async () => {
+  const { metadata } = await createPaidMarketplacePrint("Auto chaser tray");
+  const job = printJobs.find((row) => row.id === metadata.printJobId);
+  await api(`/api/factory/jobs/${job.id}/status`, "paid-token", { status: "producing", note: "Starting production." });
+  await api(`/api/factory/jobs/${job.id}/status`, "paid-token", {
+    status: "posted",
+    trackingReference: "RM-CHASER-1",
+    note: "Posted to the buyer."
+  });
+  const day = 24 * 60 * 60 * 1000;
+  job.posted_at = new Date(Date.now() - 4 * day).toISOString();
+
+  for (let index = 1; index <= 7; index += 1) {
+    const response = await fetch(`${baseUrl}/api/tasks/auto-complete-posted`, {
+      method: "POST",
+      headers: { Authorization: "Bearer test-task-secret" }
+    });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.chasers, 1);
+    assert.equal(result.completed, 0);
+    assert.equal(emailOutbox.filter((email) => email.print_job_id === job.id).length, index);
+    const latestChaser = printJobEvents.filter((event) => event.print_job_id === job.id && event.event_type === "delivery_chaser").at(-1);
+    assert.match(latestChaser.note, new RegExp(`${index}/7`));
+    latestChaser.created_at = new Date(Date.now() - 2 * day).toISOString();
+  }
+  assert.equal(job.status, "posted");
+
+  const readyAccount = {
+    printer_profile_id: printerProfile.id,
+    stripe_connected_account_id: "acct_test_factory_provider",
+    transfers_enabled: true,
+    payouts_enabled: true,
+    onboarding_complete: true
+  };
+  const existingPaymentAccount = paymentAccounts.find((account) => account.printer_profile_id === printerProfile.id);
+  if (existingPaymentAccount) Object.assign(existingPaymentAccount, readyAccount);
+  else paymentAccounts.push({ id: "50000000-0000-4000-8000-000000000123", ...readyAccount });
+  job.posted_at = new Date(Date.now() - 12 * day).toISOString();
+
+  const releaseResponse = await fetch(`${baseUrl}/api/tasks/auto-complete-posted`, {
+    method: "POST",
+    headers: { Authorization: "Bearer test-task-secret" }
+  });
+  assert.equal(releaseResponse.status, 200);
+  const release = await releaseResponse.json();
+  assert.equal(release.chasers, 0);
+  assert.equal(release.completed, 1);
+  assert.equal(job.status, "complete");
+  assert.equal(job.payout_status, "transferred");
+  assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.event_type === "auto_complete"));
 });
 
 test("providers can decline paid jobs before production and trigger a buyer refund", async () => {

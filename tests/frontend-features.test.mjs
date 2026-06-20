@@ -425,6 +425,8 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(serverSource, /STL_UPLOAD_BUCKET/);
   assert.match(serverSource, /\/storage\/v1\/object/);
   assert.match(serverSource, /\/api\/account\/stl-upload/);
+  assert.match(serverSource, /delivery_confirmation_chaser/);
+  assert.match(serverSource, /email_outbox/);
   assert.match(serverSource, /forget-about-account-data\.v1/);
   assert.match(serverSource, /retentionNotice/);
   assert.match(uploadedPrint, /desiredColourKey/);

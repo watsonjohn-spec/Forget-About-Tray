@@ -401,8 +401,25 @@ create table if not exists public.print_job_events (
   created_at timestamptz not null default now()
 );
 
-alter table public.print_job_events add column if not exists event_type text not null default 'status'
-  check (event_type in ('status', 'provider_message', 'customer_message', 'decline', 'auto_complete'));
+alter table public.print_job_events add column if not exists event_type text not null default 'status';
+alter table public.print_job_events drop constraint if exists print_job_events_event_type_check;
+alter table public.print_job_events add constraint print_job_events_event_type_check
+  check (event_type in ('status', 'provider_message', 'customer_message', 'decline', 'auto_complete', 'delivery_chaser'));
+
+create table if not exists public.email_outbox (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  print_job_id uuid references public.print_jobs(id) on delete set null,
+  recipient_email text not null,
+  email_type text not null,
+  subject text not null,
+  body_text text not null,
+  status text not null default 'queued' check (status in ('queued', 'sent', 'failed', 'skipped')),
+  provider_message_id text,
+  created_at timestamptz not null default now(),
+  sent_at timestamptz,
+  error text
+);
 
 create table if not exists public.provider_transfers (
   id uuid primary key default gen_random_uuid(),
@@ -510,6 +527,8 @@ create index if not exists designs_generator_type_idx on public.designs(generato
 create index if not exists entitlements_brand_key_idx on public.entitlements(brand_key);
 create index if not exists entitlements_generator_type_idx on public.entitlements(generator_type);
 create index if not exists entitlements_source_order_id_idx on public.entitlements(source_order_id);
+create index if not exists email_outbox_user_id_idx on public.email_outbox(user_id, created_at desc);
+create index if not exists email_outbox_print_job_id_idx on public.email_outbox(print_job_id, created_at desc);
 create index if not exists generator_catalogues_brand_key_idx on public.generator_catalogues(brand_key);
 create index if not exists orders_brand_key_idx on public.orders(brand_key);
 create index if not exists orders_generator_type_idx on public.orders(generator_type);
@@ -581,6 +600,7 @@ alter table public.print_jobs enable row level security;
 alter table public.print_job_events enable row level security;
 alter table public.provider_transfers enable row level security;
 alter table public.provider_reviews enable row level security;
+alter table public.email_outbox enable row level security;
 
 drop policy if exists "Users can view their profile" on public.profiles;
 create policy "Users can view their profile" on public.profiles
@@ -733,6 +753,10 @@ create policy "Participants view print job events" on public.print_job_events
     )
   );
 
+drop policy if exists "Users view their email outbox" on public.email_outbox;
+create policy "Users view their email outbox" on public.email_outbox
+  for select to authenticated using ((select auth.uid()) = user_id);
+
 drop policy if exists "Printers view their transfers" on public.provider_transfers;
 create policy "Printers view their transfers" on public.provider_transfers
   for select to authenticated using (
@@ -747,10 +771,10 @@ grant select on public.profiles, public.orders, public.order_items, public.order
 grant select, insert, update, delete on public.tray_designs, public.army_lists to authenticated;
 grant select on public.brands, public.generator_definitions, public.brand_generators, public.generator_catalogues, public.generator_catalogue_items, public.printer_profiles, public.printer_capabilities, public.provider_reviews to anon, authenticated;
 grant select, insert, update, delete on public.designs, public.projects to authenticated;
-grant select on public.usage_allowances, public.account_devices, public.printer_payment_accounts, public.print_quotes, public.print_jobs, public.print_job_events, public.provider_transfers to authenticated;
+grant select on public.usage_allowances, public.account_devices, public.printer_payment_accounts, public.print_quotes, public.print_jobs, public.print_job_events, public.provider_transfers, public.email_outbox to authenticated;
 grant insert, update, delete on public.printer_capabilities to authenticated;
 grant update (display_name, description, based_in, postcode_area, lead_time_days, accepting_jobs, updated_at) on public.printer_profiles to authenticated;
 revoke update on public.profiles from authenticated;
 grant update (display_name, default_address, marketing_consent, updated_at) on public.profiles to authenticated;
-grant all on public.profiles, public.tray_designs, public.army_lists, public.orders, public.order_items, public.order_customer_snapshots, public.entitlements, public.stripe_events, public.privacy_requests, public.brands, public.generator_definitions, public.brand_generators, public.designs, public.projects, public.generator_catalogues, public.generator_catalogue_items, public.usage_allowances, public.account_devices, public.printer_profiles, public.printer_payment_accounts, public.printer_capabilities, public.print_quotes, public.print_jobs, public.print_job_events, public.provider_transfers, public.provider_reviews to service_role;
+grant all on public.profiles, public.tray_designs, public.army_lists, public.orders, public.order_items, public.order_customer_snapshots, public.entitlements, public.stripe_events, public.privacy_requests, public.brands, public.generator_definitions, public.brand_generators, public.designs, public.projects, public.generator_catalogues, public.generator_catalogue_items, public.usage_allowances, public.account_devices, public.printer_profiles, public.printer_payment_accounts, public.printer_capabilities, public.print_quotes, public.print_jobs, public.print_job_events, public.provider_transfers, public.provider_reviews, public.email_outbox to service_role;
 grant usage, select on sequence public.order_invoice_number_seq to service_role;
