@@ -150,6 +150,15 @@ test("uploaded print, paint, and stitch generators are registered brands", () =>
   assert.ok(publicPlatformConfig.brands.some((candidate) => candidate.key === "stitch"));
 });
 
+test("Supabase schema defines private per-user STL object storage", async () => {
+  const schema = await readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8");
+  assert.match(schema, /user-stl-uploads/);
+  assert.match(schema, /storage\.buckets/);
+  assert.match(schema, /storage\.objects/);
+  assert.match(schema, /storage\.foldername\(name\)\)\[1\]/);
+  assert.match(schema, /file_size_limit/);
+});
+
 test("generator contract validates parameters and renders an STL", () => {
   const { generator } = resolvePlatformContext({ brandKey: "tray" });
   const source = {

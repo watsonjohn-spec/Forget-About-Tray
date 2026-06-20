@@ -1,5 +1,33 @@
 create extension if not exists pgcrypto;
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('user-stl-uploads', 'user-stl-uploads', false, 12000000, array['model/stl', 'application/octet-stream'])
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Users can read their stored STL uploads" on storage.objects;
+create policy "Users can read their stored STL uploads"
+  on storage.objects for select to authenticated
+  using (bucket_id = 'user-stl-uploads' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+drop policy if exists "Users can insert their stored STL uploads" on storage.objects;
+create policy "Users can insert their stored STL uploads"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'user-stl-uploads' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+drop policy if exists "Users can update their stored STL uploads" on storage.objects;
+create policy "Users can update their stored STL uploads"
+  on storage.objects for update to authenticated
+  using (bucket_id = 'user-stl-uploads' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'user-stl-uploads' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+drop policy if exists "Users can delete their stored STL uploads" on storage.objects;
+create policy "Users can delete their stored STL uploads"
+  on storage.objects for delete to authenticated
+  using (bucket_id = 'user-stl-uploads' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   email text not null,

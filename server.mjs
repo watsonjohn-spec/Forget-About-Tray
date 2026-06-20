@@ -38,6 +38,8 @@ const allowPrototypeSecretFallback = process.env.ALLOW_PROTOTYPE_SECRET_FALLBACK
 const downloadTokenSecret = process.env.DOWNLOAD_TOKEN_SECRET || (allowPrototypeSecretFallback ? stripeKey : "");
 const accountDeviceLimit = Number(process.env.ACCOUNT_DEVICE_LIMIT || 3);
 const enforceAccountDeviceLimit = process.env.ENFORCE_ACCOUNT_DEVICE_LIMIT === "true";
+const stlUploadBucket = process.env.STL_UPLOAD_BUCKET || "user-stl-uploads";
+const stlUploadMaxBytes = Number(process.env.STL_UPLOAD_MAX_BYTES || 12_000_000);
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -154,17 +156,17 @@ function checkoutOrigin(request) {
   return checkoutOriginAllowed(request) ? request.headers.origin || "" : "";
 }
 
-async function readBody(request) {
+async function readBody(request, maximumBytes = 1_000_000) {
   let body = "";
   for await (const chunk of request) {
     body += chunk;
-    if (body.length > 1_000_000) throw new Error("Request too large");
+    if (body.length > maximumBytes) throw new Error("Request too large");
   }
   return body;
 }
 
-async function readJson(request) {
-  return JSON.parse((await readBody(request)) || "{}");
+async function readJson(request, maximumBytes) {
+  return JSON.parse((await readBody(request, maximumBytes)) || "{}");
 }
 
 function downloadFingerprint(config, name, brandKey = "tray", generatorType = "movement_tray") {
@@ -225,6 +227,42 @@ async function supabaseAdmin(path, options = {}) {
   return body;
 }
 
+function safeStorageFileName(name) {
+  const base = cleanText(name || "uploaded-model.stl", 120)
+    .replace(/[^a-z0-9._-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "uploaded-model.stl";
+  return base.toLowerCase().endsWith(".stl") ? base : `${base}.stl`;
+}
+
+function encodeStoragePath(path) {
+  return path.split("/").map((part) => encodeURIComponent(part)).join("/");
+}
+
+function storageObjectUrl(path) {
+  return `${supabaseUrl}/storage/v1/object/${encodeURIComponent(stlUploadBucket)}/${encodeStoragePath(path)}`;
+}
+
+function stlUploadBytes(value) {
+  const raw = String(value || "").replace(/^data:[^;]+;base64,/i, "");
+  const bytes = Buffer.from(raw, "base64");
+  if (!raw || bytes.length === 0) throw new Error("Upload an STL file before saving.");
+  if (bytes.length > stlUploadMaxBytes) throw new Error(`STL uploads are limited to ${Math.round(stlUploadMaxBytes / 1_000_000)}MB.`);
+  return bytes;
+}
+
+async function storageRequest(path, options = {}) {
+  if (!supabaseReady()) throw new Error("Account service is not configured.");
+  return fetch(storageObjectUrl(path), {
+    ...options,
+    headers: {
+      apikey: supabaseSecretKey,
+      Authorization: `Bearer ${supabaseSecretKey}`,
+      ...(options.headers || {})
+    }
+  });
+}
+
 async function optionalSupabaseAdmin(path, options = {}) {
   try {
     return await supabaseAdmin(path, options);
@@ -282,6 +320,69 @@ async function accountOrders(request, response) {
     sendJson(response, 200, rows || [], origin);
   } catch (error) {
     sendJson(response, 401, { error: error.message || "Orders could not be loaded." }, origin);
+  }
+}
+
+async function uploadAccountStl(request, response) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const uploadBodyLimit = Math.ceil(stlUploadMaxBytes * 1.45) + 4096;
+    const body = await readJson(request, uploadBodyLimit);
+    const bytes = stlUploadBytes(body.stlBase64);
+    const fileName = safeStorageFileName(body.fileName);
+    const path = `${user.id}/${Date.now()}-${randomUUID()}-${fileName}`;
+    const storageResponse = await storageRequest(path, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "model/stl",
+        "Cache-Control": "private, max-age=31536000",
+        "x-upsert": "false"
+      },
+      body: bytes
+    });
+    if (!storageResponse.ok) {
+      const detail = await storageResponse.json().catch(async () => ({ message: await storageResponse.text().catch(() => "") }));
+      throw new Error(detail?.message || detail?.error || `Supabase Storage upload failed. Check bucket ${stlUploadBucket} exists.`);
+    }
+    sendJson(response, 200, {
+      storageProvider: "supabase-storage",
+      bucket: stlUploadBucket,
+      path,
+      fileName,
+      sizeBytes: bytes.length,
+      contentType: "model/stl"
+    }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "STL upload failed." }, origin);
+  }
+}
+
+async function downloadAccountStl(request, response, requestUrl) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateUser(request);
+    const path = cleanText(requestUrl.searchParams.get("path"), 500);
+    if (!path || !path.startsWith(`${user.id}/`)) {
+      response.writeHead(403, {
+        "Content-Type": "application/json; charset=utf-8",
+        ...(origin ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin" } : {})
+      });
+      response.end(JSON.stringify({ error: "Stored STL not found for this account." }));
+      return;
+    }
+    const storageResponse = await storageRequest(path);
+    if (!storageResponse.ok) throw new Error("Stored STL could not be loaded.");
+    const bytes = Buffer.from(await storageResponse.arrayBuffer());
+    response.writeHead(200, {
+      "Content-Type": storageResponse.headers.get("content-type") || "model/stl",
+      "Content-Length": String(bytes.length),
+      "Cache-Control": "no-store",
+      ...(origin ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin" } : {})
+    });
+    response.end(bytes);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "STL download failed." }, origin);
   }
 }
 
@@ -1781,6 +1882,14 @@ createServer(async (request, response) => {
   }
   if (request.method === "GET" && pathname === "/api/account/orders") {
     await accountOrders(request, response);
+    return;
+  }
+  if (request.method === "POST" && pathname === "/api/account/stl-upload") {
+    await uploadAccountStl(request, response);
+    return;
+  }
+  if (request.method === "GET" && pathname === "/api/account/stl-upload") {
+    await downloadAccountStl(request, response, requestUrl);
     return;
   }
   if (request.method === "POST" && pathname === "/api/account/use-free-export") {

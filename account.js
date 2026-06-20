@@ -433,6 +433,24 @@
     return responseJson(response);
   }
 
+  async function uploadStlFile({ fileName, stlBase64 }) {
+    const response = await fetch(`${apiBase()}/api/account/stl-upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+      body: JSON.stringify({ fileName, stlBase64 })
+    });
+    return responseJson(response);
+  }
+
+  async function downloadStlFile(storagePath) {
+    const response = await fetch(`${apiBase()}/api/account/stl-upload?path=${encodeURIComponent(storagePath)}`, {
+      headers: await authHeaders()
+    });
+    if (response.ok) return response.arrayBuffer();
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.msg || body.message || body.error_description || body.error || "STL download failed.");
+  }
+
   async function importLocalData(trays, armies) {
     const marker = `forget-about-cloud-imported-${brandKey()}-${generatorType()}-${user.id}`;
     if (localStorage.getItem(marker) === "true") return;
@@ -494,6 +512,8 @@
     exportAccountData,
     loadSecurityStatus,
     requestAccountDeletion,
+    uploadStlFile,
+    downloadStlFile,
     importLocalData,
     authHeaders,
     authType: () => authType,

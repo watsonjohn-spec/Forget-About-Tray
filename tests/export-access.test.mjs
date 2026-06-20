@@ -28,6 +28,7 @@ const providerReviews = [];
 const stripeTransfers = [];
 const refundRequests = [];
 const privacyRequests = [];
+const storageObjects = new Map();
 const webhookSecret = "whsec_test_webhook_secret";
 const paymentAccounts = [];
 const stripeAccountRequests = [];
@@ -212,6 +213,24 @@ const mockSupabase = createServer(async (request, response) => {
   if (url.pathname === "/auth/v1/user") {
     const user = userFromToken(request.headers.authorization);
     return sendJson(response, user ? 200 : 401, user || { message: "invalid token" });
+  }
+
+  if (url.pathname.startsWith("/storage/v1/object/user-stl-uploads/")) {
+    const objectPath = decodeURIComponent(url.pathname.replace("/storage/v1/object/user-stl-uploads/", ""));
+    if (request.method === "PUT") {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const bytes = Buffer.concat(chunks);
+      storageObjects.set(objectPath, { bytes, contentType: request.headers["content-type"] || "model/stl" });
+      return sendJson(response, 200, { Key: objectPath });
+    }
+    if (request.method === "GET") {
+      const object = storageObjects.get(objectPath);
+      if (!object) return sendJson(response, 404, { message: "Object not found" });
+      response.writeHead(200, { "Content-Type": object.contentType });
+      response.end(object.bytes);
+      return undefined;
+    }
   }
 
   if (url.pathname === "/rest/v1/profiles") {
@@ -759,6 +778,33 @@ test("providers can decline paid jobs before production and trigger a buyer refu
   assert.equal(providerTransfers.find((transfer) => transfer.print_job_id === job.id).status, "reversed");
   assert.equal(refundRequests.at(-1).parameters.get("payment_intent"), order.stripe_payment_intent_id);
   assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.event_type === "decline"));
+});
+
+test("uploaded STL files are stored privately and can be reloaded by the owner", async () => {
+  const stl = "solid storage\nendsolid storage\n";
+  const uploadResponse = await api("/api/account/stl-upload", "paid-token", {
+    fileName: "Storage Test.stl",
+    stlBase64: Buffer.from(stl).toString("base64")
+  });
+  assert.equal(uploadResponse.status, 200);
+  const upload = await uploadResponse.json();
+  assert.equal(upload.bucket, "user-stl-uploads");
+  assert.equal(upload.storageProvider, "supabase-storage");
+  assert.match(upload.path, new RegExp(`^${paidUserId}/`));
+  assert.equal(upload.sizeBytes, Buffer.byteLength(stl));
+  assert.equal(storageObjects.get(upload.path).bytes.toString(), stl);
+
+  const downloadResponse = await fetch(`${baseUrl}/api/account/stl-upload?path=${encodeURIComponent(upload.path)}`, {
+    headers: { Authorization: "Bearer paid-token" }
+  });
+  assert.equal(downloadResponse.status, 200);
+  assert.match(downloadResponse.headers.get("content-type"), /model\/stl/);
+  assert.equal(await downloadResponse.text(), stl);
+
+  const blockedResponse = await fetch(`${baseUrl}/api/account/stl-upload?path=${encodeURIComponent(`${freeUserId}/storage-test.stl`)}`, {
+    headers: { Authorization: "Bearer paid-token" }
+  });
+  assert.equal(blockedResponse.status, 403);
 });
 
 test("account data export returns portable records with retention boundaries", async () => {

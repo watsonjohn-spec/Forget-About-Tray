@@ -1,9 +1,11 @@
 let stlBase64 = "";
 let uploadedFileName = "";
 let stlMesh = null;
+let storageRecord = null;
 let previewTurntable = null;
 let currentUploadRef = crypto.randomUUID();
 let savedUploads = [];
+const maxUploadBytes = 12_000_000;
 const filamentColours = [
   { key: "all", name: "Any standard colour", hex: "#8b9499" },
   { key: "black", name: "Black", hex: "#202223" },
@@ -65,7 +67,14 @@ function config() {
     filamentKey: `uploaded-${material}-${colour.key}`,
     filamentHex: colour.hex,
     desiredColourKey: colour.key,
-    preferredPrinterProfileId: document.getElementById("printerPreference").value
+    preferredPrinterProfileId: document.getElementById("printerPreference").value,
+    ...(storageRecord ? {
+      storageProvider: storageRecord.storageProvider || "supabase-storage",
+      storageBucket: storageRecord.bucket,
+      storagePath: storageRecord.path,
+      storageSizeBytes: storageRecord.sizeBytes,
+      storageContentType: storageRecord.contentType || "model/stl"
+    } : {})
   };
 }
 
@@ -246,9 +255,10 @@ function parseBinaryBounds(view) {
 
 async function loadStl(file) {
   if (!file) return;
-  if (file.size > 650_000) throw new Error("Prototype upload limit is 650KB until file storage is added.");
+  if (file.size > maxUploadBytes) throw new Error(`STL uploads are limited to ${Math.round(maxUploadBytes / 1_000_000)}MB.`);
   currentUploadRef = crypto.randomUUID();
   uploadedFileName = file.name;
+  storageRecord = null;
   const buffer = await file.arrayBuffer();
   stlMesh = parseStlMesh(buffer);
   const bounds = stlMesh || parseBinaryBounds(new DataView(buffer));
@@ -277,14 +287,16 @@ function savedMetadata(upload) {
 function isSavedStlUpload(upload) {
   const parameters = savedParameters(upload);
   const metadata = savedMetadata(upload);
-  return Boolean(parameters.stlBase64 || metadata.saved_upload || metadata.uploaded_file_name);
+  return Boolean(parameters.stlBase64 || parameters.storagePath || metadata.saved_upload || metadata.uploaded_file_name || metadata.stl_storage_path);
 }
 
 function renderSavedUploads() {
   document.getElementById("savedUploads").innerHTML = savedUploads.length ? savedUploads.map((upload) => {
     const parameters = savedParameters(upload);
+    const stored = parameters.storagePath || savedMetadata(upload).stl_storage_path;
+    const storageLabel = stored ? "Stored securely" : "Legacy saved STL";
     return `<article data-upload-id="${escapeHtml(upload.id || upload.client_ref || "")}">
-      <div><strong>${escapeHtml(upload.name || parameters.name || parameters.uploadedFileName || "Uploaded STL")}</strong><small>${escapeHtml(parameters.uploadedFileName || "STL saved")} | ${Number(parameters.estimatedWeightGrams || 0).toFixed(0)} g | ${Number(parameters.outerWidth || 0).toFixed(1)} x ${Number(parameters.outerDepth || 0).toFixed(1)} x ${Number(parameters.height || 0).toFixed(1)} mm</small></div>
+      <div><strong>${escapeHtml(upload.name || parameters.name || parameters.uploadedFileName || "Uploaded STL")}</strong><small>${escapeHtml(parameters.uploadedFileName || "STL saved")} | ${storageLabel} | ${Number(parameters.estimatedWeightGrams || 0).toFixed(0)} g | ${Number(parameters.outerWidth || 0).toFixed(1)} x ${Number(parameters.outerDepth || 0).toFixed(1)} x ${Number(parameters.height || 0).toFixed(1)} mm</small></div>
       <button type="button" data-load-upload="${escapeHtml(upload.id || upload.client_ref || "")}">Load</button>
     </article>`;
   }).join("") : `<div class="empty">Saved STL files will appear here.</div>`;
@@ -295,11 +307,20 @@ async function refreshSavedUploads() {
   renderSavedUploads();
 }
 
-function applySavedUpload(upload) {
+async function applySavedUpload(upload) {
   const parameters = savedParameters(upload);
+  const metadata = savedMetadata(upload);
   currentUploadRef = upload.client_ref || upload.clientRef || upload.id || crypto.randomUUID();
-  uploadedFileName = parameters.uploadedFileName || upload.name || "uploaded-model.stl";
+  uploadedFileName = parameters.uploadedFileName || metadata.uploaded_file_name || upload.name || "uploaded-model.stl";
   stlBase64 = parameters.stlBase64 || "";
+  storageRecord = parameters.storagePath || metadata.stl_storage_path ? {
+    storageProvider: parameters.storageProvider || "supabase-storage",
+    bucket: parameters.storageBucket || metadata.stl_storage_bucket || "",
+    path: parameters.storagePath || metadata.stl_storage_path,
+    fileName: uploadedFileName,
+    sizeBytes: Number(parameters.storageSizeBytes || 0),
+    contentType: parameters.storageContentType || "model/stl"
+  } : null;
   document.getElementById("printName").value = upload.name || parameters.name || "Uploaded print";
   document.getElementById("outerWidth").value = Number(parameters.outerWidth || 100).toFixed(1);
   document.getElementById("outerDepth").value = Number(parameters.outerDepth || 100).toFixed(1);
@@ -316,6 +337,13 @@ function applySavedUpload(upload) {
     } catch {
       stlMesh = null;
     }
+  } else if (storageRecord?.path) {
+    if (!accountService.downloadStlFile) throw new Error("Stored STL downloads are not available yet.");
+    document.getElementById("uploadStatus").textContent = "Downloading saved STL from secure storage...";
+    const buffer = await accountService.downloadStlFile(storageRecord.path);
+    const bytes = new Uint8Array(buffer);
+    stlBase64 = bytesToBase64(bytes);
+    stlMesh = parseStlMesh(buffer);
   }
   document.getElementById("uploadFileLabel").textContent = `${uploadedFileName} loaded from saved uploads.`;
   document.getElementById("uploadStatus").textContent = `${uploadedFileName} loaded from your saved uploads.`;
@@ -324,13 +352,23 @@ function applySavedUpload(upload) {
 
 async function saveUploadedStl() {
   if (!stlBase64) throw new Error("Upload an STL before saving it.");
+  if (!accountService.uploadStlFile) throw new Error("Secure STL storage is not available yet.");
   const name = document.getElementById("printName").value.trim() || uploadedFileName || "Uploaded print";
+  const stored = await accountService.uploadStlFile({ fileName: uploadedFileName || `${name}.stl`, stlBase64 });
+  storageRecord = stored;
+  const parameters = config();
+  delete parameters.stlBase64;
   await accountService.upsertDesign({
     client_ref: currentUploadRef || crypto.randomUUID(),
     name,
     generator_version: 1,
-    parameters: config(),
-    metadata: { saved_upload: true, uploaded_file_name: uploadedFileName }
+    parameters,
+    metadata: {
+      saved_upload: true,
+      uploaded_file_name: uploadedFileName,
+      stl_storage_bucket: stored.bucket,
+      stl_storage_path: stored.path
+    }
   });
   await refreshSavedUploads();
   window.generatorAuth.toast("Uploaded STL saved");
@@ -401,7 +439,7 @@ document.getElementById("savedUploads").addEventListener("click", (event) => {
   const button = event.target.closest("[data-load-upload]");
   if (!button) return;
   const upload = savedUploads.find((candidate) => [candidate.id, candidate.client_ref, candidate.clientRef].includes(button.dataset.loadUpload));
-  if (upload) applySavedUpload(upload);
+  if (upload) applySavedUpload(upload).catch((error) => window.generatorAuth.toast(error.message));
 });
 
 window.generatorAuth.initAuth()
