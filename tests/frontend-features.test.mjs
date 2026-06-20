@@ -380,6 +380,8 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerJs, /accountService\.requestAccountDeletion\(\)/);
   assert.match(footerJs, /Confirm delivery and complete order/);
   assert.match(footerJs, /sharedOrderStatusTrack/);
+  assert.match(footerJs, /sharedDeliveryConfirmationPanel/);
+  assert.match(footerJs, /delivery_chaser/);
   assert.match(footerJs, /window\.forgetSharedShell/);
   assert.match(footerJs, /sharedGeneratorShell/);
   assert.match(accountPassword, /Current password/);

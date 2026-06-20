@@ -357,8 +357,48 @@
     if (type === "provider_message") return "Message from printer";
     if (type === "customer_message") return "Message to printer";
     if (type === "decline") return "Declined and refunded";
+    if (type === "delivery_chaser") return "Delivery confirmation reminder";
     if (type === "auto_complete") return "Automatically completed";
     return labelText(event.to_status || "status");
+  }
+
+  function sharedNestedRow(value) {
+    return Array.isArray(value) ? value[0] : value;
+  }
+
+  function sharedPostageDays(job) {
+    const quote = sharedNestedRow(job?.print_quotes);
+    const days = Number(quote?.postage_days || job?.design_snapshot?.fulfillment?.postageDays || 3);
+    return Number.isFinite(days) && days > 0 ? days : 3;
+  }
+
+  function sharedExpectedDeliveryDate(job) {
+    if (!job?.posted_at) return null;
+    return new Date(new Date(job.posted_at).getTime() + sharedPostageDays(job) * 24 * 60 * 60 * 1000);
+  }
+
+  function sharedDateLabel(date) {
+    return date ? date.toLocaleDateString("en-GB", { dateStyle: "medium" }) : "Not calculated yet";
+  }
+
+  function sharedDeliveryConfirmationPanel(job, events) {
+    if (!job || !["posted", "complete"].includes(job.status)) return "";
+    const expected = sharedExpectedDeliveryDate(job);
+    const releaseAt = expected ? new Date(expected.getTime() + 7 * 24 * 60 * 60 * 1000) : null;
+    const chasers = events.filter((event) => event.event_type === "delivery_chaser");
+    const message = job.status === "complete"
+      ? "This order is complete. Any held printer payout can now be released."
+      : `We will send up to seven daily reminders. If there is no confirmation or escalation by ${sharedDateLabel(releaseAt)}, the order can auto-complete and release the printer payout.`;
+    return `<section class="order-delivery-confirmation">
+      <h5>Delivery confirmation</h5>
+      <div class="shared-order-grid">
+        <div><span>Expected arrival</span><strong>${escapeHtml(sharedDateLabel(expected))}</strong></div>
+        <div><span>Reminder emails</span><strong>${chasers.length}/7 queued</strong></div>
+        <div><span>Auto-release after</span><strong>${escapeHtml(sharedDateLabel(releaseAt))}</strong></div>
+        <div><span>Tracking</span><strong>${escapeHtml(job.tracking_reference || "Not recorded")}</strong></div>
+      </div>
+      <p>${escapeHtml(message)}</p>
+    </section>`;
   }
 
   function sharedOrderStatusTrack(job, currentStatus) {
@@ -447,6 +487,7 @@
         <div><span>Generator</span><strong>${escapeHtml(labelText(order.generator_type || "generator"))}</strong></div>
         <div><span>Refund lock</span><strong>${job?.producing_at ? "Production started" : "Before production"}</strong></div>
       </div>
+      ${sharedDeliveryConfirmationPanel(job, events)}
       ${sharedOrderActions(job)}
       ${events.length ? `<div class="order-events"><h5>Messages and status history</h5>${events.map((event) => `<p class="event-${escapeHtml(event.event_type || "status")}"><strong>${escapeHtml(sharedOrderEventTitle(event))}</strong><span>${escapeHtml(event.note || "")}</span><small>${new Date(event.created_at).toLocaleString()}</small></p>`).join("")}</div>` : ""}
     `;
