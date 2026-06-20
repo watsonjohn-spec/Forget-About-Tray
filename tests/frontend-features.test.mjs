@@ -296,6 +296,9 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   assert.match(factoryApp, /brandLabel\(job\.brand_key\)/);
   assert.match(factoryApp, /renderTimeCalculator/);
   assert.match(factoryApp, /printTimeLabel/);
+  assert.match(factoryApp, /function jobEscalation\(job\)/);
+  assert.match(factoryApp, /job-escalated/);
+  assert.match(factoryApp, /customer_escalation/);
   assert.match(makeupHtml, /data-layout-mode="staircase"/);
   assert.match(makeupHtml, /data-layout-mode="pegboard"/);
   assert.match(makeupHtml, /data-brand-tagline-primary/);

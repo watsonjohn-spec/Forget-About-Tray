@@ -241,17 +241,24 @@ function drillableBillingStatusMarkup(jobs) {
   `).join("")}</section>`;
 }
 
+function jobEscalation(job) {
+  const events = Array.isArray(job?.print_job_events) ? job.print_job_events : [];
+  return events.filter((event) => event.event_type === "customer_escalation")
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] || null;
+}
+
 function renderJobs() {
   const allJobs = factoryDashboardState.jobs.filter((job) => job.status !== "pending_payment");
   const jobs = filteredJobs(allJobs);
   const active = allJobs.filter((job) => ["order_made", "producing", "posted"].includes(job.status));
   document.getElementById("activeJobCount").textContent = active.length;
   document.getElementById("factoryJobs").innerHTML = jobs.length ? jobs.map((job) => `
-    <article class="job-card brand-${escapeHtml(job.brand_key)}" data-job-id="${escapeHtml(job.id)}">
+    <article class="job-card brand-${escapeHtml(job.brand_key)}${jobEscalation(job) ? " job-escalated" : ""}" data-job-id="${escapeHtml(job.id)}">
       <span class="job-brand-marker">${escapeHtml(brandLabel(job.brand_key))}</span>
       <div><h3>${escapeHtml(job.design_snapshot?.name || job.generator_type.replaceAll("_", " "))}</h3>
       <p>Status: <strong>${escapeHtml(labelText(job.status))}</strong> | Next: ${escapeHtml(jobNextAction(job))} | ${escapeHtml(job.colour_key)} | ${jobWeightGrams(job) || "?"}g | ${jobPrintHours(job) ? printTimeLabel(jobPrintHours(job)) : "time pending"}</p>
       <p>Provider payout ${money(job.provider_share_pence)} | Created ${new Date(job.created_at).toLocaleString()}${job.tracking_reference ? ` | Tracking ${escapeHtml(job.tracking_reference)}` : ""}</p></div>
+      ${jobEscalation(job) ? `<span class="job-escalation-pill">Escalated</span>` : ""}
       <button class="button button-primary" data-open-job="${escapeHtml(job.id)}" type="button">Open order</button>
     </article>
   `).join("") : '<div class="empty-state">No jobs match these filters.</div>';
@@ -263,6 +270,7 @@ function eventTitle(event) {
   if (type === "provider_message") return "Message to buyer";
   if (type === "customer_message") return "Message from buyer";
   if (type === "decline") return "Declined and refunded";
+  if (type === "customer_escalation") return "Escalated by buyer";
   if (type === "auto_complete") return "Automatically completed";
   return labelText(event.to_status || "status");
 }
@@ -278,6 +286,7 @@ function showJobDetail(jobId) {
   const snapshot = Array.isArray(order?.order_customer_snapshots) ? order.order_customer_snapshots[0] : order?.order_customer_snapshots;
   const address = snapshot?.delivery_address || {};
   const events = Array.isArray(job.print_job_events) ? job.print_job_events : [];
+  const escalation = jobEscalation(job);
   const actionPanel = job.status === "order_made" ? `
     <section class="job-action-panel">
       <h3>Accept or decline this job</h3>
@@ -314,6 +323,7 @@ function showJobDetail(jobId) {
     </section>
     <section class="job-address"><h3>Delivery address</h3><p>${[snapshot?.customer_name, address.line1, address.line2, address.city || address.town, address.county, address.postal_code || address.postcode, address.country].filter(Boolean).map(escapeHtml).join("<br>") || "Address pending payment confirmation."}</p></section>
     <div class="job-downloads"><button class="button button-secondary" data-job-label="${escapeHtml(job.id)}">Open postage label</button><button class="button button-secondary" data-job-stl="${escapeHtml(job.id)}">Download STL</button></div>
+    ${escalation ? `<section class="job-escalation-alert"><h3>Buyer escalation</h3><p>${escapeHtml(escalation.note || "The buyer has escalated this delivery.")}</p><small>${new Date(escalation.created_at).toLocaleString()}</small></section>` : ""}
     ${actionPanel}${productionPanel}${postedPanel}
     ${["complete", "refunded", "cancelled"].includes(job.status) ? "" : `<div class="job-note-form"><label>Message buyer<textarea data-job-message rows="3" placeholder="Send a message to the buyer before the order completes"></textarea></label><button class="button button-secondary" data-save-job-note="${escapeHtml(job.id)}">Send message</button></div>`}
     ${renderJobEvents(events)}
