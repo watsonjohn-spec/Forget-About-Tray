@@ -29,7 +29,7 @@ const stripeApiBase = process.env.STRIPE_API_BASE || "https://api.stripe.com";
 const stripeApiVersion = process.env.STRIPE_API_VERSION || "2026-05-27.dahlia";
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 const allowedCountries = (process.env.STRIPE_ALLOWED_COUNTRIES || "GB,US").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean);
-const allowedOrigins = (process.env.CHECKOUT_ALLOWED_ORIGIN || "https://watsonjohn-spec.github.io")
+const allowedOrigins = (process.env.CHECKOUT_ALLOWED_ORIGIN || "https://forgetabout.im,https://watsonjohn-spec.github.io")
   .split(",")
   .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
@@ -47,7 +47,9 @@ const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml"
+  ".svg": "image/svg+xml",
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8"
 };
 const { stripeReady, stripeJson, stripeForm, stripeEventVerified } = createStripeClient({
   stripeKey,
@@ -277,9 +279,52 @@ function cleanText(value, maximum = 500) {
   return String(value || "").trim().slice(0, maximum);
 }
 
+function cleanEmail(value) {
+  return cleanText(value, 320).toLowerCase();
+}
+
+function validEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ""));
+}
+
+function publicReturnPath(path) {
+  const cleanPath = String(path || "").replace(/\/$/, "");
+  if (cleanPath === "/tray") return "/trays";
+  if (cleanPath.startsWith("/tray/")) return cleanPath.replace(/^\/tray\b/, "/trays");
+  return cleanPath;
+}
+
 function cleanPositiveInteger(value, fallback, maximum = 100_000) {
   const number = Number(value);
   return Number.isInteger(number) && number >= 0 && number <= maximum ? number : fallback;
+}
+
+async function handleLaunchSignup(request, response) {
+  const origin = checkoutOrigin(request);
+  if (!checkoutOriginAllowed(request)) return sendJson(response, 403, { error: "Origin is not allowed." });
+  try {
+    const body = await readJson(request, 10_000);
+    const firstName = cleanText(body.firstName, 80);
+    const secondName = cleanText(body.secondName, 80);
+    const email = cleanEmail(body.email);
+    const sourcePath = publicReturnPath(body.sourcePath || request.headers["x-forget-about-path"] || "/") || "/";
+    if (!firstName || !secondName || !validEmail(email)) throw new Error("Enter a first name, second name, and valid email address.");
+    await supabaseAdmin("launch_signups?on_conflict=email", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        first_name: firstName,
+        second_name: secondName,
+        email,
+        source_path: sourcePath,
+        analytics_consent: Boolean(body.analyticsConsent),
+        updated_at: new Date().toISOString()
+      })
+    });
+    sendJson(response, 200, { ok: true, message: "You're on the launch list." }, origin);
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Launch signup failed." }, origin);
+  }
 }
 
 async function loadPrinterProfile(userId) {
@@ -1200,7 +1245,7 @@ async function loadUnlimitedEntitlements(userId, brand, generator) {
 function checkoutReturnOrigin(request, origin) {
   if (process.env.CHECKOUT_RETURN_ORIGIN) return process.env.CHECKOUT_RETURN_ORIGIN.replace(/\/$/, "");
   const baseOrigin = origin || `http://${request.headers.host}`;
-  const requestedPath = String(request.headers["x-forget-about-path"] || "").replace(/\/$/, "");
+  const requestedPath = publicReturnPath(request.headers["x-forget-about-path"] || "");
   const safePath = requestedPath.startsWith("/") && !requestedPath.startsWith("//") ? requestedPath : "";
   return `${baseOrigin}${safePath}`;
 }
@@ -1951,6 +1996,10 @@ createServer(async (request, response) => {
     sendJson(response, 200, { status: "ok", service: "forget-about-platform" }, origin);
     return;
   }
+  if (request.method === "POST" && pathname === "/api/launch-signup") {
+    await handleLaunchSignup(request, response);
+    return;
+  }
   if (request.method === "POST" && pathname === "/api/stripe/webhook") {
     await handleStripeWebhook(request, response);
     return;
@@ -1959,7 +2008,7 @@ createServer(async (request, response) => {
     await runAutoCompleteTask(request, response);
     return;
   }
-  if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account") || pathname.startsWith("/api/factory") || pathname.startsWith("/api/marketplace"))) {
+  if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account") || pathname.startsWith("/api/factory") || pathname.startsWith("/api/marketplace") || pathname === "/api/launch-signup")) {
     response.writeHead(204, {
       ...(origin ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin" } : {}),
       "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Forget-About-Brand, X-Forget-About-Generator, X-Forget-About-Path, X-Forget-About-Device",
@@ -2116,6 +2165,11 @@ createServer(async (request, response) => {
     return;
   }
 
+  if (pathname === "/tray" || pathname === "/tray/") {
+    response.writeHead(308, { Location: `/trays/${requestUrl.search}` });
+    response.end();
+    return;
+  }
   const brandRoute = publicPlatformConfig.brands.find((brand) => brand.enabled && (pathname === `/${brand.path}` || pathname === `/${brand.path}/`));
   if (brandRoute && !pathname.endsWith("/")) {
     response.writeHead(308, { Location: `/${brandRoute.path}/${requestUrl.search}` });
@@ -2127,7 +2181,8 @@ createServer(async (request, response) => {
     response.end();
     return;
   }
-  const brandEntry = brandRoute ? `${brandRoute.path}/index.html` : "index.html";
+  const brandDirectory = brandRoute?.key === "tray" ? "tray" : brandRoute?.path;
+  const brandEntry = brandRoute ? `${brandDirectory}/index.html` : "index.html";
   const relativePath = pathname === "/" ? "index.html" : brandRoute ? brandEntry : pathname === "/factory/" ? "factory/index.html" : pathname.slice(1);
   const filePath = normalize(join(root, relativePath));
 

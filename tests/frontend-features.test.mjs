@@ -89,7 +89,9 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
 
   const context = { window: {} };
   vm.runInNewContext(publicConfigSource, context);
-  assert.deepEqual(Object.keys(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG).sort(), ["supabasePublishableKey", "supabaseUrl"]);
+  assert.deepEqual(Object.keys(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG).sort(), ["analytics", "apiBaseUrl", "supabasePublishableKey", "supabaseUrl"]);
+  assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.analytics.ga4MeasurementId, "G-NDKFRQ10CJ");
+  assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.analytics.clarityProjectId, "xc7u4g2p1w");
   assert.doesNotMatch(publicConfigSource, /sb_secret_|sk_(?:test|live)_|rk_(?:test|live)_|whsec_/);
 });
 
@@ -155,7 +157,7 @@ test("makeup and factory OAuth keep users on the originating app after provider 
   assert.equal(sessionStorage.getItem("forget-about-pending-auth-return"), "/makeup/");
 
   let replaced = "";
-  context.window.location.pathname = "/tray";
+  context.window.location.pathname = "/trays";
   context.window.location.hash = "#access_token=abc&refresh_token=def&expires_in=3600";
   context.window.location.replace = (url) => { replaced = url; };
 
@@ -362,11 +364,21 @@ test("site shell, footer, and prototype generators are present", async () => {
     readFile(new URL("platform/generators/uploaded-print.mjs", root), "utf8")
   ]);
   assert.match(rootIndexHtml, /Generator directory/);
-  assert.match(homeHtml, /href="tray\/"/);
+  assert.match(homeHtml, /href="trays\/"/);
   assert.match(homeHtml, /href="print\/"/);
   assert.match(homeHtml, /href="paint\/"/);
   assert.match(homeHtml, /href="stitch\/"/);
   assert.match(footerJs, /help@forget\.im/);
+  assert.match(footerJs, /analyticsConsentGranted/);
+  assert.match(footerJs, /loadGoogleAnalytics/);
+  assert.match(footerJs, /send_page_view: false/);
+  assert.match(footerJs, /trackAnalyticsPageView/);
+  assert.match(footerJs, /loadMicrosoftClarity/);
+  assert.match(footerJs, /cookie-consent/);
+  assert.match(footerJs, /launchHoldEnabled/);
+  assert.match(footerJs, /\/api\/launch-signup/);
+  assert.match(footerCss, /\.cookie-consent/);
+  assert.match(footerCss, /\.launch-hold/);
   assert.match(footerJs, /Modern slavery statement/);
   assert.match(footerJs, /data-account-password-prefix="sharedAccount"/);
   assert.match(footerJs, /accountPasswordFlow\?\.hydrate/);

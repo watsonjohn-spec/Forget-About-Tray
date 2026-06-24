@@ -37,6 +37,13 @@
     }
   };
   let sharedOrders = [];
+  const siteConfig = window.MOVEMENT_TRAY_PUBLIC_CONFIG || {};
+  const analyticsConfig = siteConfig.analytics || {};
+  const analyticsConsentKey = "forget-about-analytics-consent";
+  const launchHoldKey = "forget-about-launch-hold-dismissed";
+  let analyticsLoaded = false;
+  let analyticsHistoryPatched = false;
+  let lastTrackedUrl = "";
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -48,6 +55,197 @@
     })[character]);
   }
 
+  function safeStorageGet(key) {
+    try {
+      return window.localStorage?.getItem(key) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function safeStorageSet(key, value) {
+    try {
+      window.localStorage?.setItem(key, value);
+    } catch {
+      /* Storage can be unavailable in private or embedded browsers. */
+    }
+  }
+
+  function publicApiBase() {
+    const meta = document.querySelector('meta[name="checkout-api-url"]')?.content?.trim();
+    return (meta || siteConfig.apiBaseUrl || window.location.origin).replace(/\/$/, "");
+  }
+
+  function cookieConsentRequired() {
+    return analyticsConfig.cookieConsentRequired !== false;
+  }
+
+  function analyticsConsentGranted() {
+    return !cookieConsentRequired() || safeStorageGet(analyticsConsentKey) === "accepted";
+  }
+
+  function currentAnalyticsUrl() {
+    return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  }
+
+  function loadGoogleAnalytics() {
+    const id = String(analyticsConfig.ga4MeasurementId || "").trim();
+    if (!id || document.querySelector("script[data-forget-ga4]")) return;
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function gtag() { window.dataLayer.push(arguments); };
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`;
+    script.dataset.forgetGa4 = id;
+    document.head.append(script);
+    window.gtag("js", new Date());
+    window.gtag("config", id, { send_page_view: false });
+  }
+
+  function loadMicrosoftClarity() {
+    const id = String(analyticsConfig.clarityProjectId || "").trim();
+    if (!id || document.querySelector("script[data-forget-clarity]")) return;
+    window.clarity = window.clarity || function clarity() {
+      (window.clarity.q = window.clarity.q || []).push(arguments);
+    };
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = `https://www.clarity.ms/tag/${encodeURIComponent(id)}`;
+    script.dataset.forgetClarity = id;
+    document.head.append(script);
+  }
+
+  function trackAnalyticsPageView() {
+    if (!analyticsLoaded || !analyticsConsentGranted()) return;
+    const pagePath = currentAnalyticsUrl();
+    if (pagePath === lastTrackedUrl) return;
+    lastTrackedUrl = pagePath;
+    if (typeof window.gtag === "function" && analyticsConfig.ga4MeasurementId) {
+      window.gtag("event", "page_view", {
+        page_title: document.title,
+        page_location: window.location.href,
+        page_path: pagePath
+      });
+    }
+    if (typeof window.clarity === "function") {
+      window.clarity("set", "page_path", pagePath);
+      window.clarity("event", "page_view");
+    }
+  }
+
+  function startAnalytics() {
+    if (analyticsLoaded || !analyticsConsentGranted()) return;
+    loadGoogleAnalytics();
+    loadMicrosoftClarity();
+    analyticsLoaded = true;
+    setTimeout(trackAnalyticsPageView, 0);
+  }
+
+  function renderCookieConsent() {
+    if (!cookieConsentRequired() || safeStorageGet(analyticsConsentKey) || document.getElementById("cookieConsent")) return;
+    const banner = document.createElement("section");
+    banner.id = "cookieConsent";
+    banner.className = "cookie-consent";
+    banner.setAttribute("aria-label", "Cookie consent");
+    banner.innerHTML = `
+      <div>
+        <strong>Can we use analytics cookies?</strong>
+        <p>They help us see which generators are useful while we build. Essential site functions still work if you decline.</p>
+      </div>
+      <div class="cookie-actions">
+        <button type="button" data-cookie-consent="declined">Essential only</button>
+        <button type="button" data-cookie-consent="accepted">Accept analytics</button>
+      </div>
+    `;
+    banner.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-cookie-consent]");
+      if (!button) return;
+      safeStorageSet(analyticsConsentKey, button.dataset.cookieConsent);
+      banner.remove();
+      startAnalytics();
+    });
+    document.body.append(banner);
+  }
+
+  function setupAnalyticsNavigation() {
+    if (analyticsHistoryPatched) return;
+    analyticsHistoryPatched = true;
+    const notify = () => setTimeout(trackAnalyticsPageView, 0);
+    for (const method of ["pushState", "replaceState"]) {
+      const original = window.history?.[method];
+      if (typeof original !== "function") continue;
+      window.history[method] = function patchedHistoryMethod(...args) {
+        const result = original.apply(this, args);
+        notify();
+        return result;
+      };
+    }
+    window.addEventListener("popstate", notify);
+  }
+
+  function launchHoldEnabled() {
+    return analyticsConfig.launchHoldEnabled !== false;
+  }
+
+  function renderLaunchHold() {
+    if (!launchHoldEnabled() || safeStorageGet(launchHoldKey) || document.getElementById("launchHold")) return;
+    const hold = document.createElement("section");
+    hold.id = "launchHold";
+    hold.className = "launch-hold";
+    hold.setAttribute("role", "dialog");
+    hold.setAttribute("aria-modal", "true");
+    hold.setAttribute("aria-labelledby", "launchHoldTitle");
+    hold.innerHTML = `
+      <div class="launch-hold-card">
+        <button class="launch-hold-close" type="button" data-launch-dismiss aria-label="Continue to preview">&times;</button>
+        <p class="launch-hold-eyebrow">Soft launch preview</p>
+        <h2 id="launchHoldTitle">We have not launched yet.</h2>
+        <p>Forget About is being wired together in public. Leave your name and email and we will tell you when it is ready for proper use.</p>
+        <form id="launchSignupForm" class="launch-signup-form">
+          <div class="launch-name-grid">
+            <label>First name<input name="firstName" autocomplete="given-name" required></label>
+            <label>Second name<input name="secondName" autocomplete="family-name" required></label>
+          </div>
+          <label>Email address<input name="email" type="email" autocomplete="email" required></label>
+          <button class="button top-action-button" type="submit">Notify me at launch</button>
+          <small id="launchSignupStatus">No spam. Just the launch note and genuinely useful updates.</small>
+        </form>
+        <button class="launch-preview-button" type="button" data-launch-dismiss>Continue to preview</button>
+      </div>
+    `;
+    hold.addEventListener("click", (event) => {
+      if (!event.target.matches("[data-launch-dismiss]")) return;
+      safeStorageSet(launchHoldKey, "dismissed");
+      hold.remove();
+    });
+    hold.querySelector("form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const status = hold.querySelector("#launchSignupStatus");
+      const button = form.querySelector("button");
+      button.disabled = true;
+      status.textContent = "Adding you to the launch list...";
+      try {
+        const body = Object.fromEntries(new FormData(form).entries());
+        const response = await fetch(`${publicApiBase()}/api/launch-signup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Forget-About-Path": window.location.pathname },
+          body: JSON.stringify({ ...body, sourcePath: window.location.pathname, analyticsConsent: analyticsConsentGranted() })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Signup failed.");
+        safeStorageSet(launchHoldKey, "submitted");
+        status.textContent = result.message || "You are on the launch list.";
+        setTimeout(() => hold.remove(), 900);
+      } catch (error) {
+        button.disabled = false;
+        status.textContent = error.message;
+      }
+    });
+    document.body.append(hold);
+    hold.querySelector("input")?.focus({ preventScroll: true });
+  }
+
   function pageKey() {
     const path = window.location.pathname.toLowerCase();
     if (path.includes("/makeup")) return "makeup";
@@ -55,7 +253,7 @@
     if (path.includes("/paint")) return "paint";
     if (path.includes("/stitch")) return "stitch";
     if (path.includes("/factory")) return "factory";
-    if (path.includes("/tray")) return "tray";
+    if (path.includes("/trays") || path.includes("/tray")) return "tray";
     return "home";
   }
 
@@ -635,4 +833,8 @@
   normalizeExistingAccountButtons();
   enhancePrototypeTopbar();
   appendFooter();
+  setupAnalyticsNavigation();
+  renderCookieConsent();
+  startAnalytics();
+  renderLaunchHold();
 })();

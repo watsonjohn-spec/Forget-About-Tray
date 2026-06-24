@@ -12,6 +12,7 @@ test("movement trays are registered as a versioned generator under the tray bran
   assert.equal(generator.type, "movement_tray");
   assert.equal(generator.version, 1);
   assert.equal(brand.factoryLabel, "Tray");
+  assert.equal(brand.path, "trays");
   assert.equal(brand.tagline.primary, "Build the formation.");
   assert.equal(generator.defaultFilament.material, "pla");
   assert.deepEqual(generator.capabilities.variants, ["single_tray", "army_list", "storage_insert"]);
@@ -157,6 +158,9 @@ test("Supabase schema defines private per-user STL object storage", async () => 
   assert.match(schema, /storage\.objects/);
   assert.match(schema, /storage\.foldername\(name\)\)\[1\]/);
   assert.match(schema, /file_size_limit/);
+  assert.match(schema, /launch_signups/);
+  assert.match(schema, /analytics_consent boolean/);
+  assert.match(schema, /alter table public\.launch_signups enable row level security/);
 });
 
 test("generator contract validates parameters and renders an STL", () => {

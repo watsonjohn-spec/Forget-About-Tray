@@ -26,6 +26,14 @@ This board tracks the current development workstreams. GitHub issue links are th
 | Storage, Data Retention, GDPR and VAT Records | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/6 | Add deletion cleanup for stored STL files, legacy embedded-STL migration, and lifecycle rules for old orphaned uploads. |
 | Monetisation, Entitlements and Abuse Protection | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/7 | Add warning-first suspicious-use notices, device revocation, and brand-level entitlement management screens. |
 
+## Things We Need To Do When John Is Back
+
+- Apply the latest `supabase/schema.sql` changes in Supabase, including `launch_signups` and the `tray` brand path moving to `trays`.
+- Confirm the live `forgetabout.im` DNS/hosting points at the published GitHub Pages site rather than the old GitHub Pages URL.
+- Confirm Render environment values include `CHECKOUT_ALLOWED_ORIGIN=https://forgetabout.im,https://watsonjohn-spec.github.io` and `PUBLIC_API_BASE_URL=https://forget-about-tray.onrender.com`.
+- Check Microsoft Clarity and Google Analytics dashboards after traffic has had time to appear, because dashboard session reporting is not instant.
+- Decide whether the launch-hold popup should show on the Factory provider portal or only customer-facing generator pages.
+
 ## Working Assumptions
 
 - The current single repository remains the source of truth for all active brands.

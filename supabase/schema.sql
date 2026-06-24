@@ -39,6 +39,17 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.launch_signups (
+  id uuid primary key default gen_random_uuid(),
+  first_name text not null,
+  second_name text not null,
+  email text not null unique,
+  source_path text not null default '',
+  analytics_consent boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.tray_designs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -93,7 +104,7 @@ create table if not exists public.brand_generators (
 
 insert into public.brands (key, name, path, enabled, entitlement_scope)
 values
-  ('tray', 'Forget About Tray', 'tray', true, 'brand'),
+  ('tray', 'Forget About Tray', 'trays', true, 'brand'),
   ('makeup', 'Forget About Makeup', 'makeup', true, 'brand'),
   ('print', 'Forget About Print', 'print', true, 'brand'),
   ('paint', 'Forget About Paint', 'paint', true, 'brand'),
@@ -512,6 +523,8 @@ create table if not exists public.privacy_requests (
 
 create index if not exists tray_designs_user_id_idx on public.tray_designs(user_id);
 create index if not exists army_lists_user_id_idx on public.army_lists(user_id);
+create index if not exists launch_signups_email_idx on public.launch_signups(email);
+create index if not exists launch_signups_created_at_idx on public.launch_signups(created_at desc);
 create index if not exists orders_user_id_idx on public.orders(user_id);
 create index if not exists order_items_order_id_idx on public.order_items(order_id);
 create index if not exists entitlements_user_id_idx on public.entitlements(user_id);
@@ -575,6 +588,7 @@ select id, coalesce(email, '') from auth.users
 on conflict (user_id) do nothing;
 
 alter table public.profiles enable row level security;
+alter table public.launch_signups enable row level security;
 alter table public.tray_designs enable row level security;
 alter table public.army_lists enable row level security;
 alter table public.orders enable row level security;
@@ -776,5 +790,5 @@ grant insert, update, delete on public.printer_capabilities to authenticated;
 grant update (display_name, description, based_in, postcode_area, lead_time_days, accepting_jobs, updated_at) on public.printer_profiles to authenticated;
 revoke update on public.profiles from authenticated;
 grant update (display_name, default_address, marketing_consent, updated_at) on public.profiles to authenticated;
-grant all on public.profiles, public.tray_designs, public.army_lists, public.orders, public.order_items, public.order_customer_snapshots, public.entitlements, public.stripe_events, public.privacy_requests, public.brands, public.generator_definitions, public.brand_generators, public.designs, public.projects, public.generator_catalogues, public.generator_catalogue_items, public.usage_allowances, public.account_devices, public.printer_profiles, public.printer_payment_accounts, public.printer_capabilities, public.print_quotes, public.print_jobs, public.print_job_events, public.provider_transfers, public.provider_reviews, public.email_outbox to service_role;
+grant all on public.profiles, public.launch_signups, public.tray_designs, public.army_lists, public.orders, public.order_items, public.order_customer_snapshots, public.entitlements, public.stripe_events, public.privacy_requests, public.brands, public.generator_definitions, public.brand_generators, public.designs, public.projects, public.generator_catalogues, public.generator_catalogue_items, public.usage_allowances, public.account_devices, public.printer_profiles, public.printer_payment_accounts, public.printer_capabilities, public.print_quotes, public.print_jobs, public.print_job_events, public.provider_transfers, public.provider_reviews, public.email_outbox to service_role;
 grant usage, select on sequence public.order_invoice_number_seq to service_role;

@@ -491,6 +491,169 @@
 .sponsor-stitch { --sponsor-accent:#8d6aa9; --sponsor-bg-a:#fbf2ff; --sponsor-bg-b:#ded0eb; --sponsor-ink:#30273a; }
 .sponsor-factory { --sponsor-accent:#d08a32; --sponsor-bg-a:#f5f2e8; --sponsor-bg-b:#d0d7d6; --sponsor-ink:#1e2b33; }
 
+.cookie-consent {
+  width: min(760px, calc(100% - 24px));
+  padding: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 120;
+  border: 1px solid color-mix(in srgb, var(--accent-dark, #263c2b) 34%, var(--line, #b9c5ae));
+  border-radius: 14px;
+  color: var(--ink, #1e2921);
+  background: color-mix(in srgb, var(--white, #fffdf4) 95%, transparent);
+  box-shadow: 0 20px 70px rgba(20, 35, 24, .22);
+}
+
+.cookie-consent strong,
+.cookie-consent p {
+  margin: 0;
+}
+
+.cookie-consent p {
+  margin-top: 3px;
+  color: var(--muted, #627064);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.cookie-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cookie-actions button,
+.launch-preview-button {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--line, #b9c5ae);
+  border-radius: 999px;
+  color: var(--ink, #1e2921);
+  background: var(--white, #fffdf4);
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.cookie-actions button:last-child {
+  color: #f7f8ed;
+  border-color: var(--accent-dark, #263c2b);
+  background: var(--accent-dark, #263c2b);
+}
+
+.launch-hold {
+  padding: 18px;
+  display: grid;
+  place-items: center;
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background:
+    radial-gradient(circle at 18% 20%, color-mix(in srgb, var(--accent, #5f7d4b) 22%, transparent) 0 180px, transparent 181px),
+    rgba(18, 29, 22, .72);
+  backdrop-filter: blur(6px);
+}
+
+.launch-hold-card {
+  width: min(560px, 100%);
+  padding: clamp(22px, 4vw, 34px);
+  display: grid;
+  gap: 14px;
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--accent, #5f7d4b) 32%, var(--line, #b9c5ae));
+  border-radius: 20px;
+  color: var(--ink, #1e2921);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--white, #fffdf4) 92%, var(--accent, #5f7d4b)), var(--white, #fffdf4));
+  box-shadow: 0 34px 100px rgba(0, 0, 0, .32);
+}
+
+.launch-hold-card h2,
+.launch-hold-card p {
+  margin: 0;
+}
+
+.launch-hold-card h2 {
+  font: 650 clamp(30px, 6vw, 48px)/.95 Georgia, serif;
+  letter-spacing: -.04em;
+}
+
+.launch-hold-card p {
+  color: var(--muted, #627064);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.launch-hold-eyebrow {
+  color: var(--accent-dark, #263c2b) !important;
+  font-size: 10px !important;
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.launch-hold-close {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: 1px solid var(--line, #b9c5ae);
+  border-radius: 50%;
+  color: var(--muted, #627064);
+  background: var(--white, #fffdf4);
+  cursor: pointer;
+}
+
+.launch-signup-form {
+  display: grid;
+  gap: 10px;
+}
+
+.launch-signup-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted, #627064);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.launch-signup-form input {
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--line, #b9c5ae);
+  border-radius: 9px;
+  color: var(--ink, #1e2921);
+  background: white;
+  font-size: 13px;
+}
+
+.launch-name-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 9px;
+}
+
+.launch-signup-form small {
+  color: var(--muted, #627064);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.launch-preview-button {
+  justify-self: start;
+}
+
 .shared-account-dialog {
   width: min(920px, calc(100% - 28px));
   max-height: min(760px, calc(100dvh - 28px));
@@ -784,8 +947,25 @@
   .shared-account-page-nav,
   .shared-order-card,
   .shared-order-grid,
-  .order-status-track {
+  .order-status-track,
+  .cookie-consent,
+  .launch-name-grid {
     grid-template-columns: 1fr;
+  }
+
+  .cookie-consent {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: auto;
+  }
+
+  .cookie-actions {
+    justify-content: stretch;
+  }
+
+  .cookie-actions button {
+    flex: 1 1 140px;
   }
 
   .site-footer {
