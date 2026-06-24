@@ -654,7 +654,12 @@ test("sitemap, robots, and launch signup endpoint are exposed", async () => {
   assert.match(sitemap.headers.get("content-type"), /application\/xml/);
   const sitemapXml = await sitemap.text();
   assert.match(sitemapXml, /https:\/\/forgetabout\.im\/trays\//);
+  assert.match(sitemapXml, /https:\/\/forgetabout\.im\/print\//);
+  assert.match(sitemapXml, /https:\/\/forgetabout\.im\/factory\//);
   assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/tray\//);
+  assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/makeup\//);
+  assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/paint\//);
+  assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/stitch\//);
 
   const robots = await fetch(`${baseUrl}/robots.txt`);
   assert.equal(robots.status, 200);

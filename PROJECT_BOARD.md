@@ -10,7 +10,7 @@ This board tracks the current development workstreams. GitHub issue links are th
 | Shared Generator Shell | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/2 | First slice complete: exposed `window.forgetSharedShell` and documented the shared account/order shell rule. |
 | Core Customer Journey Hardening | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/3 | Fifth slice complete: factory jobs now flag buyer escalations in the provider queue and job detail alongside the auto-release block. |
 | Preview Quality and Visual Trust | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/4 | First slice complete: shared preview renderer now adds drag hints, filament accenting, dimension callouts, and 250mm split-plate guides across generator previews. |
-| Productise Generators by Brand | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/5 | First slice complete: central registry now carries brand taglines, factory labels, generator capability metadata, default filament metadata, and validation for enabled brand/generator pairs. |
+| Productise Generators by Brand | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/5 | Second slice complete: MVP launch mode now publicly exposes Tray, Uploaded Print, and Factory while deferring Makeup, Paint, and Stitch. |
 | Storage, Data Retention, GDPR and VAT Records | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/6 | Second slice complete: uploaded STL saves now store the file in private Supabase Storage and keep only storage metadata in the saved design. |
 | Monetisation, Entitlements and Abuse Protection | https://github.com/watsonjohn-spec/Forget-About-Tray/issues/7 | First slice complete: account security status now reports active browser/device count, warning-mode versus hard-limit state, and avoids exposing raw device hashes. |
 
@@ -32,7 +32,7 @@ This board tracks the current development workstreams. GitHub issue links are th
 - Confirm the live `forgetabout.im` DNS/hosting points at the published GitHub Pages site rather than the old GitHub Pages URL.
 - Confirm Render environment values include `CHECKOUT_ALLOWED_ORIGIN=https://forgetabout.im,https://watsonjohn-spec.github.io` and `PUBLIC_API_BASE_URL=https://forget-about-tray.onrender.com`.
 - Check Microsoft Clarity and Google Analytics dashboards after traffic has had time to appear, because dashboard session reporting is not instant.
-- Decide whether the launch-hold popup should show on the Factory provider portal or only customer-facing generator pages.
+- Confirmed: the launch-hold popup should also show on the Factory provider portal during the pre-launch period.
 
 ## Working Assumptions
 
@@ -42,4 +42,5 @@ This board tracks the current development workstreams. GitHub issue links are th
 - Download STL and print factory remain separate valid fulfilment routes.
 - Factory provider payout is still released only after the customer order reaches complete or after expected delivery plus seven daily confirmation chasers have elapsed without buyer confirmation.
 - Account-sharing controls start in warning mode before any hard device blocking.
+- Launch MVP mode exposes only Tray, Uploaded Print, and Factory in public navigation/sitemap until Makeup, Stitch, and Paint are explicitly promoted.
 - Changes should be published after each meaningful, passing implementation bundle rather than after every small edit.

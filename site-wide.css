@@ -491,6 +491,49 @@
 .sponsor-stitch { --sponsor-accent:#8d6aa9; --sponsor-bg-a:#fbf2ff; --sponsor-bg-b:#ded0eb; --sponsor-ink:#30273a; }
 .sponsor-factory { --sponsor-accent:#d08a32; --sponsor-bg-a:#f5f2e8; --sponsor-bg-b:#d0d7d6; --sponsor-ink:#1e2b33; }
 
+.launch-deferred-banner {
+  width: min(1040px, calc(100% - 24px));
+  margin: 16px auto;
+  padding: 13px 16px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-dark, #263c2b) 36%, var(--line, #b9c5ae));
+  border-radius: 13px;
+  color: var(--ink, #1e2921);
+  background: color-mix(in srgb, var(--white, #fffdf4) 82%, var(--accent, #5f7d4b) 8%);
+  box-shadow: 0 12px 30px rgba(30, 43, 51, .08);
+}
+
+.launch-deferred-banner strong {
+  color: var(--accent-dark, #263c2b);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.launch-deferred-banner span {
+  color: var(--muted, #627064);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.launch-deferred-banner a {
+  min-height: 34px;
+  padding: 0 12px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #f7f8ed;
+  background: var(--accent-dark, #263c2b);
+  font-size: 9px;
+  font-weight: 850;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .cookie-consent {
   width: min(760px, calc(100% - 24px));
   padding: 14px;
@@ -949,8 +992,18 @@
   .shared-order-grid,
   .order-status-track,
   .cookie-consent,
+  .launch-deferred-banner,
   .launch-name-grid {
     grid-template-columns: 1fr;
+  }
+
+  .launch-deferred-banner {
+    width: calc(100% - 20px);
+    text-align: center;
+  }
+
+  .launch-deferred-banner a {
+    justify-self: center;
   }
 
   .cookie-consent {

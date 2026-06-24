@@ -21,7 +21,7 @@ Makeup, Stitch and Paint should be hidden, beta-gated, or explicitly deferred un
 ## Critical Blockers
 
 ### Scope and Auth
-- [ ] BLK-001 Freeze MVP to Tray + Uploaded Print only for launch.
+- [x] BLK-001 Freeze MVP to Tray + Uploaded Print only for launch.
 - [ ] BLK-002 User registration, login, logout and password reset work end-to-end.
 
 ### Customer Journey
@@ -123,6 +123,10 @@ For every completed blocker, comment with at least one of:
 - Supabase record/storage evidence
 - Render deploy/log evidence
 - written test note explaining exact route tested
+
+## Blocker Evidence Log
+
+- BLK-001: MVP launch mode exposes only `/trays`, `/print`, and `/factory` in public navigation and generated sitemap. Makeup, Paint, and Stitch remain direct beta/deferred routes with a notice rather than launch-scope routes.
 
 ## Deployment Runbook
 - [ ] Confirm all critical blockers complete or deliberately deferred with John approval.

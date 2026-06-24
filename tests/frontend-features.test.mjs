@@ -89,9 +89,12 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
 
   const context = { window: {} };
   vm.runInNewContext(publicConfigSource, context);
-  assert.deepEqual(Object.keys(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG).sort(), ["analytics", "apiBaseUrl", "supabasePublishableKey", "supabaseUrl"]);
+  assert.deepEqual(Object.keys(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG).sort(), ["analytics", "apiBaseUrl", "launch", "supabasePublishableKey", "supabaseUrl"]);
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.analytics.ga4MeasurementId, "G-NDKFRQ10CJ");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.analytics.clarityProjectId, "xc7u4g2p1w");
+  assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.mvpModeEnabled, true);
+  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["trays", "print", "factory"]));
+  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.deferredPaths), JSON.stringify(["makeup", "paint", "stitch"]));
   assert.doesNotMatch(publicConfigSource, /sb_secret_|sk_(?:test|live)_|rk_(?:test|live)_|whsec_/);
 });
 
@@ -365,10 +368,15 @@ test("site shell, footer, and prototype generators are present", async () => {
   ]);
   assert.match(rootIndexHtml, /Generator directory/);
   assert.match(homeHtml, /href="trays\/"/);
+  assert.match(homeHtml, /data-launch-path="trays"/);
+  assert.match(homeHtml, /data-launch-path="makeup"/);
   assert.match(homeHtml, /href="print\/"/);
-  assert.match(homeHtml, /href="paint\/"/);
-  assert.match(homeHtml, /href="stitch\/"/);
+  assert.match(homeHtml, /data-launch-path="factory"/);
   assert.match(footerJs, /help@forget\.im/);
+  assert.match(footerJs, /function applyLaunchScope\(\)/);
+  assert.match(footerJs, /launchPublicPaths/);
+  assert.match(footerJs, /launchDeferredPaths/);
+  assert.match(footerJs, /launch-deferred-banner/);
   assert.match(footerJs, /analyticsConsentGranted/);
   assert.match(footerJs, /loadGoogleAnalytics/);
   assert.match(footerJs, /send_page_view: false/);
@@ -379,6 +387,7 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerJs, /\/api\/launch-signup/);
   assert.match(footerCss, /\.cookie-consent/);
   assert.match(footerCss, /\.launch-hold/);
+  assert.match(footerCss, /\.launch-deferred-banner/);
   assert.match(footerJs, /Modern slavery statement/);
   assert.match(footerJs, /data-account-password-prefix="sharedAccount"/);
   assert.match(footerJs, /accountPasswordFlow\?\.hydrate/);

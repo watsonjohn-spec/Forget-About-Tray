@@ -25,7 +25,21 @@ function envBoolean(name, fallback) {
   return !["0", "false", "no", "off"].includes(String(env[name]).trim().toLowerCase());
 }
 
+function envList(name, fallback) {
+  const source = env[name] || fallback;
+  return String(source || "")
+    .split(",")
+    .map((value) => value.trim().replace(/^\/+|\/+$/g, ""))
+    .filter(Boolean);
+}
+
 const productionOrigin = cleanOrigin(env.PRODUCTION_ORIGIN);
+const launch = {
+  mvpModeEnabled: envBoolean("MVP_LAUNCH_MODE", true),
+  publicPaths: envList("LAUNCH_PUBLIC_PATHS", "trays,print,factory"),
+  deferredPaths: envList("LAUNCH_DEFERRED_PATHS", "makeup,paint,stitch"),
+  factoryLaunchHoldEnabled: envBoolean("FACTORY_LAUNCH_HOLD_ENABLED", true)
+};
 const config = {
   supabaseUrl: env.SUPABASE_URL.replace(/\/$/, ""),
   supabasePublishableKey: env.SUPABASE_PUBLISHABLE_KEY,
@@ -36,7 +50,8 @@ const config = {
     cookieConsentRequired: envBoolean("COOKIE_CONSENT_REQUIRED", true),
     launchHoldEnabled: envBoolean("LAUNCH_HOLD_ENABLED", true),
     productionOrigin
-  }
+  },
+  launch
 };
 
 writeFileSync(
@@ -61,11 +76,13 @@ const routeAliases = new Map([["tray", "trays"]]);
 
 function publicRoutes() {
   const routes = new Set(["/"]);
+  const allowed = new Set(launch.publicPaths);
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory() || excludedRouteDirectories.has(entry.name)) continue;
     const indexPath = new URL(`${entry.name}/index.html`, root);
     if (!existsSync(indexPath)) continue;
-    routes.add(`/${routeAliases.get(entry.name) || entry.name}/`);
+    const route = routeAliases.get(entry.name) || entry.name;
+    if (!launch.mvpModeEnabled || allowed.has(route)) routes.add(`/${route}/`);
   }
   return [...routes].sort((a, b) => a.localeCompare(b));
 }

@@ -39,6 +39,7 @@
   let sharedOrders = [];
   const siteConfig = window.MOVEMENT_TRAY_PUBLIC_CONFIG || {};
   const analyticsConfig = siteConfig.analytics || {};
+  const launchConfig = siteConfig.launch || {};
   const analyticsConsentKey = "forget-about-analytics-consent";
   const launchHoldKey = "forget-about-launch-hold-dismissed";
   let analyticsLoaded = false;
@@ -185,6 +186,46 @@
 
   function launchHoldEnabled() {
     return analyticsConfig.launchHoldEnabled !== false;
+  }
+
+  function launchMvpModeEnabled() {
+    return launchConfig.mvpModeEnabled !== false;
+  }
+
+  function launchPublicPaths() {
+    return new Set(Array.isArray(launchConfig.publicPaths) ? launchConfig.publicPaths : ["trays", "print", "factory"]);
+  }
+
+  function launchDeferredPaths() {
+    return new Set(Array.isArray(launchConfig.deferredPaths) ? launchConfig.deferredPaths : ["makeup", "paint", "stitch"]);
+  }
+
+  function currentRoutePath() {
+    const path = window.location.pathname.toLowerCase().split("/").filter(Boolean)[0] || "";
+    return path === "tray" ? "trays" : path;
+  }
+
+  function applyLaunchScope() {
+    if (!launchMvpModeEnabled()) return;
+    const publicPaths = launchPublicPaths();
+    const deferredPaths = launchDeferredPaths();
+    document.querySelectorAll("[data-launch-path]").forEach((element) => {
+      const path = element.dataset.launchPath;
+      if (path && !publicPaths.has(path)) {
+        element.hidden = true;
+        element.setAttribute("aria-hidden", "true");
+      }
+    });
+    const route = currentRoutePath();
+    if (!deferredPaths.has(route) || document.querySelector(".launch-deferred-banner")) return;
+    const banner = document.createElement("section");
+    banner.className = "launch-deferred-banner";
+    banner.innerHTML = `
+      <strong>Private beta route</strong>
+      <span>This generator is not part of the public launch MVP yet. The live launch is focused on Tray, Uploaded Print, and the Print Factory.</span>
+      <a href="../">Back to launch routes</a>
+    `;
+    document.querySelector("main")?.prepend(banner);
   }
 
   function renderLaunchHold() {
@@ -829,6 +870,7 @@
     renderOrders: renderSharedOrders
   };
 
+  applyLaunchScope();
   decorateSponsors();
   normalizeExistingAccountButtons();
   enhancePrototypeTopbar();
