@@ -697,6 +697,107 @@
   justify-self: start;
 }
 
+.shared-auth-dialog {
+  width: min(560px, calc(100% - 28px));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line, #b9c5ae);
+  border-radius: 17px;
+  color: var(--ink, #1e2921);
+  background: var(--panel, #f4f4e8);
+  box-shadow: 0 34px 90px rgba(20, 35, 24, .32);
+}
+
+.shared-auth-dialog::backdrop {
+  background: rgba(20, 35, 24, .62);
+  backdrop-filter: blur(5px);
+}
+
+.shared-auth-dialog-heading {
+  padding: 17px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--line, #b9c5ae);
+  background: color-mix(in srgb, var(--white, #fffdf4) 70%, transparent);
+}
+
+.shared-auth-dialog-heading h2,
+.shared-auth-dialog-heading p {
+  margin: 0;
+}
+
+.shared-auth-dialog-heading h2 {
+  font: 650 24px/1.05 Georgia, serif;
+}
+
+.shared-auth-dialog-heading p {
+  margin-bottom: 5px;
+  color: var(--accent-dark, #263c2b);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.shared-auth-dialog-heading button {
+  width: 35px;
+  height: 35px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line, #b9c5ae);
+  border-radius: 50%;
+  color: var(--muted, #627064);
+  background: var(--white, #fffdf4);
+  cursor: pointer;
+}
+
+.shared-auth-form {
+  padding: 18px 20px 20px;
+  display: grid;
+  gap: 11px;
+}
+
+.shared-auth-form p,
+.shared-auth-form small {
+  margin: 0;
+  color: var(--muted, #627064);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.shared-auth-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted, #627064);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.shared-auth-form input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--line, #b9c5ae);
+  border-radius: 8px;
+  color: var(--ink, #1e2921);
+  background: white;
+  font-size: 13px;
+  text-transform: none;
+}
+
+.shared-auth-form button[type="submit"] {
+  min-height: 42px;
+}
+
+.shared-auth-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 9px;
+}
+
 .shared-account-dialog {
   width: min(920px, calc(100% - 28px));
   max-height: min(760px, calc(100dvh - 28px));
@@ -993,6 +1094,7 @@
   .order-status-track,
   .cookie-consent,
   .launch-deferred-banner,
+  .shared-auth-field-grid,
   .launch-name-grid {
     grid-template-columns: 1fr;
   }

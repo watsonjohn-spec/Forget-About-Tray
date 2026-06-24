@@ -569,8 +569,15 @@ language plpgsql
 security definer set search_path = ''
 as $$
 begin
-  insert into public.profiles (user_id, email)
-  values (new.id, coalesce(new.email, ''))
+  insert into public.profiles (user_id, email, display_name)
+  values (
+    new.id,
+    coalesce(new.email, ''),
+    nullif(btrim(coalesce(
+      new.raw_user_meta_data ->> 'full_name',
+      concat_ws(' ', new.raw_user_meta_data ->> 'first_name', new.raw_user_meta_data ->> 'last_name')
+    )), '')
+  )
   on conflict (user_id) do nothing;
   return new;
 end;
@@ -583,9 +590,16 @@ create trigger on_auth_user_created
 
 revoke execute on function public.handle_new_user() from anon, authenticated, public;
 
-insert into public.profiles (user_id, email)
-select id, coalesce(email, '') from auth.users
-on conflict (user_id) do nothing;
+insert into public.profiles (user_id, email, display_name)
+select
+  id,
+  coalesce(email, ''),
+  nullif(btrim(coalesce(
+    raw_user_meta_data ->> 'full_name',
+    concat_ws(' ', raw_user_meta_data ->> 'first_name', raw_user_meta_data ->> 'last_name')
+  )), '')
+from auth.users
+on conflict (user_id) do update set display_name = coalesce(public.profiles.display_name, excluded.display_name);
 
 alter table public.profiles enable row level security;
 alter table public.launch_signups enable row level security;

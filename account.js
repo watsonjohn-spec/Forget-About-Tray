@@ -74,6 +74,14 @@
     return body;
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]);
+  }
+
+  function cleanName(value, maximum = 80) {
+    return String(value || "").trim().replace(/\s+/g, " ").slice(0, maximum);
+  }
+
   async function loadConfig() {
     if (config) return config;
     const publicConfig = window.MOVEMENT_TRAY_PUBLIC_CONFIG || {};
@@ -202,19 +210,29 @@
     return responseJson(response);
   }
 
-  async function signUp(email, password) {
+  async function signUp(email, password, profile = {}) {
+    const firstName = cleanName(profile.firstName || profile.first_name);
+    const lastName = cleanName(profile.lastName || profile.last_name);
+    const fullName = cleanName(profile.fullName || [firstName, lastName].filter(Boolean).join(" "), 170);
     const result = await authRequest("/signup", {
       method: "POST",
       body: JSON.stringify({
         email,
         password,
         data: {
+          first_name: firstName,
+          last_name: lastName,
+          full_name: fullName,
+          display_name: fullName,
           signup_brand_key: brandKey(),
           signup_surface: window.location.pathname.toLowerCase().includes("/factory") ? "factory" : "customer"
         }
       })
     });
-    if (result.access_token) storeSession(result);
+    if (result.access_token) {
+      storeSession(result);
+      if (fullName) await saveProfile({ display_name: fullName }).catch(() => null);
+    }
     return result;
   }
 
@@ -234,6 +252,100 @@
       method: "POST",
       body: JSON.stringify({ email, redirect_to: appUrl() })
     });
+  }
+
+  function authDialogMarkup(mode, options = {}) {
+    const email = escapeHtml(options.email || "");
+    const password = escapeHtml(options.password || "");
+    const label = escapeHtml(options.surfaceLabel || "Forget About");
+    if (mode === "reset") {
+      return `
+        <div class="shared-auth-dialog-heading">
+          <div><p>Account help</p><h2>Reset your password</h2></div>
+          <button type="button" data-auth-dialog-close aria-label="Close">&times;</button>
+        </div>
+        <form class="shared-auth-form" data-auth-dialog-form="reset">
+          <p>Enter the email address you used for ${label}. We will send a password reset link.</p>
+          <label>Email address<input name="email" type="email" autocomplete="email" required value="${email}"></label>
+          <button class="button button-primary primary" type="submit">Send reset email</button>
+          <small data-auth-dialog-status></small>
+        </form>
+      `;
+    }
+    return `
+      <div class="shared-auth-dialog-heading">
+        <div><p>Create account</p><h2>Join ${label}</h2></div>
+        <button type="button" data-auth-dialog-close aria-label="Close">&times;</button>
+      </div>
+      <form class="shared-auth-form" data-auth-dialog-form="create">
+        <p>Create an account to save designs, orders, downloads, and print requests. Names help us keep orders and account records readable.</p>
+        <div class="shared-auth-field-grid">
+          <label>First name<input name="firstName" autocomplete="given-name" required></label>
+          <label>Last name<input name="lastName" autocomplete="family-name" required></label>
+        </div>
+        <label>Email address<input name="email" type="email" autocomplete="email" required value="${email}"></label>
+        <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required value="${password}"></label>
+        <button class="button button-primary primary" type="submit">Create account</button>
+        <small data-auth-dialog-status></small>
+      </form>
+    `;
+  }
+
+  function ensureAuthDialog() {
+    let dialog = document.getElementById("sharedAuthDialog");
+    if (dialog) return dialog;
+    dialog = document.createElement("dialog");
+    dialog.id = "sharedAuthDialog";
+    dialog.className = "shared-auth-dialog";
+    document.body.append(dialog);
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog || event.target.closest("[data-auth-dialog-close]")) dialog.close();
+    });
+    return dialog;
+  }
+
+  function dialogNotify(options, message) {
+    if (typeof options.notify === "function") options.notify(message);
+  }
+
+  function openAuthDialog(mode, options = {}) {
+    const dialog = ensureAuthDialog();
+    dialog.innerHTML = authDialogMarkup(mode, options);
+    const form = dialog.querySelector("[data-auth-dialog-form]");
+    const status = dialog.querySelector("[data-auth-dialog-status]");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button[type='submit']");
+      const values = Object.fromEntries(new FormData(form).entries());
+      try {
+        button.disabled = true;
+        status.textContent = mode === "reset" ? "Sending reset email..." : "Creating account...";
+        if (mode === "reset") {
+          await resetPassword(values.email);
+          status.textContent = "Password reset email sent.";
+          dialogNotify(options, "Password reset email sent.");
+          return;
+        }
+        if (String(values.password || "").length < 8) throw new Error("Use a password with at least 8 characters.");
+        const result = await signUp(values.email, values.password, {
+          firstName: values.firstName,
+          lastName: values.lastName
+        });
+        const message = result.access_token ? "Account created." : "Check your email to confirm your account.";
+        status.textContent = message;
+        dialogNotify(options, message);
+        await options.onSuccess?.(result, values);
+        if (result.access_token) dialog.close();
+      } catch (error) {
+        status.textContent = error.message;
+        dialogNotify(options, error.message);
+      } finally {
+        button.disabled = false;
+      }
+    });
+    dialog.showModal();
+    dialog.querySelector("input")?.focus();
+    return dialog;
   }
 
   async function updatePassword(currentPassword, newPassword) {
@@ -520,5 +632,10 @@
     authError: () => authError,
     isSignedIn: () => Boolean(session?.access_token),
     currentUser: () => user
+  };
+
+  window.accountAuthFlow = {
+    openCreateAccount: (options = {}) => openAuthDialog("create", options),
+    openPasswordReset: (options = {}) => openAuthDialog("reset", options)
   };
 })();

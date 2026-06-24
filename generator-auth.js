@@ -53,27 +53,23 @@
   });
 
   document.getElementById("createAccount")?.addEventListener("click", async () => {
-    const email = document.getElementById("loginEmail").value;
-    const password = document.getElementById("loginPassword").value;
-    if (!email || !password) return document.getElementById("loginError").textContent = "Enter an email and password first.";
-    try {
-      const result = await accountService.signUp(email, password);
-      document.getElementById("loginError").textContent = result.access_token ? "Account created." : "Check your email to confirm your account.";
-      if (result.access_token) setAuthenticated(true);
-    } catch (error) {
-      document.getElementById("loginError").textContent = error.message;
-    }
+    accountAuthFlow.openCreateAccount({
+      email: document.getElementById("loginEmail").value,
+      password: document.getElementById("loginPassword").value,
+      surfaceLabel: document.querySelector("[data-brand-name]")?.textContent?.trim() || "Forget About",
+      notify: (message) => { document.getElementById("loginError").textContent = message; },
+      onSuccess: async (result) => {
+        if (result.access_token) setAuthenticated(true);
+      }
+    });
   });
 
   document.getElementById("forgotPassword")?.addEventListener("click", async () => {
-    const email = document.getElementById("loginEmail").value;
-    if (!email) return document.getElementById("loginError").textContent = "Enter your email first.";
-    try {
-      await accountService.resetPassword(email);
-      document.getElementById("loginError").textContent = "Password reset email sent.";
-    } catch (error) {
-      document.getElementById("loginError").textContent = error.message;
-    }
+    accountAuthFlow.openPasswordReset({
+      email: document.getElementById("loginEmail").value,
+      surfaceLabel: document.querySelector("[data-brand-name]")?.textContent?.trim() || "Forget About",
+      notify: (message) => { document.getElementById("loginError").textContent = message; }
+    });
   });
 
   document.querySelectorAll("[data-oauth-provider]").forEach((button) => button.addEventListener("click", async () => {

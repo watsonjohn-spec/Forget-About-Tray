@@ -1979,30 +1979,25 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
   }
 });
 document.getElementById("createAccountButton").addEventListener("click", async () => {
-  const email = document.getElementById("loginUsername").value;
-  const password = document.getElementById("loginPassword").value;
-  if (!email || !password) return document.getElementById("loginError").textContent = "Enter an email and password first.";
-  try {
-    const result = await accountService.signUp(email, password);
-    document.getElementById("loginError").textContent = result.access_token ? "Account created." : "Check your email to confirm your account.";
-    if (result.access_token) {
+  accountAuthFlow.openCreateAccount({
+    email: document.getElementById("loginUsername").value,
+    password: document.getElementById("loginPassword").value,
+    surfaceLabel: "Forget About Tray",
+    notify: (message) => { document.getElementById("loginError").textContent = message; },
+    onSuccess: async (result) => {
+      if (!result.access_token) return;
       setAuthenticated(true);
       await accountService.importLocalData(localPresets(), localArmyProjects());
       await Promise.all([refreshCloudData(), refreshExportState()]);
     }
-  } catch (error) {
-    document.getElementById("loginError").textContent = error.message;
-  }
+  });
 });
 document.getElementById("forgotPasswordButton").addEventListener("click", async () => {
-  const email = document.getElementById("loginUsername").value;
-  if (!email) return document.getElementById("loginError").textContent = "Enter your email first.";
-  try {
-    await accountService.resetPassword(email);
-    document.getElementById("loginError").textContent = "Password reset email sent.";
-  } catch (error) {
-    document.getElementById("loginError").textContent = error.message;
-  }
+  accountAuthFlow.openPasswordReset({
+    email: document.getElementById("loginUsername").value,
+    surfaceLabel: "Forget About Tray",
+    notify: (message) => { document.getElementById("loginError").textContent = message; }
+  });
 });
 document.querySelectorAll("[data-oauth-provider]").forEach((button) => {
   button.addEventListener("click", async () => {

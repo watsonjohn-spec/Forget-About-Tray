@@ -462,33 +462,32 @@ document.getElementById("factoryLoginForm").addEventListener("submit", async (ev
 });
 
 document.getElementById("createFactoryAccount").addEventListener("click", async () => {
-  const email = document.getElementById("factoryEmail").value;
-  const password = document.getElementById("factoryPassword").value;
   const message = document.getElementById("factoryLoginMessage");
-  if (!email || password.length < 8) return message.textContent = "Enter an email and a password of at least eight characters.";
-  try {
-    const result = await accountService.signUp(email, password);
-    message.textContent = result.access_token ? "Printer account created." : "Printer account created. Check your email to confirm it, then sign in.";
-    if (result.access_token) {
+  accountAuthFlow.openCreateAccount({
+    email: document.getElementById("factoryEmail").value,
+    password: document.getElementById("factoryPassword").value,
+    surfaceLabel: "the Print Factory",
+    notify: (text) => { message.textContent = text; },
+    onSuccess: async (result) => {
+      if (!result.access_token) {
+        message.textContent = "Printer account created. Check your email to confirm it, then sign in.";
+        return;
+      }
+      message.textContent = "Printer account created.";
       setAuthenticated(true);
       await loadDashboard();
       setTab("profile");
     }
-  } catch (error) {
-    message.textContent = error.message;
-  }
+  });
 });
 
 document.getElementById("forgotFactoryPassword").addEventListener("click", async () => {
-  const email = document.getElementById("factoryEmail").value;
   const message = document.getElementById("factoryLoginMessage");
-  if (!email) return message.textContent = "Enter your email first.";
-  try {
-    await accountService.resetPassword(email);
-    message.textContent = "Password reset email sent.";
-  } catch (error) {
-    message.textContent = error.message;
-  }
+  accountAuthFlow.openPasswordReset({
+    email: document.getElementById("factoryEmail").value,
+    surfaceLabel: "the Print Factory",
+    notify: (text) => { message.textContent = text; }
+  });
 });
 
 document.querySelectorAll("[data-oauth-provider]").forEach((button) => {

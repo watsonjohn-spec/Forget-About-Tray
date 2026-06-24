@@ -161,6 +161,10 @@ test("Supabase schema defines private per-user STL object storage", async () => 
   assert.match(schema, /launch_signups/);
   assert.match(schema, /analytics_consent boolean/);
   assert.match(schema, /alter table public\.launch_signups enable row level security/);
+  assert.match(schema, /raw_user_meta_data ->> 'full_name'/);
+  assert.match(schema, /raw_user_meta_data ->> 'first_name'/);
+  assert.match(schema, /raw_user_meta_data ->> 'last_name'/);
+  assert.match(schema, /display_name = coalesce\(public\.profiles\.display_name, excluded\.display_name\)/);
 });
 
 test("generator contract validates parameters and renders an STL", () => {

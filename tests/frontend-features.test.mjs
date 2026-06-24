@@ -74,12 +74,19 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.match(app, /accountService\.providerAvailability\(\)/);
   assert.match(account, /async function signInWithProvider\(provider\)/);
   assert.match(account, /async function passwordGrant\(email, password\)/);
+  assert.match(account, /async function signUp\(email, password, profile = \{\}\)/);
+  assert.match(account, /first_name: firstName/);
+  assert.match(account, /last_name: lastName/);
+  assert.match(account, /full_name: fullName/);
   assert.match(account, /The current password is incorrect/);
   assert.match(account, /async function exportAccountData\(\)/);
   assert.match(account, /async function loadSecurityStatus\(\)/);
   assert.match(account, /async function requestAccountDeletion\(\)/);
   assert.match(account, /async function uploadStlFile/);
   assert.match(account, /async function downloadStlFile/);
+  assert.match(account, /window\.accountAuthFlow/);
+  assert.match(account, /openCreateAccount/);
+  assert.match(account, /openPasswordReset/);
   assert.match(accountPassword, /window\.accountPasswordFlow/);
   assert.match(accountPassword, /id="\$\{ids\.current\}"/);
   assert.match(accountPassword, /accountService\.updatePassword\(currentPassword, newPassword\)/);
@@ -122,7 +129,8 @@ test("login surfaces keep shared account actions across brands and factory", asy
     assert.match(source, /accountService\.providerAvailability\(\)/);
     assert.match(source, /button\.hidden = configured === false/);
     assert.match(source, /accountService\.signInWithProvider\(button\.dataset\.oauthProvider\)/);
-    assert.match(source, /accountService\.resetPassword\(email\)/);
+    assert.match(source, /accountAuthFlow\.openCreateAccount/);
+    assert.match(source, /accountAuthFlow\.openPasswordReset/);
     assert.match(source, /accountService\.authType\(\) === "recovery"/);
   }
   assert.match(architecture, /Login surfaces must stay functionally and structurally identical/);
@@ -388,6 +396,8 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerCss, /\.cookie-consent/);
   assert.match(footerCss, /\.launch-hold/);
   assert.match(footerCss, /\.launch-deferred-banner/);
+  assert.match(footerCss, /\.shared-auth-dialog/);
+  assert.match(footerCss, /\.shared-auth-field-grid/);
   assert.match(footerJs, /Modern slavery statement/);
   assert.match(footerJs, /data-account-password-prefix="sharedAccount"/);
   assert.match(footerJs, /accountPasswordFlow\?\.hydrate/);
