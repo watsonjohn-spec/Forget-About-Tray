@@ -699,6 +699,7 @@ function startAdGate() {
   const email = document.getElementById("completeAdEmailExport");
   document.getElementById("exportChoices").hidden = true;
   document.getElementById("adGate").hidden = false;
+  window.forgetSharedShell?.refreshAds?.(document.getElementById("adGate"));
   download.disabled = true;
   email.disabled = true;
   download.textContent = "Preparing STL";

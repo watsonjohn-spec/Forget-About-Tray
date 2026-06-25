@@ -99,9 +99,10 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
 
   const context = { window: {} };
   vm.runInNewContext(publicConfigSource, context);
-  assert.deepEqual(Object.keys(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG).sort(), ["analytics", "apiBaseUrl", "launch", "supabasePublishableKey", "supabaseUrl"]);
+  assert.deepEqual(Object.keys(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG).sort(), ["adsense", "analytics", "apiBaseUrl", "launch", "supabasePublishableKey", "supabaseUrl"]);
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.analytics.ga4MeasurementId, "G-NDKFRQ10CJ");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.analytics.clarityProjectId, "xc7u4g2p1w");
+  assert.equal(typeof context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.enabled, "boolean");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.mvpModeEnabled, true);
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["trays", "print", "factory"]));
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.deferredPaths), JSON.stringify(["makeup", "paint", "stitch"]));
@@ -248,6 +249,8 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(html, /Prepare my STL/);
   assert.match(html, /We are pulling your STL together/);
   assert.match(html, /The download buttons will enable as soon as the STL package is ready/);
+  assert.match(html, /data-ad-placement="export-prep"/);
+  assert.match(html, /short advertising placement may appear/);
   assert.doesNotMatch(html, /Watch sponsor message/);
   assert.doesNotMatch(html, /30-second sponsor placement/);
   assert.doesNotMatch(html, /Download unlocks in 30 seconds/);
@@ -409,10 +412,18 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerJs, /send_page_view: false/);
   assert.match(footerJs, /trackAnalyticsPageView/);
   assert.match(footerJs, /loadMicrosoftClarity/);
+  assert.match(footerJs, /loadGoogleAdSense/);
+  assert.match(footerJs, /pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js/);
+  assert.match(footerJs, /adsense-portal/);
+  assert.match(footerJs, /data-adsense-placement/);
+  assert.match(footerJs, /refreshAds: refreshAdSensePortals/);
+  assert.match(footerJs, /Accept analytics and ads/);
   assert.match(footerJs, /cookie-consent/);
   assert.match(footerJs, /launchHoldEnabled/);
   assert.match(footerJs, /\/api\/launch-signup/);
   assert.match(footerCss, /\.cookie-consent/);
+  assert.match(footerCss, /\.adsense-portal/);
+  assert.match(footerCss, /ins\.adsbygoogle\[data-ad-status="unfilled"\]/);
   assert.match(footerCss, /\.launch-hold/);
   assert.match(footerCss, /\.launch-deferred-banner/);
   assert.match(footerCss, /\.shared-auth-dialog/);

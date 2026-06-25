@@ -1,49 +1,15 @@
 (() => {
-  const sponsorSets = {
-    home: {
-      theme: "print",
-      top: { brand: "Bambu Lab", url: "https://bambulab.com/", title: "Desktop printers for the workshop bench", detail: "Concept sponsor placement for print-ready organiser projects." },
-      bottom: { brand: "DMC", url: "https://www.dmc.com/", title: "Thread, floss, and craft supplies", detail: "Concept sponsor placement for stitch and craft organisation." }
-    },
-    tray: {
-      theme: "tray",
-      top: { brand: "Warhammer", url: "https://www.warhammer.com/", title: "Tabletop armies need proper logistics", detail: "Concept sponsor placement for miniatures, paints, bases, and terrain." },
-      bottom: { brand: "Bambu Lab", url: "https://bambulab.com/", title: "Print the movement plan at home", detail: "Concept sponsor placement for printers, filament, and hobby hardware." }
-    },
-    makeup: {
-      theme: "makeup",
-      top: { brand: "Sephora UK", url: "https://www.sephora.co.uk/", title: "Beauty kit, beautifully arranged", detail: "Concept sponsor placement for cosmetics, tools, and dressing-table storage." },
-      bottom: { brand: "Space NK", url: "https://www.spacenk.com/uk/", title: "Premium beauty deserves a better caddy", detail: "Concept sponsor placement for beauty brands and organisers." }
-    },
-    print: {
-      theme: "print",
-      top: { brand: "Bambu Lab", url: "https://bambulab.com/", title: "Upload the file. Pick the print route.", detail: "Concept sponsor placement for printers and filament." },
-      bottom: { brand: "Royal Mail", url: "https://www.royalmail.com/", title: "From print bed to front door", detail: "Concept sponsor placement for UK fulfilment and delivery." }
-    },
-    paint: {
-      theme: "paint",
-      top: { brand: "Citadel Colour", url: "https://paint.warhammer.com/", title: "Paints, brushes, and a tidier desk", detail: "Concept sponsor placement for model painting supplies." },
-      bottom: { brand: "Vallejo", url: "https://acrylicosvallejo.com/en/", title: "Bottle racks for busy painting sessions", detail: "Concept sponsor placement for acrylic paints and hobby tools." }
-    },
-    stitch: {
-      theme: "stitch",
-      top: { brand: "DMC", url: "https://www.dmc.com/", title: "Keep every thread reference in reach", detail: "Concept sponsor placement for embroidery floss and stitch supplies." },
-      bottom: { brand: "Hobbycraft", url: "https://www.hobbycraft.co.uk/", title: "Craft projects deserve useful storage", detail: "Concept sponsor placement for craft supplies and kits." }
-    },
-    factory: {
-      theme: "factory",
-      top: { brand: "Bambu Lab", url: "https://bambulab.com/", title: "Provider benches built for throughput", detail: "Concept sponsor placement for printers, spares, and filament." },
-      bottom: { brand: "Royal Mail", url: "https://www.royalmail.com/", title: "Ship finished prints with confidence", detail: "Concept sponsor placement for UK delivery partners." }
-    }
-  };
+  const adPortalThemes = { home: "print", tray: "tray", makeup: "makeup", print: "print", paint: "paint", stitch: "stitch", factory: "factory" };
   let sharedOrders = [];
   const siteConfig = window.MOVEMENT_TRAY_PUBLIC_CONFIG || {};
   const analyticsConfig = siteConfig.analytics || {};
+  const adsenseConfig = siteConfig.adsense || {};
   const launchConfig = siteConfig.launch || {};
   const analyticsConsentKey = "forget-about-analytics-consent";
   const launchHoldKey = "forget-about-launch-hold-dismissed";
   let analyticsLoaded = false;
   let analyticsHistoryPatched = false;
+  let adsenseLoaded = false;
   let lastTrackedUrl = "";
 
   function escapeHtml(value) {
@@ -83,6 +49,10 @@
 
   function analyticsConsentGranted() {
     return !cookieConsentRequired() || safeStorageGet(analyticsConsentKey) === "accepted";
+  }
+
+  function adsConsentGranted() {
+    return analyticsConsentGranted();
   }
 
   function currentAnalyticsUrl() {
@@ -142,6 +112,40 @@
     setTimeout(trackAnalyticsPageView, 0);
   }
 
+  function adsenseClientId() {
+    return String(adsenseConfig.clientId || "").trim();
+  }
+
+  function adsenseEnabled() {
+    return adsenseConfig.enabled !== false && Boolean(adsenseClientId());
+  }
+
+  function adsenseSlotId(placement) {
+    const slots = adsenseConfig.slots || {};
+    return String(slots[placement] || slots.default || "").trim();
+  }
+
+  function loadGoogleAdSense() {
+    const clientId = adsenseClientId();
+    if (!adsenseEnabled() || !adsConsentGranted()) return false;
+    if (!document.querySelector("script[data-forget-adsense]")) {
+      const script = document.createElement("script");
+      script.async = true;
+      script.crossOrigin = "anonymous";
+      script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(clientId)}`;
+      script.dataset.forgetAdsense = clientId;
+      document.head.append(script);
+    }
+    window.adsbygoogle = window.adsbygoogle || [];
+    adsenseLoaded = true;
+    return true;
+  }
+
+  function startAdsense() {
+    if (!adsConsentGranted() || !loadGoogleAdSense()) return;
+    setTimeout(() => refreshAdSensePortals(), 0);
+  }
+
   function renderCookieConsent() {
     if (!cookieConsentRequired() || safeStorageGet(analyticsConsentKey) || document.getElementById("cookieConsent")) return;
     const banner = document.createElement("section");
@@ -150,12 +154,12 @@
     banner.setAttribute("aria-label", "Cookie consent");
     banner.innerHTML = `
       <div>
-        <strong>Can we use analytics cookies?</strong>
-        <p>They help us see which generators are useful while we build. Essential site functions still work if you decline.</p>
+        <strong>Can we use analytics and advertising cookies?</strong>
+        <p>They help us see which generators are useful and, where configured, show advertising through Google AdSense. Essential site functions still work if you decline.</p>
       </div>
       <div class="cookie-actions">
         <button type="button" data-cookie-consent="declined">Essential only</button>
-        <button type="button" data-cookie-consent="accepted">Accept analytics</button>
+        <button type="button" data-cookie-consent="accepted">Accept analytics and ads</button>
       </div>
     `;
     banner.addEventListener("click", (event) => {
@@ -164,6 +168,7 @@
       safeStorageSet(analyticsConsentKey, button.dataset.cookieConsent);
       banner.remove();
       startAnalytics();
+      startAdsense();
     });
     document.body.append(banner);
   }
@@ -334,11 +339,11 @@
     return `
       <span class="sponsor-visual" aria-hidden="true"></span>
       <span class="sponsor-copy">
-        <span class="sponsor-label">Concept sponsor</span>
+        <span class="sponsor-label">Advertisement</span>
         <strong>${escapeHtml(sponsor.brand)} · ${escapeHtml(sponsor.title)}</strong>
         <small>${escapeHtml(sponsor.detail)} No paid partnership is implied.</small>
       </span>
-      <span class="sponsor-cta">Visit brand</span>
+      <span class="sponsor-cta">AdSense</span>
     `;
   }
 
@@ -360,8 +365,91 @@
   }
 
   function decorateSponsors() {
-    const set = sponsorSets[pageKey()] || sponsorSets.home;
+    decorateAdSensePortals();
+  }
+
+  function adPlacementLabel(value) {
+    return String(value || "advertising").replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function adPortalPlacement(element, index) {
+    if (element.dataset.adPlacement) return element.dataset.adPlacement;
+    if (element.classList.contains("ad-gate-creative")) return "export-prep";
+    const route = pageKey();
+    const placement = element.classList.contains("ad-slot-bottom") || index % 2 === 1 ? "bottom" : "top";
+    return `${route}-${placement}`;
+  }
+
+  function adPortalMarkup(placement) {
+    const slotId = adsenseSlotId(placement);
+    const configured = adsenseEnabled() && slotId;
+    return `
+      <span class="adsense-copy">
+        <span class="adsense-label">Advertisement</span>
+        <strong>${configured ? "Google AdSense" : "AdSense portal ready"}</strong>
+        <small>${configured ? `${adPlacementLabel(placement)} ad unit.` : `${adPlacementLabel(placement)} will serve after the AdSense client and slot IDs are configured.`}</small>
+      </span>
+      <span class="adsense-mount" aria-hidden="${configured ? "false" : "true"}"></span>
+    `;
+  }
+
+  function applyAdSensePortal(element, placement) {
+    const theme = adPortalThemes[pageKey()] || adPortalThemes.home;
+    element.className = [...new Set(`${element.className} adsense-portal adsense-${theme}`.trim().split(/\s+/))].join(" ");
+    element.dataset.adsensePlacement = placement;
+    element.dataset.adsenseSlot = adsenseSlotId(placement);
+    element.setAttribute("aria-label", "Advertisement");
+    element.innerHTML = adPortalMarkup(placement);
+  }
+
+  function adPortalVisible(element) {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  }
+
+  function ensureAdSenseUnit(element) {
+    const slotId = element.dataset.adsenseSlot;
+    const clientId = adsenseClientId();
+    if (!slotId || !clientId) return null;
+    const mount = element.querySelector(".adsense-mount") || element;
+    let unit = mount.querySelector("ins.adsbygoogle");
+    if (!unit) {
+      unit = document.createElement("ins");
+      unit.className = "adsbygoogle";
+      unit.style.display = "block";
+      unit.dataset.adClient = clientId;
+      unit.dataset.adSlot = slotId;
+      unit.dataset.adFormat = "auto";
+      unit.dataset.fullWidthResponsive = "true";
+      if (adsenseConfig.testMode) unit.dataset.adtest = "on";
+      mount.append(unit);
+    }
+    return unit;
+  }
+
+  function refreshAdSensePortals(root = document) {
+    if (!adsenseEnabled() || !adsConsentGranted() || !loadGoogleAdSense()) return;
+    const scope = root instanceof Element ? root : document;
+    const slots = scope.matches?.("[data-adsense-placement]")
+      ? [scope, ...scope.querySelectorAll("[data-adsense-placement]")]
+      : [...scope.querySelectorAll("[data-adsense-placement]")];
+    slots.forEach((slot) => {
+      if (slot.dataset.adsenseRequested === "true" || !adPortalVisible(slot)) return;
+      if (!ensureAdSenseUnit(slot)) return;
+      try {
+        window.adsbygoogle.push({});
+        slot.dataset.adsenseRequested = "true";
+      } catch (error) {
+        slot.dataset.adsenseError = error.message || "AdSense request failed";
+      }
+    });
+  }
+
+  function decorateAdSensePortals() {
     let slots = [...document.querySelectorAll(".ad-slot")];
+    const exportPrep = document.querySelector(".ad-gate-creative");
+    if (exportPrep && !slots.includes(exportPrep)) slots.push(exportPrep);
     if (!slots.length) {
       const main = document.querySelector("main");
       const header = document.querySelector("header");
@@ -375,7 +463,8 @@
       main.append(bottom);
       slots = [top, bottom];
     }
-    slots.forEach((slot, index) => applySponsor(slot, index === 0 ? set.top : set.bottom, set.theme));
+    slots.forEach((slot, index) => applyAdSensePortal(slot, adPortalPlacement(slot, index)));
+    startAdsense();
   }
 
   function generatorName() {
@@ -848,7 +937,7 @@
         </details>
         <details>
           <summary>Privacy</summary>
-          <p>Draft privacy notice: we use account details, saved designs, uploaded file metadata, quote requests, order records, addresses, messages, payment status, support history, device logs, and basic analytics to run the service, generate designs, match print jobs, fulfil orders, prevent abuse, improve the platform, and meet legal duties. We share only what is needed with payment processors, hosting providers, support tools, and the selected print provider. Card details are handled by Stripe, not stored by Forget About. You can ask for help with access, correction, deletion, portability, or objection requests by emailing help@forgetabout.im.</p>
+          <p>Draft privacy notice: we use account details, saved designs, uploaded file metadata, quote requests, order records, addresses, messages, payment status, support history, device logs, analytics, and advertising consent state to run the service, generate designs, match print jobs, fulfil orders, prevent abuse, improve the platform, serve configured ads, and meet legal duties. We share only what is needed with payment processors, hosting providers, analytics and advertising providers, support tools, and the selected print provider. Card details are handled by Stripe, not stored by Forget About. You can ask for help with access, correction, deletion, portability, or objection requests by emailing help@forgetabout.im.</p>
         </details>
         <details>
           <summary>Refunds</summary>
@@ -872,16 +961,18 @@
     savePreset: saveSharedPreset,
     exportGenerator: exportSharedGenerator,
     enhanceTopbar: enhancePrototypeTopbar,
-    renderOrders: renderSharedOrders
+    renderOrders: renderSharedOrders,
+    refreshAds: refreshAdSensePortals
   };
 
   applyLaunchScope();
-  decorateSponsors();
+  decorateAdSensePortals();
   normalizeExistingAccountButtons();
   enhancePrototypeTopbar();
   appendFooter();
   setupAnalyticsNavigation();
   renderCookieConsent();
   startAnalytics();
+  startAdsense();
   renderLaunchHold();
 })();

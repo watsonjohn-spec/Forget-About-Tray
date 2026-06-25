@@ -16,8 +16,8 @@ Forget About Tray is now the first generator in the shared Forget About platform
 - Save and reload complete army tray projects
 - Add catalogue or custom units as new visual tray tabs
 - Edit army trays in place using the full visual designer
-- Route exports through a sponsor-view download or Stripe print-order checkout
-- Offer one sponsored STL download per account, then a one-off GBP 5 unlimited-download unlock
+- Route exports through a file-preparation advertising portal or Stripe print-order checkout
+- Offer one ad-supported STL download per account, then a one-off GBP 5 unlimited-download unlock
 - Supabase user accounts with cloud-saved trays, armies, profiles, and order history
 - Server-side Stripe Checkout sessions with test-mode protection
 - Customer-selected print providers with colour, rating, UK location, lead time, and all-in price comparison
@@ -45,8 +45,8 @@ Then open `http://localhost:4173`.
 
 The server calculates the displayed quote and creates Stripe Checkout sessions. Secret keys are never sent to the browser. Live Stripe keys are rejected unless `ALLOW_LIVE_STRIPE=true`.
 
-Paid unlimited-download access and the single sponsored download are recorded against the signed-in Supabase account.
-Set `DOWNLOAD_TOKEN_SECRET` to a long random value before deployment so sponsored-download permits cannot be forged.
+Paid unlimited-download access and the single ad-supported download are recorded against the signed-in Supabase account.
+Set `DOWNLOAD_TOKEN_SECRET` to a long random value before deployment so first-download permits cannot be forged.
 
 For Print Factory onboarding, payouts, and provider-decline refunds, the Stripe key must also be allowed to create and read connected accounts, create Express login links, create transfers, and create refunds. Keep the integration in test mode until the complete marketplace flow has been exercised.
 
@@ -70,7 +70,7 @@ Set `PRINT_AUTO_COMPLETE_DAYS` to control the buyer confirmation window for post
 
 To enable Google and Apple sign-in, open **Supabase Dashboard → Authentication → Providers**, configure Google and Apple, then add the deployed app URL to **Authentication → URL Configuration → Redirect URLs**. Email and password sign-in remains available.
 
-`npm run public-config` generates `public-config.js` using only `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. These values are designed to be public and allow account login to work on GitHub Pages. The Supabase secret key is never included. `Publish to GitHub.cmd` runs this automatically before publishing.
+`npm run public-config` generates `public-config.js` using only public browser configuration such as `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, analytics IDs, and optional AdSense publisher/ad-unit IDs. These values are designed to be public and allow account login, analytics, and configured ad portals to work on the deployed site. The Supabase secret key is never included. `Publish to GitHub.cmd` runs this automatically before publishing.
 
 The bundled catalogue covers ranked units across the main and legacy Old World armies. Base dimensions can change with rules updates, so confirm unusual models against the current army publication before printing.
 

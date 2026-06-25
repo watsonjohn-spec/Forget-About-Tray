@@ -1829,7 +1829,7 @@ async function useFreeExport(request, response) {
     const config = generator.normalizeParameters(body.config || body.parameters || {});
     const name = String(body.name || "movement-tray").slice(0, 80);
     const claimed = await claimFreeExportForScope(user.id, brand.key, generator.type);
-    if (!claimed) return sendJson(response, 409, { error: "The sponsored STL download has already been used." }, origin);
+    if (!claimed) return sendJson(response, 409, { error: "The first free STL export has already been used." }, origin);
     sendJson(response, 200, { allowed: true, downloadToken: createFreeDownloadToken(user.id, config, name, brand.key, generator.type) }, origin);
   } catch (error) {
     sendJson(response, 401, { error: error.message }, origin);

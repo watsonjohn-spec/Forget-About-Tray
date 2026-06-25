@@ -34,6 +34,36 @@ function envList(name, fallback) {
 }
 
 const productionOrigin = cleanOrigin(env.PRODUCTION_ORIGIN);
+const adsenseClientId = String(env.ADSENSE_CLIENT_ID || env.ADSENSE_PUBLISHER_ID || "").trim();
+const adsenseSlotNames = [
+  "home-top",
+  "home-bottom",
+  "tray-top",
+  "tray-bottom",
+  "makeup-top",
+  "makeup-bottom",
+  "print-top",
+  "print-bottom",
+  "paint-top",
+  "paint-bottom",
+  "stitch-top",
+  "stitch-bottom",
+  "factory-top",
+  "factory-bottom",
+  "export-prep",
+  "default"
+];
+
+function envNameForAdSlot(slotName) {
+  return `ADSENSE_SLOT_${slotName.toUpperCase().replace(/-/g, "_")}`;
+}
+
+function adsenseSlots() {
+  return Object.fromEntries(adsenseSlotNames
+    .map((slotName) => [slotName, String(env[envNameForAdSlot(slotName)] || "").trim()])
+    .filter(([, value]) => value));
+}
+
 const launch = {
   mvpModeEnabled: envBoolean("MVP_LAUNCH_MODE", true),
   publicPaths: envList("LAUNCH_PUBLIC_PATHS", "trays,print,factory"),
@@ -51,6 +81,12 @@ const config = {
     cookieConsentRequired: envBoolean("COOKIE_CONSENT_REQUIRED", true),
     launchHoldEnabled: envBoolean("LAUNCH_HOLD_ENABLED", true),
     productionOrigin
+  },
+  adsense: {
+    enabled: envBoolean("ADSENSE_ENABLED", Boolean(adsenseClientId)),
+    clientId: adsenseClientId,
+    testMode: envBoolean("ADSENSE_TEST_MODE", false),
+    slots: adsenseSlots()
   },
   launch
 };
