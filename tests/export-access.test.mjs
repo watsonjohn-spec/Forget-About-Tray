@@ -644,6 +644,9 @@ test("corporate landing page links to active generators", async () => {
   assert.equal(landing.status, 200);
   const html = await landing.text();
   assert.match(html, /Forget About/);
+  assert.match(html, /Generator directory/);
+  const homeAlias = await fetch(`${baseUrl}/home/`);
+  assert.equal(homeAlias.status, 404);
   for (const route of ["/trays/", "/makeup/", "/print/", "/paint/", "/stitch/", "/factory/"]) {
     assert.match(html, new RegExp(`href="${route.slice(1).replace("/", "\\/")}`));
     const response = await fetch(`${baseUrl}${route}`);
@@ -703,7 +706,10 @@ test("factory route serves the dedicated provider login", async () => {
 test("hub route is restricted to the admin email and can approve provider profiles", async () => {
   const route = await fetch(`${baseUrl}/hub/`);
   assert.equal(route.status, 200);
-  assert.match(await route.text(), /Forget About Hub/);
+  const routeHtml = await route.text();
+  assert.match(routeHtml, /Forget About Hub/);
+  assert.match(routeHtml, /href="\.\.\/"/);
+  assert.doesNotMatch(routeHtml, /site-wide\.js/);
 
   printerProfile.status = "pending_review";
   printerProfile.accepting_jobs = false;

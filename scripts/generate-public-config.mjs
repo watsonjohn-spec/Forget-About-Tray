@@ -38,6 +38,7 @@ const launch = {
   mvpModeEnabled: envBoolean("MVP_LAUNCH_MODE", true),
   publicPaths: envList("LAUNCH_PUBLIC_PATHS", "trays,print,factory"),
   deferredPaths: envList("LAUNCH_DEFERRED_PATHS", "makeup,paint,stitch"),
+  launchHoldExcludedPaths: envList("LAUNCH_HOLD_EXCLUDED_PATHS", "hub"),
   factoryLaunchHoldEnabled: envBoolean("FACTORY_LAUNCH_HOLD_ENABLED", true)
 };
 const config = {

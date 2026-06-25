@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
@@ -87,6 +88,8 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.match(account, /window\.accountAuthFlow/);
   assert.match(account, /openCreateAccount/);
   assert.match(account, /openPasswordReset/);
+  assert.match(account, /path === "\/hub"/);
+  assert.match(account, /signup_surface:[\s\S]*\? "hub"/);
   assert.match(accountPassword, /window\.accountPasswordFlow/);
   assert.match(accountPassword, /id="\$\{ids\.current\}"/);
   assert.match(accountPassword, /accountService\.updatePassword\(currentPassword, newPassword\)/);
@@ -102,6 +105,7 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.mvpModeEnabled, true);
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["trays", "print", "factory"]));
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.deferredPaths), JSON.stringify(["makeup", "paint", "stitch"]));
+  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.launchHoldExcludedPaths), JSON.stringify(["hub"]));
   assert.doesNotMatch(publicConfigSource, /sb_secret_|sk_(?:test|live)_|rk_(?:test|live)_|whsec_/);
 });
 
@@ -358,8 +362,7 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
 });
 
 test("site shell, footer, and prototype generators are present", async () => {
-  const [homeHtml, rootIndexHtml, footerCss, footerJs, accountPassword, printHtml, paintHtml, stitchHtml, hubHtml, hubCss, printJs, paintJs, stitchJs, hubJs, generatorQuotes, serverSource, uploadedPrint] = await Promise.all([
-    readFile(new URL("home.html", root), "utf8"),
+  const [rootIndexHtml, footerCss, footerJs, accountPassword, printHtml, paintHtml, stitchHtml, hubHtml, hubCss, printJs, paintJs, stitchJs, hubJs, generatorQuotes, serverSource, uploadedPrint] = await Promise.all([
     readFile(new URL("index.html", root), "utf8"),
     readFile(new URL("site-wide.css", root), "utf8"),
     readFile(new URL("site-wide.js", root), "utf8"),
@@ -378,15 +381,20 @@ test("site shell, footer, and prototype generators are present", async () => {
     readFile(new URL("platform/generators/uploaded-print.mjs", root), "utf8")
   ]);
   assert.match(rootIndexHtml, /Generator directory/);
-  assert.match(homeHtml, /href="trays\/"/);
-  assert.match(homeHtml, /data-launch-path="trays"/);
-  assert.match(homeHtml, /data-launch-path="makeup"/);
-  assert.match(homeHtml, /href="print\/"/);
-  assert.match(homeHtml, /data-launch-path="factory"/);
-  assert.match(footerJs, /help@forget\.im/);
+  assert.equal(existsSync(new URL("home.html", root)), false);
+  assert.equal(existsSync(new URL("home/index.html", root)), false);
+  assert.match(rootIndexHtml, /href="trays\/"/);
+  assert.match(rootIndexHtml, /data-launch-path="trays"/);
+  assert.match(rootIndexHtml, /data-launch-path="makeup"/);
+  assert.match(rootIndexHtml, /href="print\/"/);
+  assert.match(rootIndexHtml, /data-launch-path="factory"/);
+  assert.match(footerJs, /help@forgetabout\.im/);
+  assert.doesNotMatch(footerJs, /help@forget\.im/);
   assert.match(footerJs, /function applyLaunchScope\(\)/);
   assert.match(footerJs, /launchPublicPaths/);
   assert.match(footerJs, /launchDeferredPaths/);
+  assert.match(footerJs, /launchHoldExcludedPaths/);
+  assert.match(footerJs, /launchHoldExcludedPaths\(\)\.has\(currentRoutePath\(\)\)/);
   assert.match(footerJs, /launch-deferred-banner/);
   assert.match(footerJs, /analyticsConsentGranted/);
   assert.match(footerJs, /loadGoogleAnalytics/);
@@ -498,7 +506,9 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(hubHtml, /id="createAccount"/);
   assert.match(hubHtml, /id="forgotPassword"/);
   assert.match(hubHtml, /watson\.john@live\.co\.uk/);
+  assert.match(hubHtml, /href="\.\.\/"/);
   assert.match(hubHtml, /src="hub\.js"/);
+  assert.doesNotMatch(hubHtml, /site-wide\.js/);
   assert.match(hubCss, /\.hub-login/);
   assert.match(stitchJs, /stitchConfig/);
   assert.match(stitchJs, /threads: parseThreads/);

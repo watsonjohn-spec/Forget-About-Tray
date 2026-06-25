@@ -200,6 +200,10 @@
     return new Set(Array.isArray(launchConfig.deferredPaths) ? launchConfig.deferredPaths : ["makeup", "paint", "stitch"]);
   }
 
+  function launchHoldExcludedPaths() {
+    return new Set(Array.isArray(launchConfig.launchHoldExcludedPaths) ? launchConfig.launchHoldExcludedPaths : ["hub"]);
+  }
+
   function currentRoutePath() {
     const path = window.location.pathname.toLowerCase().split("/").filter(Boolean)[0] || "";
     return path === "tray" ? "trays" : path;
@@ -229,6 +233,7 @@
   }
 
   function renderLaunchHold() {
+    if (launchHoldExcludedPaths().has(currentRoutePath())) return;
     if (!launchHoldEnabled() || safeStorageGet(launchHoldKey) || document.getElementById("launchHold")) return;
     const hold = document.createElement("section");
     hold.id = "launchHold";
@@ -833,7 +838,7 @@
         <section class="site-footer-contact" aria-label="Contact us">
           <h2>Contact us</h2>
           <p>Need help with an order, print quote, generator, or account? Email support and we will route it to the right person.</p>
-          <a class="site-contact-button" href="mailto:help@forget.im">Email help@forget.im</a>
+          <a class="site-contact-button" href="mailto:help@forgetabout.im">Email help@forgetabout.im</a>
         </section>
       </div>
       <section class="site-footer-legal" aria-label="Legal information">
@@ -843,7 +848,7 @@
         </details>
         <details>
           <summary>Privacy</summary>
-          <p>Draft privacy notice: we use account details, saved designs, uploaded file metadata, quote requests, order records, addresses, messages, payment status, support history, device logs, and basic analytics to run the service, generate designs, match print jobs, fulfil orders, prevent abuse, improve the platform, and meet legal duties. We share only what is needed with payment processors, hosting providers, support tools, and the selected print provider. Card details are handled by Stripe, not stored by Forget About. You can ask for help with access, correction, deletion, portability, or objection requests by emailing help@forget.im.</p>
+          <p>Draft privacy notice: we use account details, saved designs, uploaded file metadata, quote requests, order records, addresses, messages, payment status, support history, device logs, and basic analytics to run the service, generate designs, match print jobs, fulfil orders, prevent abuse, improve the platform, and meet legal duties. We share only what is needed with payment processors, hosting providers, support tools, and the selected print provider. Card details are handled by Stripe, not stored by Forget About. You can ask for help with access, correction, deletion, portability, or objection requests by emailing help@forgetabout.im.</p>
         </details>
         <details>
           <summary>Refunds</summary>
@@ -856,7 +861,7 @@
       </section>
       <div class="site-footer-bottom">
         <span>Copyright ${year} Forget About. Draft policy copy for legal review before launch.</span>
-        <span>Support: <a href="mailto:help@forget.im">help@forget.im</a></span>
+        <span>Support: <a href="mailto:help@forgetabout.im">help@forgetabout.im</a></span>
       </div>
     `;
     document.body.append(footer);

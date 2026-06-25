@@ -25,6 +25,9 @@
     if (path === "/factory" || path === "/factory/index.html") {
       url.pathname = "/factory/";
     }
+    if (path === "/hub" || path === "/hub/index.html") {
+      url.pathname = "/hub/";
+    }
     return url.toString();
   }
 
@@ -225,7 +228,11 @@
           full_name: fullName,
           display_name: fullName,
           signup_brand_key: brandKey(),
-          signup_surface: window.location.pathname.toLowerCase().includes("/factory") ? "factory" : "customer"
+          signup_surface: window.location.pathname.toLowerCase().includes("/factory")
+            ? "factory"
+            : window.location.pathname.toLowerCase().includes("/hub")
+              ? "hub"
+              : "customer"
         }
       })
     });
