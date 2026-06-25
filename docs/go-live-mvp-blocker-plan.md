@@ -127,6 +127,18 @@ For every completed blocker, comment with at least one of:
 ## Blocker Evidence Log
 
 - BLK-001: MVP launch mode exposes only `/trays`, `/print`, and `/factory` in public navigation and generated sitemap. Makeup, Paint, and Stitch remain direct beta/deferred routes with a notice rather than launch-scope routes.
+- 2026-06-25 blocker rerun:
+  - Local suite: `npm.cmd run check` passed 41/41.
+  - BLK-002: Core auth passed with disposable confirmed users: login, profile name mapping, recovery-link generation, logout, and rejected post-logout token. Public signup/reset email remains blocked by Supabase built-in email quota until custom SMTP or quota reset.
+  - BLK-003: Tray route live partial pass: `/trays/` loaded, disposable user saved/reloaded a tray design, cross-user design read returned no rows, account orders endpoint returned an array, and entitled STL export returned `solid movement_tray`. Sponsored free export is blocked by BLK-023.
+  - BLK-004: Uploaded Print live partial pass: uploaded-print design saves. Print quote stage is blocked because live provider profile `Bongo Bill` is still `pending_review`, so no active provider quote is returned.
+  - BLK-010/BLK-015/BLK-020: Account data export live partial pass: designs and orders are returned as separate collections. Populated order drill-down still needs a paid order.
+  - BLK-014/BLK-017: Initially blocked because `/api/account/stl-upload` returned `Bucket not found`. Applied the live Supabase `user-stl-uploads` bucket and owner-only storage policies from `supabase/schema.sql`; rerun passed live upload, owner download, cross-user 403, and empty-upload rejection.
+  - BLK-018: Public config live pass: `https://forgetabout.im/public-config.js` contains no secret-looking Supabase, Stripe, restricted key, or webhook values.
+  - BLK-023: Live sponsored STL permit blocked: `/api/account/use-free-export` returned `STL download signing is not configured`, indicating `DOWNLOAD_TOKEN_SECRET` is missing on the Render service.
+  - BLK-026: Live pass: `https://forgetabout.im/` returns 200, `https://www.forgetabout.im/` returns 301 to apex, `/trays/`, `/print/`, `/factory/`, and Render `/api/health` load over HTTPS.
+  - BLK-027/BLK-028: Blocked: `/privacy/`, `/terms/`, `/cookie/`, `/refunds/`, `/contact/`, and `/support/` return 404 and legal pages are not in the public sitemap.
+  - BLK-029: Partial/blocker: Render health endpoint responds, but `POST /api/tasks/auto-complete-posted` without a secret returns `503 Scheduled task secret is not configured` rather than protected `403`, indicating `TASK_RUNNER_SECRET` is missing on Render.
 
 ## Deployment Runbook
 - [ ] Confirm all critical blockers complete or deliberately deferred with John approval.
