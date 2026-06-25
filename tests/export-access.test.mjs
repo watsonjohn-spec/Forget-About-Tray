@@ -12,6 +12,7 @@ const baseUrl = `http://127.0.0.1:${appPort}`;
 const freeUserId = "00000000-0000-4000-8000-000000000001";
 const paidUserId = "00000000-0000-4000-8000-000000000002";
 const concurrentUserId = "00000000-0000-4000-8000-000000000003";
+const adminUserId = "00000000-0000-4000-8000-000000000004";
 const profiles = new Map([[freeUserId, false], [paidUserId, true], [concurrentUserId, false]]);
 const orders = [];
 const orderItems = [];
@@ -52,6 +53,7 @@ function userFromToken(header = "") {
   if (header === "Bearer free-token") return { id: freeUserId, email: "free@example.test" };
   if (header === "Bearer paid-token") return { id: paidUserId, email: "paid@example.test" };
   if (header === "Bearer concurrent-token") return { id: concurrentUserId, email: "concurrent@example.test" };
+  if (header === "Bearer admin-token") return { id: adminUserId, email: "watson.john@live.co.uk" };
   return null;
 }
 
@@ -83,7 +85,7 @@ function applyPatch(rows, predicate, patch) {
 
 function orderRowsForUser(userId, brandKey = "") {
   return orders
-    .filter((order) => order.user_id === userId && (!brandKey || order.brand_key === brandKey))
+    .filter((order) => (!userId || order.user_id === userId) && (!brandKey || order.brand_key === brandKey))
     .map((order) => ({
       ...order,
       order_items: orderItems.filter((item) => item.order_id === order.id),
@@ -554,7 +556,8 @@ test.before(async () => {
       TASK_RUNNER_SECRET: "test-task-secret",
       STRIPE_SECRET_KEY: "rk_test_abcdefghijklmnopqrstuvwxyz123456",
       STRIPE_WEBHOOK_SECRET: webhookSecret,
-      STRIPE_API_BASE: `http://127.0.0.1:${mockPort}`
+      STRIPE_API_BASE: `http://127.0.0.1:${mockPort}`,
+      HUB_ADMIN_EMAILS: "watson.john@live.co.uk"
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -695,6 +698,37 @@ test("factory route serves the dedicated provider login", async () => {
   assert.match(html, /Forget About Print Factory/);
   assert.match(html, /id="createFactoryAccount"/);
   assert.match(html, /src="\.\.\/account\.js"/);
+});
+
+test("hub route is restricted to the admin email and can approve provider profiles", async () => {
+  const route = await fetch(`${baseUrl}/hub/`);
+  assert.equal(route.status, 200);
+  assert.match(await route.text(), /Forget About Hub/);
+
+  printerProfile.status = "pending_review";
+  printerProfile.accepting_jobs = false;
+
+  const denied = await api("/api/hub/dashboard", "paid-token");
+  assert.equal(denied.status, 403);
+  assert.match((await denied.json()).error, /restricted/i);
+
+  const dashboard = await api("/api/hub/dashboard", "admin-token");
+  assert.equal(dashboard.status, 200);
+  const body = await dashboard.json();
+  assert.equal(body.admin.email, "watson.john@live.co.uk");
+  assert.equal(body.metrics.pendingProviderProfiles, 1);
+  assert.ok(body.pendingProfiles.some((profile) => profile.id === printerProfile.id));
+
+  const approveDenied = await api(`/api/hub/printer-profiles/${printerProfile.id}/status`, "paid-token", { status: "active", acceptingJobs: true });
+  assert.equal(approveDenied.status, 403);
+
+  const approve = await api(`/api/hub/printer-profiles/${printerProfile.id}/status`, "admin-token", { status: "active", acceptingJobs: true });
+  assert.equal(approve.status, 200);
+  const result = await approve.json();
+  assert.equal(result.profile.status, "active");
+  assert.equal(result.profile.accepting_jobs, true);
+  assert.equal(printerProfile.status, "active");
+  assert.equal(printerProfile.accepting_jobs, true);
 });
 
 test("factory Stripe Connect onboarding uses Accounts v2 and a hosted account link", async () => {

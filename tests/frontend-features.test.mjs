@@ -358,7 +358,7 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
 });
 
 test("site shell, footer, and prototype generators are present", async () => {
-  const [homeHtml, rootIndexHtml, footerCss, footerJs, accountPassword, printHtml, paintHtml, stitchHtml, printJs, paintJs, stitchJs, generatorQuotes, serverSource, uploadedPrint] = await Promise.all([
+  const [homeHtml, rootIndexHtml, footerCss, footerJs, accountPassword, printHtml, paintHtml, stitchHtml, hubHtml, hubCss, printJs, paintJs, stitchJs, hubJs, generatorQuotes, serverSource, uploadedPrint] = await Promise.all([
     readFile(new URL("home.html", root), "utf8"),
     readFile(new URL("index.html", root), "utf8"),
     readFile(new URL("site-wide.css", root), "utf8"),
@@ -367,9 +367,12 @@ test("site shell, footer, and prototype generators are present", async () => {
     readFile(new URL("print/index.html", root), "utf8"),
     readFile(new URL("paint/index.html", root), "utf8"),
     readFile(new URL("stitch/index.html", root), "utf8"),
+    readFile(new URL("hub/index.html", root), "utf8"),
+    readFile(new URL("hub/hub.css", root), "utf8"),
     readFile(new URL("print/print.js", root), "utf8"),
     readFile(new URL("paint/paint.js", root), "utf8"),
     readFile(new URL("stitch/stitch.js", root), "utf8"),
+    readFile(new URL("hub/hub.js", root), "utf8"),
     readFile(new URL("generator-quotes.js", root), "utf8"),
     readFile(new URL("server.mjs", root), "utf8"),
     readFile(new URL("platform/generators/uploaded-print.mjs", root), "utf8")
@@ -490,6 +493,13 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.doesNotMatch(stitchHtml, /Embedded tray/);
   assert.match(stitchHtml, /id="engravingDepth"/);
   assert.match(stitchHtml, /data-preview-turn="-1"/);
+  assert.match(hubHtml, /Forget About Hub/);
+  assert.match(hubHtml, /id="loginForm"/);
+  assert.match(hubHtml, /id="createAccount"/);
+  assert.match(hubHtml, /id="forgotPassword"/);
+  assert.match(hubHtml, /watson\.john@live\.co\.uk/);
+  assert.match(hubHtml, /src="hub\.js"/);
+  assert.match(hubCss, /\.hub-login/);
   assert.match(stitchJs, /stitchConfig/);
   assert.match(stitchJs, /threads: parseThreads/);
   assert.match(stitchJs, /let stitchStyle = "thread-slot-tray"/);
@@ -501,4 +511,14 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(stitchJs, /forgetPreview3d\.textLabel/);
   assert.match(stitchJs, /forgetPreview3d\.createTurntable/);
   assert.match(stitchJs, /forgetPrintEstimates\.generatedWeightGrams/);
+  assert.match(hubJs, /\/api\/hub\/dashboard/);
+  assert.match(hubJs, /\/api\/hub\/printer-profiles\/\$\{encodeURIComponent\(profileId\)\}\/status/);
+  assert.match(hubJs, /accountAuthFlow\.openCreateAccount/);
+  assert.match(hubJs, /accountService\.providerAvailability\(\)/);
+  assert.match(hubJs, /data-hub-status/);
+  assert.match(hubJs, /Hub access is restricted to watson\.john@live\.co\.uk/);
+  assert.match(serverSource, /HUB_ADMIN_EMAILS/);
+  assert.match(serverSource, /watson\.john@live\.co\.uk/);
+  assert.match(serverSource, /\/api\/hub\/dashboard/);
+  assert.match(serverSource, /hubProfileStatusRoute/);
 });

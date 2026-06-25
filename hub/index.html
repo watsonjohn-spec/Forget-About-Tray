@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#26313a" />
+    <meta name="description" content="Forget About Hub is the internal admin workspace for provider approvals, marketplace orders, and launch metrics." />
+    <meta name="checkout-api-url" content="https://forget-about-tray.onrender.com" />
+    <link rel="canonical" href="https://forgetabout.im/hub/" />
+    <title>Forget About Hub</title>
+    <link rel="stylesheet" href="../site-wide.css" />
+    <link rel="stylesheet" href="hub.css" />
+  </head>
+  <body>
+    <section class="hub-login" id="hubLogin">
+      <form class="hub-login-panel" id="loginForm">
+        <div class="hub-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <p class="eyebrow" data-brand-name>Forget About Hub</p>
+        <h1>Admin sign in</h1>
+        <p>Use your Forget About account to review provider profiles, orders, and operating metrics.</p>
+        <label>Email<input id="loginEmail" type="email" autocomplete="email" required></label>
+        <label>Password<input id="loginPassword" type="password" autocomplete="current-password" minlength="8" required></label>
+        <p class="login-error" id="loginError" role="alert"></p>
+        <button class="button button-primary" type="submit">Sign in</button>
+        <div class="login-divider"><span>or continue with</span></div>
+        <div class="oauth-actions">
+          <button class="button button-secondary oauth-button" data-oauth-provider="google" type="button"><b>G</b> Google</button>
+          <button class="button button-secondary oauth-button" data-oauth-provider="apple" type="button" hidden><b>A</b> Apple</button>
+        </div>
+        <small id="oauthStatus">Checking social sign-in providers...</small>
+        <div class="login-secondary-actions">
+          <button class="button button-secondary" id="createAccount" type="button">Create account</button>
+          <button class="button button-secondary" id="forgotPassword" type="button">Forgot password</button>
+        </div>
+        <small>Current access is restricted to watson.john@live.co.uk.</small>
+      </form>
+    </section>
+
+    <header class="hub-header">
+      <a href="../" class="hub-brand">
+        <span class="hub-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span><strong>Forget About Hub</strong><small>Internal operations</small></span>
+      </a>
+      <p class="hub-header-note"><strong>Review providers. Watch orders. Keep the marketplace moving.</strong><span>Approvals here control which printers customers can select.</span></p>
+      <div class="hub-actions">
+        <span id="accountEmail"></span>
+        <button class="button button-secondary" id="hubRefresh" type="button">Refresh</button>
+        <button class="button button-primary" id="logoutButton" type="button">Log out</button>
+      </div>
+    </header>
+
+    <main class="hub-main">
+      <section class="hub-hero">
+        <div>
+          <p class="eyebrow">Admin control room</p>
+          <h1>Marketplace health at a glance.</h1>
+          <p id="hubStatus">Loading Hub...</p>
+        </div>
+        <div class="hub-metrics" id="hubMetrics"></div>
+      </section>
+
+      <nav class="hub-tabs" aria-label="Hub sections">
+        <button class="active" data-hub-tab="providers" type="button">Provider reviews</button>
+        <button data-hub-tab="orders" type="button">Orders</button>
+        <button data-hub-tab="metrics" type="button">Metrics</button>
+      </nav>
+
+      <section class="hub-panel active" data-hub-panel="providers">
+        <div class="section-heading"><div><p class="eyebrow">Approval queue</p><h2>Provider profiles</h2></div><span class="status-pill" id="providerQueueCount">0 waiting</span></div>
+        <div class="hub-grid" id="providerProfiles"></div>
+      </section>
+
+      <section class="hub-panel" data-hub-panel="orders" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Marketplace activity</p><h2>Recent orders and jobs</h2></div></div>
+        <div class="hub-grid" id="recentOrders"></div>
+      </section>
+
+      <section class="hub-panel" data-hub-panel="metrics" hidden>
+        <div class="section-heading"><div><p class="eyebrow">Operating metrics</p><h2>Orders by brand, status, and location</h2></div></div>
+        <div class="hub-breakdowns" id="hubBreakdowns"></div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="../public-config.js"></script>
+    <script src="../account.js"></script>
+    <script src="hub.js"></script>
+  </body>
+</html>

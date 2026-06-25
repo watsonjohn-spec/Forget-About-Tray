@@ -36,6 +36,10 @@ const allowedOrigins = (process.env.CHECKOUT_ALLOWED_ORIGIN || "https://forgetab
 const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || "";
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || "";
+const hubAdminEmails = (process.env.HUB_ADMIN_EMAILS || "watson.john@live.co.uk")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 const allowPrototypeSecretFallback = process.env.ALLOW_PROTOTYPE_SECRET_FALLBACK === "true";
 const downloadTokenSecret = process.env.DOWNLOAD_TOKEN_SECRET || (allowPrototypeSecretFallback ? stripeKey : "");
 const accountDeviceLimit = Number(process.env.ACCOUNT_DEVICE_LIMIT || 3);
@@ -216,6 +220,16 @@ async function authenticateUser(request) {
   return user;
 }
 
+async function authenticateHubAdmin(request) {
+  const user = await authenticateUser(request);
+  if (!hubAdminEmails.includes(String(user.email || "").toLowerCase())) {
+    const error = new Error("Hub access is restricted to approved administrators.");
+    error.status = 403;
+    throw error;
+  }
+  return user;
+}
+
 async function supabaseAdmin(path, options = {}) {
   if (!supabaseReady()) throw new Error("Account service is not configured.");
   const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
@@ -355,6 +369,119 @@ async function factoryDashboard(request, response) {
     }, origin);
   } catch (error) {
     sendJson(response, 401, { error: error.message }, origin);
+  }
+}
+
+function countBy(rows, accessor) {
+  return rows.reduce((counts, row) => {
+    const key = accessor(row) || "unknown";
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function sumPence(rows, accessor) {
+  return rows.reduce((total, row) => total + Number(accessor(row) || 0), 0);
+}
+
+function orderLocation(order) {
+  const snapshot = nestedRow(order.order_customer_snapshots);
+  const address = snapshot?.shipping_address || snapshot?.billing_address || {};
+  return cleanText(address.city || address.postcode || address.country || "Unknown", 80) || "Unknown";
+}
+
+function hubProfileSummary(profile, capabilities, paymentAccounts) {
+  const ownedCapabilities = capabilities.filter((capability) => capability.printer_profile_id === profile.id);
+  const paymentAccount = paymentAccounts.find((account) => account.printer_profile_id === profile.id) || null;
+  return {
+    ...profile,
+    capability_count: ownedCapabilities.length,
+    active_capability_count: ownedCapabilities.filter((capability) => capability.active !== false).length,
+    payment_account: paymentAccount
+      ? {
+          onboarding_complete: Boolean(paymentAccount.onboarding_complete),
+          charges_enabled: Boolean(paymentAccount.charges_enabled),
+          transfers_enabled: Boolean(paymentAccount.transfers_enabled)
+        }
+      : null
+  };
+}
+
+async function hubDashboard(request, response) {
+  const origin = checkoutOrigin(request);
+  try {
+    const user = await authenticateHubAdmin(request);
+    const [orders, printJobs, profiles, capabilities, paymentAccounts, transfers, launchRows, privacyRows, emailRows] = await Promise.all([
+      supabaseAdmin("orders?select=*,order_items(*),order_customer_snapshots(*),print_jobs(*,print_job_events(*),print_quotes(*))&order=created_at.desc&limit=100"),
+      supabaseAdmin("print_jobs?select=*,print_quotes(*),orders(*,order_customer_snapshots(*))&order=created_at.desc&limit=100"),
+      supabaseAdmin("printer_profiles?select=*&order=created_at.desc"),
+      supabaseAdmin("printer_capabilities?select=*&order=created_at.desc"),
+      optionalSupabaseAdmin("printer_payment_accounts?select=*&order=updated_at.desc"),
+      optionalSupabaseAdmin("provider_transfers?select=*&order=created_at.desc&limit=100"),
+      optionalSupabaseAdmin("launch_signups?select=*&order=created_at.desc&limit=100"),
+      optionalSupabaseAdmin("privacy_requests?select=*&order=requested_at.desc&limit=100"),
+      optionalSupabaseAdmin("email_outbox?select=*&order=created_at.desc&limit=100")
+    ]);
+    const safeOrders = orders || [];
+    const safeJobs = printJobs || [];
+    const safeProfiles = profiles || [];
+    const safeCapabilities = capabilities || [];
+    const safeTransfers = transfers || [];
+    const providerSummaries = safeProfiles.map((profile) => hubProfileSummary(profile, safeCapabilities, paymentAccounts || []));
+    sendJson(response, 200, {
+      admin: { email: user.email },
+      metrics: {
+        totalOrders: safeOrders.length,
+        paidOrders: safeOrders.filter((order) => order.paid_at || ["paid", "order_made", "producing", "posted", "complete"].includes(order.status)).length,
+        grossPence: sumPence(safeOrders, (order) => order.total_inc_vat),
+        heldPayoutPence: sumPence(safeTransfers.filter((transfer) => transfer.status === "held" || transfer.payout_status === "held"), (transfer) => transfer.amount_pence),
+        pendingProviderProfiles: providerSummaries.filter((profile) => profile.status === "pending_review").length,
+        activeProviderProfiles: providerSummaries.filter((profile) => profile.status === "active").length,
+        activeJobs: safeJobs.filter((job) => !["complete", "cancelled", "refunded"].includes(job.status)).length,
+        launchSignups: (launchRows || []).length,
+        privacyRequests: (privacyRows || []).filter((requestRow) => requestRow.status !== "completed").length,
+        queuedEmails: (emailRows || []).filter((email) => !email.sent_at && email.status !== "sent").length
+      },
+      breakdowns: {
+        ordersByStatus: countBy(safeOrders, (order) => order.status),
+        ordersByBrand: countBy(safeOrders, (order) => order.brand_key),
+        ordersByLocation: countBy(safeOrders, orderLocation),
+        jobsByStatus: countBy(safeJobs, (job) => job.status)
+      },
+      providerProfiles: providerSummaries,
+      pendingProfiles: providerSummaries.filter((profile) => profile.status === "pending_review"),
+      recentOrders: safeOrders.slice(0, 25),
+      recentJobs: safeJobs.slice(0, 25),
+      launchSignups: (launchRows || []).slice(0, 25),
+      privacyRequests: (privacyRows || []).slice(0, 25)
+    }, origin);
+  } catch (error) {
+    sendJson(response, error.status || 401, { error: error.message || "Hub dashboard could not be loaded." }, origin);
+  }
+}
+
+async function updateHubPrinterProfile(request, response, profileId) {
+  const origin = checkoutOrigin(request);
+  try {
+    await authenticateHubAdmin(request);
+    const body = await readJson(request, 20_000);
+    const status = cleanText(body.status, 40);
+    if (!["pending_review", "active", "paused", "suspended"].includes(status)) throw new Error("Choose a valid provider status.");
+    const update = {
+      status,
+      accepting_jobs: Object.hasOwn(body, "acceptingJobs") ? Boolean(body.acceptingJobs) : status === "active",
+      updated_at: new Date().toISOString()
+    };
+    if (status !== "active" && !Object.hasOwn(body, "acceptingJobs")) update.accepting_jobs = false;
+    const saved = await supabaseAdmin(`printer_profiles?id=eq.${encodeURIComponent(profileId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify(update)
+    });
+    if (!saved?.length) throw new Error("Provider profile was not found.");
+    sendJson(response, 200, { profile: saved[0] }, origin);
+  } catch (error) {
+    sendJson(response, error.status || 400, { error: error.message || "Provider profile could not be updated." }, origin);
   }
 }
 
@@ -2008,7 +2135,7 @@ createServer(async (request, response) => {
     await runAutoCompleteTask(request, response);
     return;
   }
-  if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account") || pathname.startsWith("/api/factory") || pathname.startsWith("/api/marketplace") || pathname === "/api/launch-signup")) {
+  if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account") || pathname.startsWith("/api/factory") || pathname.startsWith("/api/hub") || pathname.startsWith("/api/marketplace") || pathname === "/api/launch-signup")) {
     response.writeHead(204, {
       ...(origin ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin" } : {}),
       "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Forget-About-Brand, X-Forget-About-Generator, X-Forget-About-Path, X-Forget-About-Device",
@@ -2073,6 +2200,15 @@ createServer(async (request, response) => {
   }
   if (request.method === "GET" && pathname === "/api/account/orders") {
     await accountOrders(request, response);
+    return;
+  }
+  if (request.method === "GET" && pathname === "/api/hub/dashboard") {
+    await hubDashboard(request, response);
+    return;
+  }
+  const hubProfileStatusRoute = pathname.match(/^\/api\/hub\/printer-profiles\/([0-9a-f-]+)\/status$/i);
+  if (request.method === "POST" && hubProfileStatusRoute) {
+    await updateHubPrinterProfile(request, response, hubProfileStatusRoute[1]);
     return;
   }
   if (request.method === "POST" && pathname === "/api/account/stl-upload") {
@@ -2181,9 +2317,14 @@ createServer(async (request, response) => {
     response.end();
     return;
   }
+  if (pathname === "/hub") {
+    response.writeHead(308, { Location: `/hub/${requestUrl.search}` });
+    response.end();
+    return;
+  }
   const brandDirectory = brandRoute?.key === "tray" ? "tray" : brandRoute?.path;
   const brandEntry = brandRoute ? `${brandDirectory}/index.html` : "index.html";
-  const relativePath = pathname === "/" ? "index.html" : brandRoute ? brandEntry : pathname === "/factory/" ? "factory/index.html" : pathname.slice(1);
+  const relativePath = pathname === "/" ? "index.html" : brandRoute ? brandEntry : pathname === "/factory/" ? "factory/index.html" : pathname === "/hub/" ? "hub/index.html" : pathname.slice(1);
   const filePath = normalize(join(root, relativePath));
 
   if (!filePath.startsWith(normalize(root)) || !existsSync(filePath) || !statSync(filePath).isFile()) {
