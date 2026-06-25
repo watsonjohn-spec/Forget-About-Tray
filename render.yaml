@@ -3,7 +3,7 @@ services:
     name: forget-about-platform
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install && npm run public-config
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
