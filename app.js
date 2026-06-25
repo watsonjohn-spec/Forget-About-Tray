@@ -701,15 +701,19 @@ function startAdGate() {
   document.getElementById("adGate").hidden = false;
   download.disabled = true;
   email.disabled = true;
-  countdown.textContent = `Download unlocks in ${seconds} seconds`;
+  download.textContent = "Preparing STL";
+  email.textContent = "Preparing email";
+  countdown.textContent = `Preparing your STL package... about ${seconds} seconds remaining`;
   clearInterval(adCountdownTimer);
   adCountdownTimer = setInterval(() => {
     seconds -= 1;
-    countdown.textContent = seconds > 0 ? `Download unlocks in ${seconds} seconds` : "Your STL is ready";
+    countdown.textContent = seconds > 0 ? `Preparing your STL package... about ${seconds} seconds remaining` : "Your STL is ready to download.";
     if (seconds <= 0) {
       clearInterval(adCountdownTimer);
       download.disabled = false;
       email.disabled = false;
+      download.textContent = "Download STL";
+      email.textContent = "Send by email";
     }
   }, 1000);
 }
@@ -2292,7 +2296,7 @@ async function completeSponsoredExport(delivery) {
       body: JSON.stringify({ config: pendingExportConfig, name: pendingExportPrefix })
     });
     const result = await response.json();
-    if (!response.ok || !result.allowed) throw new Error(result.error || "The sponsored download could not be unlocked.");
+    if (!response.ok || !result.allowed) throw new Error(result.error || "The prepared STL export could not be completed.");
     accountExportState.freeExportUsed = true;
     if (delivery === "email") await emailStl(pendingExportConfig, pendingExportPrefix, result.downloadToken);
     else await exportStl(pendingExportConfig, pendingExportPrefix, result.downloadToken);

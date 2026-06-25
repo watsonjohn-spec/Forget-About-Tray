@@ -245,6 +245,12 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(html, /id="storageIncludeBases"/);
   assert.match(html, /id="catalogueSystemFilter"/);
   assert.match(html, /id="chooseEmailExport"/);
+  assert.match(html, /Prepare my STL/);
+  assert.match(html, /We are pulling your STL together/);
+  assert.match(html, /The download buttons will enable as soon as the STL package is ready/);
+  assert.doesNotMatch(html, /Watch sponsor message/);
+  assert.doesNotMatch(html, /30-second sponsor placement/);
+  assert.doesNotMatch(html, /Download unlocks in 30 seconds/);
   assert.match(html, /meta name="checkout-api-url" content="https:\/\/forget-about-tray\.onrender\.com"/);
   assert.match(html, /data-account-page="profile"/);
   assert.match(html, /data-account-page="password"/);
@@ -258,6 +264,8 @@ test("UAT shell keeps primary actions visible and separates account pages", asyn
   assert.match(app, /input\[name="printOutputMode"\]/);
   assert.match(app, /forgetPrintEstimates\.generatedWeightGrams\(metrics\.volume \/ 1000, state\.filamentMaterial\)/);
   assert.match(app, /window\.location\.href = `mailto:/);
+  assert.match(app, /Preparing your STL package/);
+  assert.doesNotMatch(app, /Download unlocks in/);
   assert.match(app, /window\.confirm\("Request account deletion\?/);
   assert.match(app, /Confirm delivery and complete order/);
   assert.match(app, /releases the printer payout/);

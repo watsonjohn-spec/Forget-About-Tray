@@ -438,6 +438,7 @@ input[type="range"] { width: 100%; margin-top: 12px; accent-color: var(--green);
 .ad-gate-creative { width: min(500px, 100%); min-height: 180px; padding: 25px; display: grid; place-items: center; align-content: center; border: 1px dashed #8ca07e; border-radius: 12px; color: white; background: linear-gradient(130deg, #526f4e, #243b2a); }
 .ad-gate-creative strong { font-family: Georgia, serif; font-size: 20px; }
 .ad-gate-creative p { margin: 8px 0 0; color: #c9d8bd; font-size: 10px; }
+.ad-prep-note { width: min(500px, 100%); padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #f4f6ee; }
 .ad-gate > p { margin: 0; color: var(--muted); font-size: 11px; font-weight: 800; }
 .ad-export-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .print-order h3 { margin: 0; font-family: Georgia, serif; font-size: 23px; }
