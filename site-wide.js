@@ -51,10 +51,6 @@
     return !cookieConsentRequired() || safeStorageGet(analyticsConsentKey) === "accepted";
   }
 
-  function adsConsentGranted() {
-    return analyticsConsentGranted();
-  }
-
   function currentAnalyticsUrl() {
     return `${window.location.pathname}${window.location.search}${window.location.hash}`;
   }
@@ -120,6 +116,14 @@
     return adsenseConfig.enabled !== false && Boolean(adsenseClientId());
   }
 
+  function adsenseUsesGoogleCmp() {
+    return String(adsenseConfig.consentProvider || "google-cmp").toLowerCase() === "google-cmp";
+  }
+
+  function adsConsentGranted() {
+    return adsenseUsesGoogleCmp() || analyticsConsentGranted();
+  }
+
   function adsenseSlotId(placement) {
     const slots = adsenseConfig.slots || {};
     return String(slots[placement] || slots.default || "").trim();
@@ -157,12 +161,12 @@
     banner.setAttribute("aria-label", "Cookie consent");
     banner.innerHTML = `
       <div>
-        <strong>Can we use analytics and advertising cookies?</strong>
-        <p>They help us see which generators are useful and, where configured, show advertising through Google AdSense. Essential site functions still work if you decline.</p>
+        <strong>Can we use analytics cookies?</strong>
+        <p>They help us see which generators are useful. Google advertising consent is handled by the certified Google consent message where it applies. Essential site functions still work if you decline.</p>
       </div>
       <div class="cookie-actions">
         <button type="button" data-cookie-consent="declined">Essential only</button>
-        <button type="button" data-cookie-consent="accepted">Accept analytics and ads</button>
+        <button type="button" data-cookie-consent="accepted">Accept analytics</button>
       </div>
     `;
     banner.addEventListener("click", (event) => {

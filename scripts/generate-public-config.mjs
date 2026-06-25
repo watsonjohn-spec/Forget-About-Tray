@@ -87,6 +87,7 @@ const config = {
   adsense: {
     enabled: envBoolean("ADSENSE_ENABLED", Boolean(adsenseClientId)),
     clientId: adsenseClientId,
+    consentProvider: String(env.ADSENSE_CONSENT_PROVIDER || "google-cmp").trim().toLowerCase(),
     testMode: envBoolean("ADSENSE_TEST_MODE", false),
     slots: adsenseSlots()
   },

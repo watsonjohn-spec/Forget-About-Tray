@@ -104,6 +104,7 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.analytics.clarityProjectId, "xc7u4g2p1w");
   assert.equal(typeof context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.enabled, "boolean");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.clientId, "ca-pub-6722120388841444");
+  assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.consentProvider, "google-cmp");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.mvpModeEnabled, true);
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["trays", "print", "factory"]));
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.deferredPaths), JSON.stringify(["makeup", "paint", "stitch"]));
@@ -420,10 +421,14 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerJs, /loadMicrosoftClarity/);
   assert.match(footerJs, /loadGoogleAdSense/);
   assert.match(footerJs, /pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js/);
+  assert.match(footerJs, /function adsenseUsesGoogleCmp\(\)/);
+  assert.match(footerJs, /adsenseConfig\.consentProvider/);
+  assert.match(footerJs, /return adsenseUsesGoogleCmp\(\) \|\| analyticsConsentGranted\(\)/);
   assert.match(footerJs, /adsense-portal/);
   assert.match(footerJs, /data-adsense-placement/);
   assert.match(footerJs, /refreshAds: refreshAdSensePortals/);
-  assert.match(footerJs, /Accept analytics and ads/);
+  assert.match(footerJs, /Accept analytics/);
+  assert.match(footerJs, /Google advertising consent is handled by the certified Google consent message/);
   assert.match(footerJs, /cookie-consent/);
   assert.match(footerJs, /launchHoldEnabled/);
   assert.match(footerJs, /\/api\/launch-signup/);

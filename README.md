@@ -72,6 +72,8 @@ To enable Google and Apple sign-in, open **Supabase Dashboard → Authentication
 
 `npm run public-config` generates `public-config.js` using only public browser configuration such as `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, analytics IDs, and optional AdSense publisher/ad-unit IDs. These values are designed to be public and allow account login, analytics, and configured ad portals to work on the deployed site. The Supabase secret key is never included. `Publish to GitHub.cmd` runs this automatically before publishing.
 
+For advertising consent, set up the AdSense **Privacy & messaging** European-regulations message for `forgetabout.im`, then leave `ADSENSE_CONSENT_PROVIDER=google-cmp`. The Google CMP handles AdSense consent where it applies. The local Forget About cookie banner remains analytics-only for GA4 and Microsoft Clarity.
+
 The bundled catalogue covers ranked units across the main and legacy Old World armies. Base dimensions can change with rules updates, so confirm unusual models against the current army publication before printing.
 
 GitHub Pages cannot securely run this checkout endpoint because it is static hosting. For the public site, deploy `server.mjs` to a Node host and set the `checkout-api-url` meta tag in `index.html` to that backend origin.
