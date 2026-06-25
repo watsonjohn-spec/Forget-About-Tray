@@ -103,6 +103,7 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.analytics.ga4MeasurementId, "G-NDKFRQ10CJ");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.analytics.clarityProjectId, "xc7u4g2p1w");
   assert.equal(typeof context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.enabled, "boolean");
+  assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.clientId, "ca-pub-6722120388841444");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.mvpModeEnabled, true);
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["trays", "print", "factory"]));
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.deferredPaths), JSON.stringify(["makeup", "paint", "stitch"]));
@@ -121,8 +122,10 @@ test("login surfaces keep shared account actions across brands and factory", asy
     readFile(new URL("platform/ARCHITECTURE.md", root), "utf8")
   ]);
   const surfaces = [trayHtml, makeupHtml, factoryHtml];
+  const adsenseHeadScript = /pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=ca-pub-6722120388841444/;
   for (const html of surfaces) {
     assert.match(html, /class="login-divider"/);
+    assert.match(html, adsenseHeadScript);
     assert.match(html, /data-oauth-provider="google"/);
     assert.match(html, /data-oauth-provider="apple"[^>]*hidden/);
     assert.match(html, /id="oauthStatus"/);
@@ -373,7 +376,7 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
 });
 
 test("site shell, footer, and prototype generators are present", async () => {
-  const [rootIndexHtml, footerCss, footerJs, accountPassword, printHtml, paintHtml, stitchHtml, hubHtml, hubCss, printJs, paintJs, stitchJs, hubJs, generatorQuotes, serverSource, uploadedPrint] = await Promise.all([
+  const [rootIndexHtml, footerCss, footerJs, accountPassword, printHtml, paintHtml, stitchHtml, hubHtml, hubCss, printJs, paintJs, stitchJs, hubJs, generatorQuotes, serverSource, uploadedPrint, adsTxt] = await Promise.all([
     readFile(new URL("index.html", root), "utf8"),
     readFile(new URL("site-wide.css", root), "utf8"),
     readFile(new URL("site-wide.js", root), "utf8"),
@@ -389,9 +392,12 @@ test("site shell, footer, and prototype generators are present", async () => {
     readFile(new URL("hub/hub.js", root), "utf8"),
     readFile(new URL("generator-quotes.js", root), "utf8"),
     readFile(new URL("server.mjs", root), "utf8"),
-    readFile(new URL("platform/generators/uploaded-print.mjs", root), "utf8")
+    readFile(new URL("platform/generators/uploaded-print.mjs", root), "utf8"),
+    readFile(new URL("ads.txt", root), "utf8")
   ]);
+  const adsenseHeadScript = /pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=ca-pub-6722120388841444/;
   assert.match(rootIndexHtml, /Generator directory/);
+  assert.match(rootIndexHtml, adsenseHeadScript);
   assert.equal(existsSync(new URL("home.html", root)), false);
   assert.equal(existsSync(new URL("home/index.html", root)), false);
   assert.match(rootIndexHtml, /href="trays\/"/);
@@ -456,6 +462,7 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerCss, /Drag to rotate - arrows nudge view/);
   assert.match(footerCss, /--preview-accent/);
   assert.match(printHtml, /Forget About Print/);
+  assert.match(printHtml, adsenseHeadScript);
   assert.match(printHtml, /account-password\.js/);
   assert.match(printHtml, /preview-3d\.js/);
   assert.match(printHtml, /print-estimates\.js/);
@@ -499,7 +506,9 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(serverSource, /retentionNotice/);
   assert.match(uploadedPrint, /desiredColourKey/);
   assert.match(uploadedPrint, /preferredPrinterProfileId/);
+  assert.match(adsTxt, /google\.com, pub-6722120388841444, DIRECT, f08c47fec0942fa0/);
   assert.match(paintHtml, /Forget About Paint/);
+  assert.match(paintHtml, adsenseHeadScript);
   assert.match(paintHtml, /account-password\.js/);
   assert.match(paintHtml, /preview-3d\.js/);
   assert.match(paintHtml, /print-estimates\.js/);
@@ -511,6 +520,7 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(paintJs, /forgetPreview3d\.createTurntable/);
   assert.match(paintJs, /forgetPrintEstimates\.generatedWeightGrams/);
   assert.match(stitchHtml, /Forget About Stitch/);
+  assert.match(stitchHtml, adsenseHeadScript);
   assert.match(stitchHtml, /account-password\.js/);
   assert.match(stitchHtml, /preview-3d\.js/);
   assert.match(stitchHtml, /print-estimates\.js/);
@@ -521,6 +531,7 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(stitchHtml, /id="engravingDepth"/);
   assert.match(stitchHtml, /data-preview-turn="-1"/);
   assert.match(hubHtml, /Forget About Hub/);
+  assert.doesNotMatch(hubHtml, adsenseHeadScript);
   assert.match(hubHtml, /id="loginForm"/);
   assert.match(hubHtml, /id="createAccount"/);
   assert.match(hubHtml, /id="forgotPassword"/);

@@ -4,13 +4,14 @@ import { publicPlatformConfig } from "../platform/registry.mjs";
 const root = new URL("../", import.meta.url);
 const envPath = new URL(".env", root);
 const envText = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
-const env = Object.fromEntries(envText
+const fileEnv = Object.fromEntries(envText
   .split(/\r?\n/)
   .filter((line) => line && !line.startsWith("#") && line.includes("="))
   .map((line) => {
     const separator = line.indexOf("=");
     return [line.slice(0, separator), line.slice(separator + 1)];
   }));
+const env = { ...fileEnv, ...process.env };
 
 if (!env.SUPABASE_URL || !env.SUPABASE_PUBLISHABLE_KEY) {
   throw new Error("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY must be set in .env before publishing.");
@@ -34,7 +35,8 @@ function envList(name, fallback) {
 }
 
 const productionOrigin = cleanOrigin(env.PRODUCTION_ORIGIN);
-const adsenseClientId = String(env.ADSENSE_CLIENT_ID || env.ADSENSE_PUBLISHER_ID || "").trim();
+const defaultAdsenseClientId = "ca-pub-6722120388841444";
+const adsenseClientId = String(env.ADSENSE_CLIENT_ID || env.ADSENSE_PUBLISHER_ID || defaultAdsenseClientId).trim();
 const adsenseSlotNames = [
   "home-top",
   "home-bottom",

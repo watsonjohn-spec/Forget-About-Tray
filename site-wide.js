@@ -128,13 +128,16 @@
   function loadGoogleAdSense() {
     const clientId = adsenseClientId();
     if (!adsenseEnabled() || !adsConsentGranted()) return false;
-    if (!document.querySelector("script[data-forget-adsense]")) {
+    const existingScript = document.querySelector("script[data-forget-adsense], script[src*='pagead2.googlesyndication.com/pagead/js/adsbygoogle.js']");
+    if (!existingScript) {
       const script = document.createElement("script");
       script.async = true;
       script.crossOrigin = "anonymous";
       script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(clientId)}`;
       script.dataset.forgetAdsense = clientId;
       document.head.append(script);
+    } else if (!existingScript.dataset.forgetAdsense) {
+      existingScript.dataset.forgetAdsense = clientId;
     }
     window.adsbygoogle = window.adsbygoogle || [];
     adsenseLoaded = true;
