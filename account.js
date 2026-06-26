@@ -197,6 +197,7 @@
   async function signIn(email, password) {
     const nextSession = await passwordGrant(email, password);
     storeSession(nextSession);
+    await recordEvent("auth.signed_in", { entityType: "user", entityId: nextSession?.user?.id || user?.id });
     return nextSession;
   }
 
@@ -238,6 +239,11 @@
     });
     if (result.access_token) {
       storeSession(result);
+      await recordEvent("auth.account_created", {
+        entityType: "user",
+        entityId: result.user?.id || user?.id,
+        payload: { signupSurface: window.location.pathname.toLowerCase().includes("/factory") ? "factory" : window.location.pathname.toLowerCase().includes("/hub") ? "hub" : "customer" }
+      });
       if (fullName) await saveProfile({ display_name: fullName }).catch(() => null);
     }
     return result;
@@ -371,11 +377,14 @@
     } catch {
       throw new Error("The current password is incorrect.");
     }
-    return authRequest("/user", { method: "PUT", body: JSON.stringify({ password }) });
+    const result = await authRequest("/user", { method: "PUT", body: JSON.stringify({ password }) });
+    await recordEvent("auth.password_changed", { entityType: "user", entityId: user?.id });
+    return result;
   }
 
   async function signOut() {
     try {
+      await recordEvent("auth.signed_out", { entityType: "user", entityId: user?.id });
       if (session) await authRequest("/logout", { method: "POST", body: "{}" });
     } catch {
       // Local sign-out must still complete if Supabase is temporarily unavailable.
@@ -400,17 +409,49 @@
     return responseJson(response);
   }
 
+  function eventActorRole() {
+    const path = window.location.pathname.toLowerCase();
+    if (path.includes("/factory")) return "printer";
+    if (path.includes("/hub")) return "admin";
+    return "customer";
+  }
+
+  async function recordEvent(eventType, options = {}) {
+    try {
+      if (!session?.access_token) return null;
+      const response = await fetch(`${apiBase()}/api/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({
+          eventType,
+          actorRole: options.actorRole || eventActorRole(),
+          brandKey: options.brandKey || brandKey(),
+          generatorType: options.generatorType || generatorType(),
+          entityType: options.entityType || null,
+          entityId: options.entityId || null,
+          sourcePath: `${window.location.pathname}${window.location.search}`,
+          payload: options.payload || {}
+        })
+      });
+      return response.ok ? responseJson(response) : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function loadProfile() {
     const rows = await restRequest(`profiles?select=*&user_id=eq.${encodeURIComponent(user.id)}&limit=1`);
     return rows[0] || null;
   }
 
   async function saveProfile(profile) {
-    return restRequest(`profiles?user_id=eq.${encodeURIComponent(user.id)}`, {
+    const result = await restRequest(`profiles?user_id=eq.${encodeURIComponent(user.id)}`, {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({ ...profile, updated_at: new Date().toISOString() })
     });
+    await recordEvent("account.profile_saved", { entityType: "profile", entityId: user.id, payload: { fields: Object.keys(profile || {}) } });
+    return result;
   }
 
   async function loadTrayDesigns() {
@@ -428,7 +469,7 @@
 
   async function upsertDesign(design) {
     try {
-      return await restRequest("designs?on_conflict=user_id,brand_key,generator_type,client_ref", {
+      const result = await restRequest("designs?on_conflict=user_id,brand_key,generator_type,client_ref", {
         method: "POST",
         headers: { Prefer: "resolution=merge-duplicates,return=representation" },
         body: JSON.stringify({
@@ -439,6 +480,8 @@
           updated_at: new Date().toISOString()
         })
       });
+      await recordEvent("design.saved", { entityType: "design", entityId: result?.[0]?.id || design.client_ref, payload: { name: design.name } });
+      return result;
     } catch (error) {
       if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
       return upsertTrayDesign({ client_ref: design.client_ref, name: design.name, configuration: design.parameters });
@@ -447,7 +490,9 @@
 
   async function deleteDesign(id) {
     try {
-      return await restRequest(`designs?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+      const result = await restRequest(`designs?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+      await recordEvent("design.deleted", { entityType: "design", entityId: id });
+      return result;
     } catch (error) {
       if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
       return deleteTrayDesign(id);
@@ -465,7 +510,7 @@
 
   async function upsertProject(project) {
     try {
-      return await restRequest("projects?on_conflict=user_id,brand_key,generator_type,client_ref", {
+      const result = await restRequest("projects?on_conflict=user_id,brand_key,generator_type,client_ref", {
         method: "POST",
         headers: { Prefer: "resolution=merge-duplicates,return=representation" },
         body: JSON.stringify({
@@ -476,6 +521,8 @@
           updated_at: new Date().toISOString()
         })
       });
+      await recordEvent("project.saved", { entityType: "project", entityId: result?.[0]?.id || project.client_ref, payload: { projectType: project.project_type, name: project.name, itemCount: Array.isArray(project.items) ? project.items.length : 0 } });
+      return result;
     } catch (error) {
       if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
       return upsertArmyList({
@@ -489,7 +536,9 @@
 
   async function deleteProject(id) {
     try {
-      return await restRequest(`projects?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+      const result = await restRequest(`projects?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+      await recordEvent("project.deleted", { entityType: "project", entityId: id });
+      return result;
     } catch (error) {
       if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
       return deleteArmyList(id);
@@ -549,7 +598,9 @@
 
   async function requestAccountDeletion() {
     const response = await fetch(`${apiBase()}/api/account/deletion-request`, { method: "POST", headers: await authHeaders(), body: "{}" });
-    return responseJson(response);
+    const result = await responseJson(response);
+    await recordEvent("privacy.account_deletion_requested", { entityType: "privacy_request", entityId: user?.id });
+    return result;
   }
 
   async function uploadStlFile({ fileName, stlBase64 }) {
@@ -558,7 +609,9 @@
       headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ fileName, stlBase64 })
     });
-    return responseJson(response);
+    const result = await responseJson(response);
+    await recordEvent("stl.uploaded", { entityType: "storage_object", entityId: result.storagePath || fileName, payload: { fileName, bytes: Math.round((String(stlBase64 || "").length * 3) / 4) } });
+    return result;
   }
 
   async function downloadStlFile(storagePath) {
@@ -634,6 +687,7 @@
     uploadStlFile,
     downloadStlFile,
     importLocalData,
+    recordEvent,
     authHeaders,
     authType: () => authType,
     authError: () => authError,

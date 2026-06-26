@@ -723,6 +723,8 @@ test("hub route is restricted to the admin email and can approve provider profil
   const body = await dashboard.json();
   assert.equal(body.admin.email, "watson.john@live.co.uk");
   assert.equal(body.metrics.pendingProviderProfiles, 1);
+  assert.equal(body.founder.executive.fci.label, "Factory Capacity Index");
+  assert.ok(Array.isArray(body.founder.decisions));
   assert.ok(body.pendingProfiles.some((profile) => profile.id === printerProfile.id));
 
   const approveDenied = await api(`/api/hub/printer-profiles/${printerProfile.id}/status`, "paid-token", { status: "active", acceptingJobs: true });

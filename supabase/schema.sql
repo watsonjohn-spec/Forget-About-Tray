@@ -417,6 +417,21 @@ alter table public.print_job_events drop constraint if exists print_job_events_e
 alter table public.print_job_events add constraint print_job_events_event_type_check
   check (event_type in ('status', 'provider_message', 'customer_message', 'decline', 'auto_complete', 'delivery_chaser', 'customer_escalation'));
 
+create table if not exists public.platform_events (
+  id uuid primary key default gen_random_uuid(),
+  event_type text not null,
+  actor_user_id uuid references auth.users(id) on delete set null,
+  actor_role text not null default 'system' check (actor_role in ('anonymous', 'customer', 'printer', 'admin', 'system')),
+  brand_key text references public.brands(key),
+  generator_type text references public.generator_definitions(type),
+  entity_type text,
+  entity_id text,
+  source_path text,
+  payload jsonb not null default '{}'::jsonb,
+  occurred_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.email_outbox (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
@@ -547,6 +562,11 @@ create index if not exists orders_brand_key_idx on public.orders(brand_key);
 create index if not exists orders_generator_type_idx on public.orders(generator_type);
 create index if not exists print_job_events_actor_user_id_idx on public.print_job_events(actor_user_id);
 create index if not exists print_job_events_print_job_id_idx on public.print_job_events(print_job_id);
+create index if not exists platform_events_occurred_at_idx on public.platform_events(occurred_at desc);
+create index if not exists platform_events_event_type_idx on public.platform_events(event_type, occurred_at desc);
+create index if not exists platform_events_actor_user_id_idx on public.platform_events(actor_user_id, occurred_at desc);
+create index if not exists platform_events_brand_generator_idx on public.platform_events(brand_key, generator_type, occurred_at desc);
+create index if not exists platform_events_entity_idx on public.platform_events(entity_type, entity_id);
 create index if not exists print_jobs_brand_key_idx on public.print_jobs(brand_key);
 create index if not exists print_jobs_generator_type_idx on public.print_jobs(generator_type);
 create index if not exists print_jobs_quote_id_idx on public.print_jobs(quote_id);
@@ -626,6 +646,7 @@ alter table public.printer_capabilities enable row level security;
 alter table public.print_quotes enable row level security;
 alter table public.print_jobs enable row level security;
 alter table public.print_job_events enable row level security;
+alter table public.platform_events enable row level security;
 alter table public.provider_transfers enable row level security;
 alter table public.provider_reviews enable row level security;
 alter table public.email_outbox enable row level security;
@@ -781,6 +802,15 @@ create policy "Participants view print job events" on public.print_job_events
     )
   );
 
+drop policy if exists "Users insert their platform events" on public.platform_events;
+create policy "Users insert their platform events" on public.platform_events
+  for insert to authenticated
+  with check ((select auth.uid()) = actor_user_id);
+
+drop policy if exists "Users view their platform events" on public.platform_events;
+create policy "Users view their platform events" on public.platform_events
+  for select to authenticated using ((select auth.uid()) = actor_user_id);
+
 drop policy if exists "Users view their email outbox" on public.email_outbox;
 create policy "Users view their email outbox" on public.email_outbox
   for select to authenticated using ((select auth.uid()) = user_id);
@@ -800,9 +830,10 @@ grant select, insert, update, delete on public.tray_designs, public.army_lists t
 grant select on public.brands, public.generator_definitions, public.brand_generators, public.generator_catalogues, public.generator_catalogue_items, public.printer_profiles, public.printer_capabilities, public.provider_reviews to anon, authenticated;
 grant select, insert, update, delete on public.designs, public.projects to authenticated;
 grant select on public.usage_allowances, public.account_devices, public.printer_payment_accounts, public.print_quotes, public.print_jobs, public.print_job_events, public.provider_transfers, public.email_outbox to authenticated;
+grant select, insert on public.platform_events to authenticated;
 grant insert, update, delete on public.printer_capabilities to authenticated;
 grant update (display_name, description, based_in, postcode_area, lead_time_days, accepting_jobs, updated_at) on public.printer_profiles to authenticated;
 revoke update on public.profiles from authenticated;
 grant update (display_name, default_address, marketing_consent, updated_at) on public.profiles to authenticated;
-grant all on public.profiles, public.launch_signups, public.tray_designs, public.army_lists, public.orders, public.order_items, public.order_customer_snapshots, public.entitlements, public.stripe_events, public.privacy_requests, public.brands, public.generator_definitions, public.brand_generators, public.designs, public.projects, public.generator_catalogues, public.generator_catalogue_items, public.usage_allowances, public.account_devices, public.printer_profiles, public.printer_payment_accounts, public.printer_capabilities, public.print_quotes, public.print_jobs, public.print_job_events, public.provider_transfers, public.provider_reviews, public.email_outbox to service_role;
+grant all on public.profiles, public.launch_signups, public.tray_designs, public.army_lists, public.orders, public.order_items, public.order_customer_snapshots, public.entitlements, public.stripe_events, public.privacy_requests, public.brands, public.generator_definitions, public.brand_generators, public.designs, public.projects, public.generator_catalogues, public.generator_catalogue_items, public.usage_allowances, public.account_devices, public.printer_profiles, public.printer_payment_accounts, public.printer_capabilities, public.print_quotes, public.print_jobs, public.print_job_events, public.platform_events, public.provider_transfers, public.provider_reviews, public.email_outbox to service_role;
 grant usage, select on sequence public.order_invoice_number_seq to service_role;

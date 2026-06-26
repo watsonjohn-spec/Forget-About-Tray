@@ -60,12 +60,21 @@
       </section>
 
       <nav class="hub-tabs" aria-label="Hub sections">
-        <button class="active" data-hub-tab="providers" type="button">Provider reviews</button>
+        <button class="active" data-hub-tab="founder" type="button">Founder Console</button>
+        <button data-hub-tab="providers" type="button">Provider reviews</button>
         <button data-hub-tab="orders" type="button">Orders</button>
         <button data-hub-tab="metrics" type="button">Metrics</button>
       </nav>
 
-      <section class="hub-panel active" data-hub-panel="providers">
+      <section class="hub-panel active founder-console" data-hub-panel="founder">
+        <div class="section-heading">
+          <div><p class="eyebrow">Founder Console</p><h2>Operating and business model control room</h2></div>
+          <span class="status-pill">Event driven</span>
+        </div>
+        <div class="founder-layout" id="founderConsole"></div>
+      </section>
+
+      <section class="hub-panel" data-hub-panel="providers" hidden>
         <div class="section-heading"><div><p class="eyebrow">Approval queue</p><h2>Provider profiles</h2></div><span class="status-pill" id="providerQueueCount">0 waiting</span></div>
         <div class="hub-grid" id="providerProfiles"></div>
       </section>

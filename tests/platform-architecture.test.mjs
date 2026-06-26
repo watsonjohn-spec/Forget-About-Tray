@@ -160,6 +160,12 @@ test("Supabase schema defines private per-user STL object storage", async () => 
   assert.match(schema, /file_size_limit/);
   assert.match(schema, /launch_signups/);
   assert.match(schema, /analytics_consent boolean/);
+  assert.match(schema, /create table if not exists public\.platform_events/);
+  assert.match(schema, /event_type text not null/);
+  assert.match(schema, /payload jsonb not null default '\{\}'::jsonb/);
+  assert.match(schema, /alter table public\.platform_events enable row level security/);
+  assert.match(schema, /Users insert their platform events/);
+  assert.match(schema, /grant select, insert on public\.platform_events to authenticated/);
   assert.match(schema, /alter table public\.launch_signups enable row level security/);
   assert.match(schema, /raw_user_meta_data ->> 'full_name'/);
   assert.match(schema, /raw_user_meta_data ->> 'first_name'/);

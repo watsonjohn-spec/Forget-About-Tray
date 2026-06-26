@@ -540,11 +540,16 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(hubHtml, /id="loginForm"/);
   assert.match(hubHtml, /id="createAccount"/);
   assert.match(hubHtml, /id="forgotPassword"/);
+  assert.match(hubHtml, /Founder Console/);
+  assert.match(hubHtml, /id="founderConsole"/);
+  assert.match(hubHtml, /data-hub-tab="founder"/);
   assert.match(hubHtml, /watson\.john@live\.co\.uk/);
   assert.match(hubHtml, /href="\.\.\/"/);
   assert.match(hubHtml, /src="hub\.js"/);
   assert.doesNotMatch(hubHtml, /site-wide\.js/);
   assert.match(hubCss, /\.hub-login/);
+  assert.match(hubCss, /\.founder-console/);
+  assert.match(hubCss, /\.decision-list/);
   assert.match(stitchJs, /stitchConfig/);
   assert.match(stitchJs, /threads: parseThreads/);
   assert.match(stitchJs, /let stitchStyle = "thread-slot-tray"/);
@@ -557,6 +562,9 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(stitchJs, /forgetPreview3d\.createTurntable/);
   assert.match(stitchJs, /forgetPrintEstimates\.generatedWeightGrams/);
   assert.match(hubJs, /\/api\/hub\/dashboard/);
+  assert.match(hubJs, /function renderFounderConsole/);
+  assert.match(hubJs, /Executive Dashboard/);
+  assert.match(hubJs, /Decision Centre/);
   assert.match(hubJs, /\/api\/hub\/printer-profiles\/\$\{encodeURIComponent\(profileId\)\}\/status/);
   assert.match(hubJs, /accountAuthFlow\.openCreateAccount/);
   assert.match(hubJs, /accountService\.providerAvailability\(\)/);
@@ -565,5 +573,9 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(serverSource, /HUB_ADMIN_EMAILS/);
   assert.match(serverSource, /watson\.john@live\.co\.uk/);
   assert.match(serverSource, /\/api\/hub\/dashboard/);
+  assert.match(serverSource, /\/api\/events/);
+  assert.match(serverSource, /function buildFounderConsole/);
+  assert.match(serverSource, /recordPlatformEvent/);
+  assert.match(serverSource, /platform_events\?select=\*/);
   assert.match(serverSource, /hubProfileStatusRoute/);
 });

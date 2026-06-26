@@ -1,7 +1,7 @@
 (function () {
   const state = {
     dashboard: null,
-    activeTab: "providers",
+    activeTab: "founder",
     loading: false
   };
 
@@ -86,6 +86,128 @@
       metricCard("Pending profiles", metrics.pendingProviderProfiles || 0, "Need review"),
       metricCard("Active jobs", metrics.activeJobs || 0, "Not complete/refunded"),
       metricCard("Launch signups", metrics.launchSignups || 0, "Holding-list records")
+    ].join("");
+  }
+
+  function founderMetric(label, value, note = "") {
+    return `<article class="founder-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`;
+  }
+
+  function founderModule(title, subtitle, body, className = "") {
+    return `
+      <article class="founder-module ${className}">
+        <div class="founder-module-heading"><div><p class="eyebrow">${escapeHtml(subtitle)}</p><h3>${escapeHtml(title)}</h3></div></div>
+        ${body}
+      </article>
+    `;
+  }
+
+  function founderRows(rows = []) {
+    return `<div class="founder-rows">${rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>`;
+  }
+
+  function founderBreakdown(rows = {}) {
+    const entries = Object.entries(rows || {}).sort((a, b) => Number(b[1]) - Number(a[1]));
+    return entries.length
+      ? `<div class="founder-breakdown">${entries.map(([label, count]) => `<span><b>${escapeHtml(count)}</b>${escapeHtml(label)}</span>`).join("")}</div>`
+      : `<p class="empty-state compact">No event data yet.</p>`;
+  }
+
+  function renderFounderConsole(founder = {}) {
+    const executive = founder.executive || {};
+    const factory = founder.factory || {};
+    const growth = founder.growth || {};
+    const finance = founder.finance || {};
+    const enterprise = founder.enterprise || {};
+    const experiments = founder.experiments || {};
+    const decisions = founder.decisions || [];
+    const cash = executive.cash || {};
+    const fci = executive.fci || {};
+    const fva = executive.fva || {};
+    const runway = executive.runway || {};
+    const pnl = finance.pnl || {};
+    const cashFlow = finance.cashFlow || {};
+    const contribution = finance.contribution || {};
+    const printers = factory.printers || [];
+    const printerMap = printers.length
+      ? `<div class="printer-map">${printers.slice(0, 8).map((printer) => `
+          <article>
+            <b>${escapeHtml(printer.displayName || "Printer")}</b>
+            <span>${escapeHtml(printer.basedIn || "Unknown")} · ${escapeHtml(printer.postcodeArea || "")}</span>
+            <small>${escapeHtml(printer.status || "unknown")} · ${printer.queueLength || 0} active jobs · ${printer.activeCapabilities || 0} capabilities</small>
+          </article>
+        `).join("")}</div>`
+      : `<p class="empty-state compact">No printer profiles yet.</p>`;
+    document.getElementById("founderConsole").innerHTML = [
+      founderModule("Executive Dashboard", "North Star", `
+        <div class="founder-metric-grid">
+          ${founderMetric(executive.northStar?.label || "Completed factory jobs", executive.northStar?.value ?? 0, executive.northStar?.note || "")}
+          ${founderMetric("Cash signal", money(cash.netCashSignalPence), `${money(cash.grossPence)} gross, ${money(cash.heldProviderLiabilityPence)} held payouts`)}
+          ${founderMetric(fci.label || "FCI", `${fci.value ?? 0}%`, fci.note || "")}
+          ${founderMetric(fva.label || "FVA", money(fva.valuePence), fva.note || "")}
+          ${founderMetric(runway.label || "Runway", runway.value || "Needs cost input", runway.note || "")}
+        </div>
+        ${(executive.alerts || []).length ? `<div class="founder-alerts">${executive.alerts.map((alert) => `<span>${escapeHtml(alert)}</span>`).join("")}</div>` : `<p class="empty-state compact">No current founder alerts.</p>`}
+      `, "wide"),
+      founderModule("Factory Control Centre", "Manufacturing", `
+        ${founderRows([
+          ["Utilisation", `${factory.utilisation || 0}%`],
+          ["Order made", factory.queueLengths?.orderMade || 0],
+          ["Producing", factory.queueLengths?.producing || 0],
+          ["Posted", factory.queueLengths?.posted || 0],
+          ["SLA risks", (factory.slaRisks || []).length]
+        ])}
+        ${printerMap}
+      `),
+      founderModule("Growth Dashboard", "Demand", `
+        ${founderRows([
+          ["SEO", growth.seo?.status || "Needs import"],
+          ["Indexed route signal", growth.seo?.indexedRoutes || 0],
+          ["STL exports", growth.unlockConversions?.stlExports || 0],
+          ["Unlocks granted", growth.unlockConversions?.unlocksGranted || 0],
+          ["Unlock rate", `${growth.unlockConversions?.unlockRatePercent || 0}%`]
+        ])}
+        <h4>Generator performance</h4>
+        ${founderBreakdown(growth.generatorPerformance)}
+      `),
+      founderModule("Finance Dashboard", "Money", `
+        ${founderRows([
+          ["Gross", money(pnl.grossPence)],
+          ["Platform revenue", money(pnl.platformRevenuePence)],
+          ["Provider share", money(pnl.providerSharePence)],
+          ["VAT", money(pnl.vatPence)],
+          ["Held payouts", money(cashFlow.heldProviderPayoutsPence)],
+          ["Contribution margin", `${contribution.contributionMarginPercent || 0}%`]
+        ])}
+      `),
+      founderModule("Enterprise Dashboard", "B2B", `
+        ${founderRows([
+          ["ARR", money(enterprise.arrPence)],
+          ["Pipeline", enterprise.pipeline?.length || 0],
+          ["Onboarding", enterprise.onboarding?.length || 0],
+          ["Implementation", enterprise.implementationProgress || "No data yet"]
+        ])}
+      `),
+      founderModule("Experiment Centre", "Learning", `
+        ${founderRows([
+          ["Active tests", experiments.active?.length || 0],
+          ["Pricing signals", Object.values(experiments.pricingSignals || {}).reduce((sum, value) => sum + Number(value || 0), 0)]
+        ])}
+        <h4>Measured outcomes</h4>
+        ${founderBreakdown(experiments.measuredOutcomes)}
+      `),
+      founderModule("Decision Centre", "AI recommendations", `
+        <div class="decision-list">
+          ${decisions.map((decision) => `
+            <article>
+              <span>${escapeHtml(decision.priority || "Watch")}</span>
+              <strong>${escapeHtml(decision.title || "Recommendation")}</strong>
+              <p>${escapeHtml(decision.rationale || "")}</p>
+              <small>${escapeHtml(decision.nextAction || "")}</small>
+            </article>
+          `).join("")}
+        </div>
+      `, "wide")
     ].join("");
   }
 
@@ -181,6 +303,7 @@
   function renderDashboard() {
     const dashboard = state.dashboard || {};
     renderMetrics(dashboard.metrics);
+    renderFounderConsole(dashboard.founder);
     renderProviders(dashboard.providerProfiles || [], dashboard.pendingProfiles || []);
     renderOrders(dashboard.recentOrders || [], dashboard.recentJobs || []);
     renderBreakdowns(dashboard.breakdowns);
