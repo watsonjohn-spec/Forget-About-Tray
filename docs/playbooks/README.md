@@ -2,6 +2,10 @@
 
 Repeatable operating steps live here. Keep playbooks literal enough that a future operator or Codex session can follow them without reconstructing the process from chat.
 
+## Current Playbooks
+
+- [Decision Review Agent](decision-review-agent.md): review recent code changes and update design decision documentation with what changed and why.
+
 ## Existing Operating Routines To Document
 
 - Publish static site to GitHub Pages.

@@ -239,7 +239,7 @@
     });
     if (result.access_token) {
       storeSession(result);
-      await recordEvent("auth.account_created", {
+      await recordEvent("user.registered", {
         entityType: "user",
         entityId: result.user?.id || user?.id,
         payload: { signupSurface: window.location.pathname.toLowerCase().includes("/factory") ? "factory" : window.location.pathname.toLowerCase().includes("/hub") ? "hub" : "customer" }
@@ -430,7 +430,8 @@
           entityType: options.entityType || null,
           entityId: options.entityId || null,
           sourcePath: `${window.location.pathname}${window.location.search}`,
-          payload: options.payload || {}
+          payload: options.payload || {},
+          version: options.version || 1
         })
       });
       return response.ok ? responseJson(response) : null;
@@ -480,7 +481,7 @@
           updated_at: new Date().toISOString()
         })
       });
-      await recordEvent("design.saved", { entityType: "design", entityId: result?.[0]?.id || design.client_ref, payload: { name: design.name } });
+      await recordEvent("generator.completed", { entityType: "design", entityId: result?.[0]?.id || design.client_ref, payload: { completionType: "design.saved", name: design.name } });
       return result;
     } catch (error) {
       if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
@@ -521,7 +522,7 @@
           updated_at: new Date().toISOString()
         })
       });
-      await recordEvent("project.saved", { entityType: "project", entityId: result?.[0]?.id || project.client_ref, payload: { projectType: project.project_type, name: project.name, itemCount: Array.isArray(project.items) ? project.items.length : 0 } });
+      await recordEvent("generator.completed", { entityType: "project", entityId: result?.[0]?.id || project.client_ref, payload: { completionType: "project.saved", projectType: project.project_type, name: project.name, itemCount: Array.isArray(project.items) ? project.items.length : 0 } });
       return result;
     } catch (error) {
       if (brandKey() !== "tray" || generatorType() !== "movement_tray") throw error;
@@ -546,11 +547,13 @@
   }
 
   async function upsertTrayDesign(design) {
-    return restRequest("tray_designs?on_conflict=user_id,client_ref", {
+    const result = await restRequest("tray_designs?on_conflict=user_id,client_ref", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=representation" },
       body: JSON.stringify({ ...design, user_id: user.id, updated_at: new Date().toISOString() })
     });
+    await recordEvent("generator.completed", { entityType: "tray_design", entityId: result?.[0]?.id || design.client_ref, payload: { completionType: "tray_design.saved", name: design.name } });
+    return result;
   }
 
   async function deleteTrayDesign(id) {
@@ -562,11 +565,13 @@
   }
 
   async function upsertArmyList(army) {
-    return restRequest("army_lists?on_conflict=user_id,client_ref", {
+    const result = await restRequest("army_lists?on_conflict=user_id,client_ref", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=representation" },
       body: JSON.stringify({ ...army, user_id: user.id, updated_at: new Date().toISOString() })
     });
+    await recordEvent("generator.completed", { entityType: "army_list", entityId: result?.[0]?.id || army.client_ref, payload: { completionType: "army_list.saved", name: army.name, itemCount: Array.isArray(army.parsed_units) ? army.parsed_units.length : 0 } });
+    return result;
   }
 
   async function deleteArmyList(id) {

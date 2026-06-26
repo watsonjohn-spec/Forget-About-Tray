@@ -54,7 +54,7 @@ Before running the account-enabled app for the first time, open the Supabase SQL
 
 Re-run `supabase/schema.sql` after pulling the multi-brand platform update. It enables the Makeup brand and generator, migrates existing tray designs and army lists into the generic design/project model, and adds the print marketplace foundation without deleting the legacy records.
 
-Re-run `supabase/schema.sql` after pulling the Founder Console update. It adds `platform_events`, the simple event log used by Hub to roll up auth, design, STL, checkout, factory, privacy, and admin actions into operational and financial dashboards.
+Re-run `supabase/schema.sql` after pulling the Founder Console update. It adds `platform_events`, the append-only event log used by Hub to roll up auth, design, STL, checkout, factory, privacy, and admin actions into operational and financial dashboards. The event contract and subscription patterns are documented in `docs/EVENT_LOG.md`.
 
 The marketplace is designed for UK-only fulfilment initially. Choosing **Have it printed** creates live, time-limited quotes from suitable printer capabilities. Material is costed at GBP 20/kg by default, then the printer's per-print fee, standard postage, 10% Forget About commission, fixed platform fee, and VAT are shown separately. It uses Stripe Connect separate charges and transfers: the printer share remains held until the print job reaches `complete`.
 

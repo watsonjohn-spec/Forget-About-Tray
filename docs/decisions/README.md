@@ -40,6 +40,16 @@ Initial factory/provider operations are UK-only.
 
 Reason: VAT, delivery, currency, provider matching, and support are simpler while the workflow is still being proven.
 
+### 2026-06-26 Decision Review Agent
+
+Decision: Maintain a dedicated decision review agent and playbook that can run as a scheduled ChatGPT agent, review project conversations and GitHub repo evidence, then draft GitHub-tracked design decision documentation updates with what changed, why it changed, consequences, and follow-ups.
+
+Reason: The platform now spans multiple brands, shared services, Supabase, Stripe, events, factory operations, and deployment paths. Durable decisions need to outlive chat sessions and individual pull request summaries, but repo writes still need an approval boundary.
+
+Consequences: Substantive code changes should include a decision-review pass before merge or deployment. Scheduled ChatGPT runs should draft proposed `docs/decisions/README.md` and related-doc updates, show the evidence used, and ask for approval before any GitHub write action. The agent should ask for missing rationale instead of inventing it.
+
+Follow-ups: After the approval workflow is proven, decide whether a write-capable Codex or GitHub workflow should apply approved patches and open pull requests automatically.
+
 ## Entry Template
 
 ```text

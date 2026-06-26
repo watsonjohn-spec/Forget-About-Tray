@@ -74,6 +74,8 @@ The static site is published from the repo, and the Node backend is hosted separ
 
 Documentation is part of the product. Update docs whenever a task changes architecture, generator behaviour, payment flow, account flow, deployment, privacy/security, or operational workflow.
 
+For regular code review that updates design decisions, use `.agents/decision-review-agent.md` with `docs/playbooks/decision-review-agent.md`. The agent must document what changed and why, may use project conversation evidence when available, and must ask or flag when the rationale is not recoverable from repo evidence. Scheduled ChatGPT runs are draft-first and need explicit user approval before any GitHub write action.
+
 Use:
 
 - `docs/architecture/system-overview.md` for the platform shape.

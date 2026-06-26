@@ -919,6 +919,35 @@
     });
   }
 
+  function trackGeneratorLifecycle() {
+    const key = pageKey();
+    if (!["tray", "makeup", "print", "paint", "stitch"].includes(key)) return;
+    const entityId = `${key}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+    const basePayload = () => ({
+      route: key,
+      path: window.location.pathname,
+      title: document.title,
+      generatorName: generatorName()
+    });
+    const record = (eventType, payload = {}) => window.accountService?.recordEvent?.(eventType, {
+      entityType: "generator_session",
+      entityId,
+      payload: { ...basePayload(), ...payload }
+    });
+    let completed = false;
+    setTimeout(() => record("generator.started"), 1200);
+    const complete = (reason) => {
+      if (completed) return;
+      completed = true;
+      record("generator.completed", { completionType: reason || "generator.interaction" });
+    };
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest("#sharedSavePresetTop, #savePresetTop, #savePresetButton, #exportButton, #sharedExportTop, #quoteButton, #requestQuotesButton, #stripeCheckoutButton")) return;
+      complete("generator.action_clicked");
+    }, true);
+    window.addEventListener("forget-generator-completed", (event) => complete(event.detail?.completionType || "generator.completed"));
+  }
+
   function appendFooter() {
     if (document.querySelector(".site-footer")) return;
     const brandName = generatorName();
@@ -976,6 +1005,7 @@
   decorateAdSensePortals();
   normalizeExistingAccountButtons();
   enhancePrototypeTopbar();
+  trackGeneratorLifecycle();
   appendFooter();
   setupAnalyticsNavigation();
   renderCookieConsent();

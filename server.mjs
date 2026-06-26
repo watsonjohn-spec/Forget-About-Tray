@@ -337,9 +337,12 @@ function eventPayload(value) {
 async function recordPlatformEvent(event) {
   const eventType = eventTypeName(event.eventType || event.event_type);
   if (!eventType) return null;
+  const actorUserId = event.actorUserId || event.actor_user_id || null;
+  const eventUserId = event.userId || event.user_id || actorUserId;
   const row = {
     event_type: eventType,
-    actor_user_id: event.actorUserId || event.actor_user_id || null,
+    user_id: eventUserId || null,
+    actor_user_id: actorUserId,
     actor_role: ["anonymous", "customer", "printer", "admin", "system"].includes(event.actorRole || event.actor_role)
       ? event.actorRole || event.actor_role
       : "system",
@@ -348,7 +351,8 @@ async function recordPlatformEvent(event) {
     entity_type: cleanText(event.entityType || event.entity_type, 80) || null,
     entity_id: cleanText(event.entityId || event.entity_id, 160) || null,
     source_path: publicReturnPath(event.sourcePath || event.source_path || "") || null,
-    payload: eventPayload(event.payload)
+    payload: eventPayload(event.payload),
+    version: cleanPositiveInteger(event.version, 1, 1000)
   };
   try {
     const saved = await supabaseAdmin("platform_events", {
@@ -370,16 +374,18 @@ async function ingestPlatformEvent(request, response) {
     const { brand, generator } = requestPlatformContext(request, body);
     const eventType = eventTypeName(body.eventType || body.event_type);
     if (!eventType) throw new Error("Provide a valid event type.");
+    const requestedActorRole = cleanText(body.actorRole || body.actor_role, 30);
     await recordPlatformEvent({
       eventType,
       actorUserId: user.id,
-      actorRole: body.actorRole === "printer" ? "printer" : "customer",
+      actorRole: ["customer", "printer", "admin"].includes(requestedActorRole) ? requestedActorRole : "customer",
       brandKey: brand.key,
       generatorType: generator.type,
       entityType: body.entityType || body.entity_type,
       entityId: body.entityId || body.entity_id,
       sourcePath: body.sourcePath || sourcePathFromRequest(request),
-      payload: body.payload || {}
+      payload: body.payload || {},
+      version: body.version || 1
     });
     sendJson(response, 200, { ok: true }, origin);
   } catch (error) {
@@ -523,7 +529,7 @@ function buildDecisionRecommendations({ orders, jobs, profiles, capabilities, ev
   const recommendations = [];
   const activePrinters = profiles.filter((profile) => profile.status === "active" && profile.accepting_jobs);
   const quoteEvents = events.filter((event) => event.event_type === "marketplace.quotes_created");
-  const printStarted = events.filter((event) => event.event_type === "checkout.marketplace_started");
+  const printStarted = events.filter((event) => event.event_type === "factory.order.checkout_started" || event.event_type === "checkout.marketplace_started");
   const conversion = percent(printStarted.length, quoteEvents.length);
   if (quoteEvents.length >= 3 && conversion < 20) {
     recommendations.push({
@@ -582,9 +588,8 @@ function buildFounderConsole({ orders, jobs, profiles, capabilities, transfers, 
   const completedJobs = jobs.filter((job) => job.status === "complete");
   const recentEvents = events.filter((event) => withinDays(event.occurred_at || event.created_at, 30));
   const quoteEvents = recentEvents.filter((event) => event.event_type === "marketplace.quotes_created");
-  const checkoutEvents = recentEvents.filter((event) => event.event_type?.startsWith("checkout."));
   const exportEvents = recentEvents.filter((event) => event.event_type === "stl.exported");
-  const unlockEvents = recentEvents.filter((event) => event.event_type === "entitlement.unlimited_stl_granted");
+  const unlockEvents = recentEvents.filter((event) => event.event_type === "unlock.purchased" || event.event_type === "entitlement.unlimited_stl_granted");
   const factoryCapacityIndex = percent(activePrinters.length, Math.max(1, profiles.length));
   const factoryValueAddedPence = revenuePence;
   const utilisation = percent(activeJobs.length, Math.max(1, activePrinters.length * 5));
@@ -629,7 +634,7 @@ function buildFounderConsole({ orders, jobs, profiles, capabilities, transfers, 
     acceptingJobs: activePrinters.length,
     stripeConnected: paymentAccountProfileIds.size
   };
-  const checkoutStarts = checkoutEvents.filter((event) => event.event_type === "checkout.marketplace_started" || event.event_type === "checkout.unlock_started" || event.event_type === "checkout.session_started" || event.event_type?.startsWith("checkout."));
+  const checkoutStarts = recentEvents.filter((event) => event.event_type === "factory.order.checkout_started" || event.event_type === "checkout.marketplace_started" || event.event_type === "checkout.unlock_started" || event.event_type === "checkout.session_started" || event.event_type?.startsWith("checkout."));
   const marketingFunnel = {
     launchSignups: launchRows.length,
     quoteRequests: quoteEvents.length,
@@ -911,7 +916,7 @@ async function updateHubPrinterProfile(request, response, profileId) {
     });
     if (!saved?.length) throw new Error("Provider profile was not found.");
     await recordPlatformEvent({
-      eventType: "admin.provider_status_updated",
+      eventType: status === "active" ? "printer.certified" : "printer.status.updated",
       actorUserId: user.id,
       actorRole: "admin",
       entityType: "printer_profile",
@@ -1203,13 +1208,29 @@ async function createPrintJobEvent(event) {
       body: JSON.stringify(legacyPayload)
     });
   }
+  const platformEventType = (() => {
+    if (payload.event_type === "status") {
+      if (payload.to_status === "order_made") return "factory.order.created";
+      if (payload.to_status === "producing") return "factory.order.accepted";
+      if (payload.to_status === "complete") return "factory.order.completed";
+      if (["cancelled", "refunded", "failed"].includes(payload.to_status)) return "factory.order.failed";
+      return "factory.order.status_changed";
+    }
+    if (payload.event_type === "auto_complete") return "factory.order.completed";
+    if (payload.event_type === "decline" || payload.event_type === "customer_escalation") return "factory.order.failed";
+    if (payload.event_type === "provider_message") return "printer.message.sent";
+    if (payload.event_type === "customer_message") return "customer.message.sent";
+    if (payload.event_type === "delivery_chaser") return "factory.order.delivery_chaser_sent";
+    return `print_job.${payload.event_type}`;
+  })();
   await recordPlatformEvent({
-    eventType: `print_job.${payload.event_type === "status" ? "status_changed" : payload.event_type}`,
+    eventType: platformEventType,
     actorUserId: payload.actor_user_id,
     actorRole: event.actorRole || "system",
     entityType: "print_job",
     entityId: payload.print_job_id,
     payload: {
+      orderId: event.orderId || null,
       fromStatus: payload.from_status,
       toStatus: payload.to_status,
       note: payload.note,
@@ -1358,9 +1379,23 @@ async function completePrintJob(job, { actorUserId = null, note = "Customer conf
       })
     });
     await updateProviderRating(job.printer_profile_id);
+    await recordPlatformEvent({
+      eventType: "customer.review.submitted",
+      actorUserId: actorUserId || job.customer_user_id,
+      actorRole: "customer",
+      entityType: "provider_review",
+      entityId: job.id,
+      payload: {
+        printJobId: job.id,
+        printerProfileId: job.printer_profile_id,
+        rating: Number(rating),
+        hasReviewText: Boolean(cleanText(reviewText, 800))
+      }
+    });
   }
   await createPrintJobEvent({
     printJobId: job.id,
+    orderId: job.order_id || null,
     actorUserId,
     actorRole: automatic ? "system" : "customer",
     fromStatus: job.status,
@@ -1487,7 +1522,7 @@ async function saveFactoryProfile(request, response) {
       });
     }
     await recordPlatformEvent({
-      eventType: profile ? "factory.profile_updated" : "factory.profile_created",
+      eventType: profile ? "printer.profile.updated" : "printer.onboarded",
       actorUserId: user.id,
       actorRole: "printer",
       entityType: "printer_profile",
@@ -1680,6 +1715,7 @@ async function declineFactoryJob(request, response, jobId) {
       }),
       createPrintJobEvent({
         printJobId: job.id,
+        orderId: job.order_id || null,
         actorUserId: user.id,
         actorRole: "printer",
         fromStatus: job.status,
@@ -1688,6 +1724,19 @@ async function declineFactoryJob(request, response, jobId) {
         eventType: "decline"
       })
     ]);
+    await recordPlatformEvent({
+      eventType: "refund.processed",
+      actorUserId: user.id,
+      actorRole: "printer",
+      entityType: "order",
+      entityId: job.order_id,
+      payload: {
+        printJobId: job.id,
+        printerProfileId: profile.id,
+        refundId: refund.id || null,
+        reason
+      }
+    });
     sendJson(response, 200, { declined: true, refundId: refund.id || null }, origin);
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Print job could not be declined." }, origin);
@@ -2144,7 +2193,7 @@ async function createMarketplaceCheckout(request, response) {
       })
     });
     await recordPlatformEvent({
-      eventType: "checkout.marketplace_started",
+      eventType: "factory.order.checkout_started",
       actorUserId: user.id,
       actorRole: "customer",
       brandKey: brand.key,
@@ -2640,7 +2689,7 @@ async function finalizeCheckoutSession(session) {
     })
   });
   await recordPlatformEvent({
-    eventType: "checkout.payment_confirmed",
+    eventType: "payment.completed",
     actorUserId: userId,
     actorRole: "customer",
     brandKey: session.metadata?.brand_key || null,
@@ -2685,7 +2734,7 @@ async function finalizeCheckoutSession(session) {
       });
     }
     await recordPlatformEvent({
-      eventType: "entitlement.unlimited_stl_granted",
+      eventType: "unlock.purchased",
       actorUserId: userId,
       actorRole: "customer",
       brandKey: brand.key,

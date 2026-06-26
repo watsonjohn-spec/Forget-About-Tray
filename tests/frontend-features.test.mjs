@@ -292,6 +292,9 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
   ]);
   assert.match(account, /forget-about-active-session/);
   assert.match(account, /sessionStorage\.getItem\(activeSessionKey\)/);
+  assert.match(account, /"user\.registered"/);
+  assert.match(account, /"generator\.completed"/);
+  assert.match(account, /version: options\.version \|\| 1/);
   assert.match(trayHtml, /data-preview-turn="-1"/);
   assert.match(trayHtml, /data-brand-tagline-primary/);
   assert.match(trayHtml, /id="filamentMaterial"/);
@@ -461,6 +464,9 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerJs, /customer_escalation/);
   assert.match(footerJs, /window\.forgetSharedShell/);
   assert.match(footerJs, /sharedGeneratorShell/);
+  assert.match(footerJs, /function trackGeneratorLifecycle\(\)/);
+  assert.match(footerJs, /"generator\.started"/);
+  assert.match(footerJs, /"generator\.completed"/);
   assert.match(accountPassword, /Current password/);
   assert.match(accountPassword, /Confirm password/);
   assert.match(footerCss, /\.site-footer/);
@@ -593,5 +599,15 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(serverSource, /MONTHLY_FIXED_COST_PENCE/);
   assert.match(serverSource, /recordPlatformEvent/);
   assert.match(serverSource, /platform_events\?select=\*/);
+  assert.match(serverSource, /"payment\.completed"/);
+  assert.match(serverSource, /"unlock\.purchased"/);
+  assert.match(serverSource, /"factory\.order\.created"/);
+  assert.match(serverSource, /"factory\.order\.accepted"/);
+  assert.match(serverSource, /"factory\.order\.completed"/);
+  assert.match(serverSource, /"factory\.order\.failed"/);
+  assert.match(serverSource, /"printer\.onboarded"/);
+  assert.match(serverSource, /"printer\.certified"/);
+  assert.match(serverSource, /"customer\.review\.submitted"/);
+  assert.match(serverSource, /"refund\.processed"/);
   assert.match(serverSource, /hubProfileStatusRoute/);
 });

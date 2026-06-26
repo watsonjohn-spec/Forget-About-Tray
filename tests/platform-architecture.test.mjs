@@ -153,6 +153,7 @@ test("uploaded print, paint, and stitch generators are registered brands", () =>
 
 test("Supabase schema defines private per-user STL object storage", async () => {
   const schema = await readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8");
+  const eventLogDocs = await readFile(new URL("../docs/EVENT_LOG.md", import.meta.url), "utf8");
   assert.match(schema, /user-stl-uploads/);
   assert.match(schema, /storage\.buckets/);
   assert.match(schema, /storage\.objects/);
@@ -162,15 +163,41 @@ test("Supabase schema defines private per-user STL object storage", async () => 
   assert.match(schema, /analytics_consent boolean/);
   assert.match(schema, /create table if not exists public\.platform_events/);
   assert.match(schema, /event_type text not null/);
+  assert.match(schema, /user_id uuid references auth\.users\(id\) on delete set null/);
+  assert.match(schema, /version integer not null default 1 check \(version > 0\)/);
   assert.match(schema, /payload jsonb not null default '\{\}'::jsonb/);
+  assert.match(schema, /prevent_platform_events_mutation/);
+  assert.match(schema, /platform_events is append-only/);
+  assert.match(schema, /alter publication supabase_realtime add table public\.platform_events/);
   assert.match(schema, /alter table public\.platform_events enable row level security/);
   assert.match(schema, /Users insert their platform events/);
   assert.match(schema, /grant select, insert on public\.platform_events to authenticated/);
+  assert.match(schema, /grant select, insert on public\.platform_events to service_role/);
+  assert.match(schema, /revoke update, delete, truncate, trigger on public\.platform_events from authenticated, service_role/);
   assert.match(schema, /alter table public\.launch_signups enable row level security/);
   assert.match(schema, /raw_user_meta_data ->> 'full_name'/);
   assert.match(schema, /raw_user_meta_data ->> 'first_name'/);
   assert.match(schema, /raw_user_meta_data ->> 'last_name'/);
   assert.match(schema, /display_name = coalesce\(public\.profiles\.display_name, excluded\.display_name\)/);
+  [
+    "user.registered",
+    "generator.started",
+    "generator.completed",
+    "stl.exported",
+    "unlock.purchased",
+    "factory.order.created",
+    "factory.order.accepted",
+    "factory.order.completed",
+    "factory.order.failed",
+    "printer.onboarded",
+    "printer.certified",
+    "customer.review.submitted",
+    "printer.review.submitted",
+    "payment.completed",
+    "refund.processed"
+  ].forEach((eventType) => assert.match(eventLogDocs, new RegExp(eventType.replaceAll(".", "\\."))));
+  assert.match(eventLogDocs, /postgres_changes/);
+  assert.match(eventLogDocs, /event.id idempotently/);
 });
 
 test("generator contract validates parameters and renders an STL", () => {
