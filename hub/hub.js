@@ -106,11 +106,40 @@
     return `<div class="founder-rows">${rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>`;
   }
 
+  function founderLabel(value) {
+    return String(value || "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
   function founderBreakdown(rows = {}) {
     const entries = Object.entries(rows || {}).sort((a, b) => Number(b[1]) - Number(a[1]));
     return entries.length
       ? `<div class="founder-breakdown">${entries.map(([label, count]) => `<span><b>${escapeHtml(count)}</b>${escapeHtml(label)}</span>`).join("")}</div>`
       : `<p class="empty-state compact">No event data yet.</p>`;
+  }
+
+  function founderFunnel(rows = {}) {
+    const entries = Object.entries(rows || {});
+    return entries.length
+      ? `<div class="founder-funnel">${entries.map(([label, value]) => `<div><span>${escapeHtml(founderLabel(label))}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>`
+      : `<p class="empty-state compact">No funnel data yet.</p>`;
+  }
+
+  function founderList(items = [], renderItem, empty = "No data yet.") {
+    return items.length
+      ? `<div class="founder-list">${items.map(renderItem).join("")}</div>`
+      : `<p class="empty-state compact">${escapeHtml(empty)}</p>`;
+  }
+
+  function founderHeatMap(rows = []) {
+    return founderList(rows, (row) => {
+      const utilisation = Number(row.utilisationPercent || 0);
+      const level = utilisation >= 80 ? "hot" : utilisation >= 40 ? "warm" : "cool";
+      return `<article class="founder-heat ${level}">
+        <div><strong>${escapeHtml(row.label || "Printer")}</strong><span>${escapeHtml(row.region || "Unknown")}</span></div>
+        <b>${escapeHtml(utilisation)}%</b>
+        <small>${escapeHtml(row.queueLength || 0)}/${escapeHtml(row.nominalSlots || 0)} jobs | ${escapeHtml(row.bedLabel || "Bed unknown")} | ${escapeHtml((row.materials || []).join(", ") || "No materials")}</small>
+      </article>`;
+    }, "No capacity rows yet.");
   }
 
   function renderFounderConsole(founder = {}) {
@@ -121,18 +150,23 @@
     const enterprise = founder.enterprise || {};
     const experiments = founder.experiments || {};
     const decisions = founder.decisions || [];
+    const countryRollout = founder.countryRollout || enterprise.countryRollout || [];
+    const whiteLabelPipeline = founder.whiteLabelPipeline || enterprise.whiteLabelPipeline || {};
+    const board = founder.board || {};
     const cash = executive.cash || {};
     const fci = executive.fci || {};
     const fva = executive.fva || {};
     const runway = executive.runway || {};
     const pnl = finance.pnl || {};
     const cashFlow = finance.cashFlow || {};
+    const financialKpis = finance.kpis || {};
+    const cashRunway = finance.cashRunway || {};
     const contribution = finance.contribution || {};
-    const printers = factory.printers || [];
-    const printerMap = printers.length
-      ? `<div class="printer-map">${printers.slice(0, 8).map((printer) => `
+    const activePrinterMap = factory.map || [];
+    const printerMap = activePrinterMap.length
+      ? `<div class="printer-map">${activePrinterMap.slice(0, 8).map((printer) => `
           <article>
-            <b>${escapeHtml(printer.displayName || "Printer")}</b>
+            <b>${escapeHtml(printer.label || "Printer")}</b>
             <span>${escapeHtml(printer.basedIn || "Unknown")} · ${escapeHtml(printer.postcodeArea || "")}</span>
             <small>${escapeHtml(printer.status || "unknown")} · ${printer.queueLength || 0} active jobs · ${printer.activeCapabilities || 0} capabilities</small>
           </article>
@@ -149,7 +183,7 @@
         </div>
         ${(executive.alerts || []).length ? `<div class="founder-alerts">${executive.alerts.map((alert) => `<span>${escapeHtml(alert)}</span>`).join("")}</div>` : `<p class="empty-state compact">No current founder alerts.</p>`}
       `, "wide"),
-      founderModule("Factory Control Centre", "Manufacturing", `
+      founderModule("Factory Map with Active Printers", "Manufacturing", `
         ${founderRows([
           ["Utilisation", `${factory.utilisation || 0}%`],
           ["Order made", factory.queueLengths?.orderMade || 0],
@@ -158,6 +192,25 @@
           ["SLA risks", (factory.slaRisks || []).length]
         ])}
         ${printerMap}
+      `),
+      founderModule("Capacity Heat Maps", "Factory load", `
+        ${founderHeatMap(factory.capacityHeatMap || [])}
+      `),
+      founderModule("Live Orders", "Customer movement", `
+        ${founderList(factory.liveOrders || [], (order) => `<article>
+          <strong>${escapeHtml(order.invoiceNumber || order.id || "Order")}</strong>
+          <span>${escapeHtml(order.brandKey || "unknown")} | ${escapeHtml(founderLabel(order.status || "unknown"))}</span>
+          <small>${escapeHtml(order.location || "Unknown")} | ${money(order.valuePence)} | ${order.paidAt ? plainDate(order.paidAt) : "Not paid"}</small>
+        </article>`, "No paid orders in the live feed yet.")}
+      `),
+      founderModule("Printer Onboarding Funnel", "Provider activation", `
+        ${founderFunnel(factory.onboardingFunnel || {})}
+      `),
+      founderModule("Generator Performance", "Demand by product", `
+        ${founderBreakdown(growth.generatorPerformance)}
+      `),
+      founderModule("Marketing Funnel", "Acquisition to value", `
+        ${founderFunnel(growth.marketingFunnel || {})}
       `),
       founderModule("Growth Dashboard", "Demand", `
         ${founderRows([
@@ -169,6 +222,24 @@
         ])}
         <h4>Generator performance</h4>
         ${founderBreakdown(growth.generatorPerformance)}
+      `),
+      founderModule("Financial KPIs", "Unit economics", `
+        ${founderRows([
+          ["Gross", money(financialKpis.grossPence)],
+          ["Platform revenue", money(financialKpis.platformRevenuePence)],
+          ["Held liability", money(financialKpis.heldProviderLiabilityPence)],
+          ["Average order", money(financialKpis.averageOrderPence)],
+          ["VAT signal", money(financialKpis.vatPence)],
+          ["Print GMV", money(financialKpis.printGrossPence)]
+        ])}
+      `),
+      founderModule("Cash Runway", "Cash discipline", `
+        ${founderRows([
+          ["Runway", runway.value || "Needs cost input"],
+          ["Monthly fixed cost", cashRunway.monthlyFixedCostPence ? money(cashRunway.monthlyFixedCostPence) : "Not set"],
+          ["Net cash signal", money(cashRunway.netCashSignalPence)],
+          ["Held provider payouts", money(cash.heldProviderLiabilityPence)]
+        ])}
       `),
       founderModule("Finance Dashboard", "Money", `
         ${founderRows([
@@ -188,6 +259,17 @@
           ["Implementation", enterprise.implementationProgress || "No data yet"]
         ])}
       `),
+      founderModule("Country Rollout Status", "Geography", `
+        ${founderList(countryRollout, (row) => `<article>
+          <strong>${escapeHtml(row.country || row.code || "Country")}</strong>
+          <span>${escapeHtml(row.status || "Unknown")} | ${escapeHtml(row.currency || "")}</span>
+          <small>${escapeHtml(row.orders || 0)} orders | ${escapeHtml(row.printers || 0)} printers | ${escapeHtml(row.nextGate || "")}</small>
+        </article>`)}
+      `),
+      founderModule("White-label Pipeline", "Enterprise", `
+        ${founderFunnel(whiteLabelPipeline.stageCounts || {})}
+        <p class="empty-state compact">${escapeHtml(whiteLabelPipeline.note || "No white-label pipeline data yet.")}</p>
+      `),
       founderModule("Experiment Centre", "Learning", `
         ${founderRows([
           ["Active tests", experiments.active?.length || 0],
@@ -196,6 +278,18 @@
         <h4>Measured outcomes</h4>
         ${founderBreakdown(experiments.measuredOutcomes)}
       `),
+      founderModule("Board Dashboard", "Board pack", `
+        ${founderRows([
+          ["Completed jobs", board.headline?.completedFactoryJobs || 0],
+          ["Gross", money(board.headline?.grossPence)],
+          ["Platform revenue", money(board.headline?.platformRevenuePence)],
+          ["Active printers", board.headline?.activePrinters || 0],
+          ["Launch signups", board.headline?.launchSignups || 0],
+          ["Runway", board.headline?.runwayMonths === null || board.headline?.runwayMonths === undefined ? "Needs cost input" : `${Number(board.headline.runwayMonths).toFixed(1)} months`]
+        ])}
+        ${(board.risks || []).length ? `<div class="founder-alerts">${board.risks.map((risk) => `<span>${escapeHtml(risk)}</span>`).join("")}</div>` : `<p class="empty-state compact">No board-level risks flagged.</p>`}
+        ${founderList(board.nextBoardQuestions || [], (question) => `<article><strong>${escapeHtml(question)}</strong></article>`, "No board questions queued.")}
+      `, "wide"),
       founderModule("Decision Centre", "AI recommendations", `
         <div class="decision-list">
           ${decisions.map((decision) => `

@@ -46,6 +46,7 @@ const accountDeviceLimit = Number(process.env.ACCOUNT_DEVICE_LIMIT || 3);
 const enforceAccountDeviceLimit = process.env.ENFORCE_ACCOUNT_DEVICE_LIMIT === "true";
 const stlUploadBucket = process.env.STL_UPLOAD_BUCKET || "user-stl-uploads";
 const stlUploadMaxBytes = Number(process.env.STL_UPLOAD_MAX_BYTES || 12_000_000);
+const monthlyFixedCostPence = Number(process.env.MONTHLY_FIXED_COST_PENCE || 0);
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -303,8 +304,8 @@ function validEmail(value) {
 
 function publicReturnPath(path) {
   const cleanPath = String(path || "").replace(/\/$/, "");
-  if (cleanPath === "/tray") return "/trays";
-  if (cleanPath.startsWith("/tray/")) return cleanPath.replace(/^\/tray\b/, "/trays");
+  if (cleanPath === "/trays") return "/tray";
+  if (cleanPath.startsWith("/trays/")) return cleanPath.replace(/^\/trays\b/, "/tray");
   return cleanPath;
 }
 
@@ -568,7 +569,7 @@ function buildDecisionRecommendations({ orders, jobs, profiles, capabilities, ev
   return recommendations;
 }
 
-function buildFounderConsole({ orders, jobs, profiles, capabilities, transfers, launchRows, privacyRows, emailRows, events }) {
+function buildFounderConsole({ orders, jobs, profiles, capabilities, transfers, launchRows, privacyRows, emailRows, events, paymentAccounts = [] }) {
   const paidOrders = orders.filter((order) => order.paid_at || ["paid", "order_made", "producing", "posted", "complete"].includes(order.status));
   const grossPence = sumPence(paidOrders, (order) => order.total_inc_vat);
   const providerLiabilityPence = sumPence(transfers.filter((transfer) => ["held", "ready"].includes(transfer.status || transfer.payout_status)), (transfer) => transfer.amount_pence);
@@ -588,6 +589,95 @@ function buildFounderConsole({ orders, jobs, profiles, capabilities, transfers, 
   const factoryValueAddedPence = revenuePence;
   const utilisation = percent(activeJobs.length, Math.max(1, activePrinters.length * 5));
   const printGrossPence = jobRevenuePence(jobs);
+  const configuredMonthlyFixedCostPence = Number.isFinite(monthlyFixedCostPence) && monthlyFixedCostPence > 0 ? monthlyFixedCostPence : 0;
+  const runwayMonths = configuredMonthlyFixedCostPence ? Math.max(0, (grossPence - providerLiabilityPence) / configuredMonthlyFixedCostPence) : null;
+  const paymentAccountProfileIds = new Set(paymentAccounts
+    .filter((account) => account.onboarding_complete || account.transfers_enabled || account.charges_enabled)
+    .map((account) => account.printer_profile_id));
+  const profileCapabilities = (profileId) => capabilities.filter((capability) => capability.printer_profile_id === profileId && capability.active !== false);
+  const profileOpenJobs = (profileId) => jobs.filter((job) => job.printer_profile_id === profileId && !["complete", "cancelled", "refunded", "pending_payment"].includes(job.status));
+  const capacityHeatMap = profiles.map((profile) => {
+    const ownedCapabilities = profileCapabilities(profile.id);
+    const openJobs = profileOpenJobs(profile.id);
+    const nominalSlots = Math.max(1, ownedCapabilities.length * 5);
+    const bedWidth = Math.max(0, ...ownedCapabilities.map((capability) => Number(capability.max_width_mm || 0)));
+    const bedDepth = Math.max(0, ...ownedCapabilities.map((capability) => Number(capability.max_depth_mm || 0)));
+    return {
+      id: profile.id,
+      label: profile.display_name || "Unnamed printer",
+      region: profile.postcode_area || profile.based_in || "Unknown",
+      utilisationPercent: percent(openJobs.length, nominalSlots),
+      queueLength: openJobs.length,
+      nominalSlots,
+      materials: [...new Set(ownedCapabilities.map((capability) => capability.material || "unknown"))],
+      bedLabel: bedWidth && bedDepth ? `${bedWidth} x ${bedDepth}mm` : "Bed unknown"
+    };
+  });
+  const liveOrders = paidOrders.slice(0, 12).map((order) => ({
+    id: order.id,
+    invoiceNumber: order.invoice_number || "Pending invoice",
+    brandKey: order.brand_key || "unknown",
+    status: order.status || "unknown",
+    valuePence: Number(order.total_inc_vat || 0),
+    location: orderLocation(order),
+    paidAt: order.paid_at || order.created_at || null
+  }));
+  const printerOnboardingFunnel = {
+    profilesCreated: profiles.length,
+    pendingReview: profiles.filter((profile) => profile.status === "pending_review").length,
+    approvedActive: profiles.filter((profile) => profile.status === "active").length,
+    acceptingJobs: activePrinters.length,
+    stripeConnected: paymentAccountProfileIds.size
+  };
+  const checkoutStarts = checkoutEvents.filter((event) => event.event_type === "checkout.marketplace_started" || event.event_type === "checkout.unlock_started" || event.event_type === "checkout.session_started" || event.event_type?.startsWith("checkout."));
+  const marketingFunnel = {
+    launchSignups: launchRows.length,
+    quoteRequests: quoteEvents.length,
+    checkoutStarts: checkoutStarts.length,
+    paidOrders: paidOrders.length,
+    stlExports: exportEvents.length,
+    unlimitedUnlocks: unlockEvents.length,
+    quoteToCheckoutPercent: percent(checkoutStarts.length, Math.max(1, quoteEvents.length)),
+    signupToPaidPercent: percent(paidOrders.length, Math.max(1, launchRows.length || paidOrders.length))
+  };
+  const countryFromOrder = (order) => {
+    const snapshot = nestedRow(order.order_customer_snapshots);
+    const address = snapshot?.delivery_address || snapshot?.shipping_address || snapshot?.billing_address || {};
+    return cleanText(address.country || address.country_code || "GB", 2).toUpperCase() || "GB";
+  };
+  const countryRollout = [
+    {
+      country: "United Kingdom",
+      code: "GB",
+      status: "Live test",
+      currency: "GBP",
+      orders: paidOrders.filter((order) => countryFromOrder(order) === "GB").length,
+      printers: profiles.length,
+      nextGate: "Prove quote conversion, delivery SLAs, refunds, VAT evidence, and payout release."
+    },
+    { country: "Ireland", code: "IE", status: "Planned", currency: "EUR", orders: 0, printers: 0, nextGate: "Add EU VAT, shipping, and provider onboarding rules." },
+    { country: "United States", code: "US", status: "Later", currency: "USD", orders: paidOrders.filter((order) => countryFromOrder(order) === "US").length, printers: 0, nextGate: "Localise tax, postage, liability, and Stripe Connect settings." }
+  ];
+  const financialKpis = {
+    grossPence,
+    platformRevenuePence: revenuePence,
+    heldProviderLiabilityPence: providerLiabilityPence,
+    averageOrderPence: paidOrders.length ? Math.round(grossPence / paidOrders.length) : 0,
+    vatPence: sumPence(paidOrders, (order) => order.vat_amount || order.vat_pence),
+    printGrossPence
+  };
+  const founderAlerts = [
+    ...(profiles.some((profile) => profile.status === "pending_review") ? ["Provider approvals waiting"] : []),
+    ...(postedJobs.some((job) => autoCompleteAfterDate(job) && Date.now() > autoCompleteAfterDate(job).getTime()) ? ["Posted jobs past buyer-confirmation window"] : []),
+    ...(privacyRows.some((row) => row.status !== "completed") ? ["Open privacy requests"] : []),
+    ...(emailRows.some((row) => !row.sent_at && row.status !== "sent") ? ["Queued emails need processing"] : [])
+  ];
+  const whiteLabelPipeline = {
+    arrPence: 0,
+    stageCounts: { lead: 0, qualified: 0, onboarding: 0, live: 0 },
+    opportunities: [],
+    note: "No white-label CRM table yet. This module is ready to bind once enterprise pipeline rows exist."
+  };
   return {
     executive: {
       northStar: {
@@ -613,15 +703,10 @@ function buildFounderConsole({ orders, jobs, profiles, capabilities, transfers, 
       },
       runway: {
         label: "Runway",
-        value: "Needs cost input",
-        note: "Add monthly fixed costs before this becomes a real runway calculation"
+        value: runwayMonths === null ? "Needs cost input" : `${runwayMonths.toFixed(1)} months`,
+        note: runwayMonths === null ? "Set MONTHLY_FIXED_COST_PENCE to turn this into a real runway calculation" : `${configuredMonthlyFixedCostPence}p monthly fixed-cost assumption`
       },
-      alerts: [
-        ...(profiles.some((profile) => profile.status === "pending_review") ? ["Provider approvals waiting"] : []),
-        ...(postedJobs.some((job) => autoCompleteAfterDate(job) && Date.now() > autoCompleteAfterDate(job).getTime()) ? ["Posted jobs past buyer-confirmation window"] : []),
-        ...(privacyRows.some((row) => row.status !== "completed") ? ["Open privacy requests"] : []),
-        ...(emailRows.some((row) => !row.sent_at && row.status !== "sent") ? ["Queued emails need processing"] : [])
-      ]
+      alerts: founderAlerts
     },
     factory: {
       printers: profiles.map((profile) => ({
@@ -632,9 +717,23 @@ function buildFounderConsole({ orders, jobs, profiles, capabilities, transfers, 
         status: profile.status,
         acceptingJobs: Boolean(profile.accepting_jobs),
         ratingAverage: Number(profile.rating_average || 0),
-        queueLength: jobs.filter((job) => job.printer_profile_id === profile.id && !["complete", "cancelled", "refunded", "pending_payment"].includes(job.status)).length,
-        activeCapabilities: capabilities.filter((capability) => capability.printer_profile_id === profile.id && capability.active !== false).length
+        queueLength: profileOpenJobs(profile.id).length,
+        activeCapabilities: profileCapabilities(profile.id).length
       })),
+      map: activePrinters.map((profile) => ({
+        id: profile.id,
+        label: profile.display_name || "Unnamed printer",
+        displayName: profile.display_name || "Unnamed printer",
+        basedIn: profile.based_in || "Unknown",
+        postcodeArea: profile.postcode_area || "Unknown",
+        status: profile.status,
+        activeCapabilities: profileCapabilities(profile.id).length,
+        ratingAverage: Number(profile.rating_average || 0),
+        queueLength: profileOpenJobs(profile.id).length
+      })),
+      capacityHeatMap,
+      liveOrders,
+      onboardingFunnel: printerOnboardingFunnel,
       utilisation,
       queueLengths: {
         orderMade: orderMadeJobs.length,
@@ -650,6 +749,7 @@ function buildFounderConsole({ orders, jobs, profiles, capabilities, transfers, 
     growth: {
       seo: { status: "Needs Search Console import", indexedRoutes: publicPlatformConfig.brands.filter((brand) => brand.enabled).length },
       generatorPerformance: countBy(recentEvents, (event) => event.generator_type || event.brand_key || "platform"),
+      marketingFunnel,
       adsense: { status: "Needs AdSense reporting API import", eventProxy: eventCounts(recentEvents, (event) => event.event_type?.includes("ad") || event.event_type?.includes("launch")) },
       unlockConversions: {
         stlExports: exportEvents.length,
@@ -659,11 +759,17 @@ function buildFounderConsole({ orders, jobs, profiles, capabilities, transfers, 
       cohorts: countBy(paidOrders, (order) => (order.created_at || "").slice(0, 7) || "unknown")
     },
     finance: {
+      kpis: financialKpis,
+      cashRunway: {
+        monthlyFixedCostPence: configuredMonthlyFixedCostPence,
+        runwayMonths,
+        netCashSignalPence: grossPence - providerLiabilityPence
+      },
       pnl: {
         grossPence,
         printGrossPence,
         platformRevenuePence: revenuePence,
-        vatPence: sumPence(paidOrders, (order) => order.vat_amount || order.vat_pence),
+        vatPence: financialKpis.vatPence,
         providerSharePence: sumPence(jobs, (job) => job.provider_share_pence),
         postagePence: sumPence(jobs, (job) => job.postage_pence)
       },
@@ -686,7 +792,27 @@ function buildFounderConsole({ orders, jobs, profiles, capabilities, transfers, 
       pipeline: [],
       onboarding: [],
       arrPence: 0,
-      implementationProgress: "No enterprise pipeline table yet"
+      implementationProgress: "No enterprise pipeline table yet",
+      countryRollout,
+      whiteLabelPipeline
+    },
+    countryRollout,
+    whiteLabelPipeline,
+    board: {
+      headline: {
+        completedFactoryJobs: completedJobs.length,
+        grossPence,
+        platformRevenuePence: revenuePence,
+        activePrinters: activePrinters.length,
+        launchSignups: launchRows.length,
+        runwayMonths
+      },
+      risks: founderAlerts,
+      nextBoardQuestions: [
+        "Which generator creates the strongest paid conversion?",
+        "Where is factory capacity constraining fulfilled demand?",
+        "Which country should unlock next once UK SLAs are stable?"
+      ]
     },
     experiments: {
       active: recentEvents.filter((event) => event.event_type?.startsWith("experiment.")),
@@ -754,7 +880,8 @@ async function hubDashboard(request, response) {
         launchRows: launchRows || [],
         privacyRows: privacyRows || [],
         emailRows: emailRows || [],
-        events: safeEvents
+        events: safeEvents,
+        paymentAccounts: paymentAccounts || []
       }),
       launchSignups: (launchRows || []).slice(0, 25),
       privacyRequests: (privacyRows || []).slice(0, 25)
@@ -2834,8 +2961,9 @@ createServer(async (request, response) => {
     return;
   }
 
-  if (pathname === "/tray" || pathname === "/tray/") {
-    response.writeHead(308, { Location: `/trays/${requestUrl.search}` });
+  if (pathname === "/trays" || pathname.startsWith("/trays/")) {
+    const targetPath = pathname === "/trays" ? "/tray/" : pathname.replace(/^\/trays\b/, "/tray");
+    response.writeHead(308, { Location: `${targetPath}${requestUrl.search}` });
     response.end();
     return;
   }

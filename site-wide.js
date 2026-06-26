@@ -205,7 +205,7 @@
   }
 
   function launchPublicPaths() {
-    return new Set(Array.isArray(launchConfig.publicPaths) ? launchConfig.publicPaths : ["trays", "print", "factory"]);
+    return new Set(Array.isArray(launchConfig.publicPaths) ? launchConfig.publicPaths : ["tray", "print", "factory"]);
   }
 
   function launchDeferredPaths() {
@@ -218,7 +218,7 @@
 
   function currentRoutePath() {
     const path = window.location.pathname.toLowerCase().split("/").filter(Boolean)[0] || "";
-    return path === "tray" ? "trays" : path;
+    return path;
   }
 
   function applyLaunchScope() {

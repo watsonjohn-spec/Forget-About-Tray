@@ -631,12 +631,12 @@ test("download and physical print are both presented as fulfilment options", asy
 });
 
 test("enabled brand route serves the shared app shell", async () => {
-  const response = await fetch(`${baseUrl}/trays/`);
+  const response = await fetch(`${baseUrl}/tray/`);
   assert.equal(response.status, 200);
   assert.match(await response.text(), /<script src="\.\.\/platform\.js"><\/script>/);
-  const legacy = await fetch(`${baseUrl}/tray/`, { redirect: "manual" });
+  const legacy = await fetch(`${baseUrl}/trays/`, { redirect: "manual" });
   assert.equal(legacy.status, 308);
-  assert.equal(legacy.headers.get("location"), "/trays/");
+  assert.equal(legacy.headers.get("location"), "/tray/");
 });
 
 test("corporate landing page links to active generators", async () => {
@@ -647,7 +647,7 @@ test("corporate landing page links to active generators", async () => {
   assert.match(html, /Generator directory/);
   const homeAlias = await fetch(`${baseUrl}/home/`);
   assert.equal(homeAlias.status, 404);
-  for (const route of ["/trays/", "/makeup/", "/print/", "/paint/", "/stitch/", "/factory/"]) {
+  for (const route of ["/tray/", "/makeup/", "/print/", "/paint/", "/stitch/", "/factory/"]) {
     assert.match(html, new RegExp(`href="${route.slice(1).replace("/", "\\/")}`));
     const response = await fetch(`${baseUrl}${route}`);
     assert.equal(response.status, 200);
@@ -659,10 +659,10 @@ test("sitemap, robots, and launch signup endpoint are exposed", async () => {
   assert.equal(sitemap.status, 200);
   assert.match(sitemap.headers.get("content-type"), /application\/xml/);
   const sitemapXml = await sitemap.text();
-  assert.match(sitemapXml, /https:\/\/forgetabout\.im\/trays\//);
+  assert.match(sitemapXml, /https:\/\/forgetabout\.im\/tray\//);
   assert.match(sitemapXml, /https:\/\/forgetabout\.im\/print\//);
   assert.match(sitemapXml, /https:\/\/forgetabout\.im\/factory\//);
-  assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/tray\//);
+  assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/trays\//);
   assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/makeup\//);
   assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/paint\//);
   assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/stitch\//);
@@ -675,11 +675,11 @@ test("sitemap, robots, and launch signup endpoint are exposed", async () => {
   const signup = await fetch(`${baseUrl}/api/launch-signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Origin: "http://127.0.0.1:4192" },
-    body: JSON.stringify({ firstName: "Launch", secondName: "Tester", email: "launch@example.test", sourcePath: "/trays/" })
+    body: JSON.stringify({ firstName: "Launch", secondName: "Tester", email: "launch@example.test", sourcePath: "/tray/" })
   });
   assert.equal(signup.status, 200);
   assert.equal(launchSignups.at(-1).email, "launch@example.test");
-  assert.equal(launchSignups.at(-1).source_path, "/trays");
+  assert.equal(launchSignups.at(-1).source_path, "/tray");
 });
 
 test("makeup route serves the rose-gold caddy generator", async () => {
@@ -724,6 +724,14 @@ test("hub route is restricted to the admin email and can approve provider profil
   assert.equal(body.admin.email, "watson.john@live.co.uk");
   assert.equal(body.metrics.pendingProviderProfiles, 1);
   assert.equal(body.founder.executive.fci.label, "Factory Capacity Index");
+  assert.ok(Array.isArray(body.founder.factory.capacityHeatMap));
+  assert.ok(Array.isArray(body.founder.factory.liveOrders));
+  assert.equal(body.founder.factory.onboardingFunnel.pendingReview, 1);
+  assert.ok(body.founder.growth.marketingFunnel);
+  assert.ok(body.founder.finance.kpis);
+  assert.ok(Array.isArray(body.founder.countryRollout));
+  assert.ok(body.founder.whiteLabelPipeline);
+  assert.ok(body.founder.board);
   assert.ok(Array.isArray(body.founder.decisions));
   assert.ok(body.pendingProfiles.some((profile) => profile.id === printerProfile.id));
 
@@ -1062,10 +1070,10 @@ test("checkout returns to the originating brand path", async () => {
   const response = await api("/api/checkout/session", "paid-token", { config, name: "Brand path tray" }, {
     "X-Forget-About-Brand": "tray",
     "X-Forget-About-Generator": "movement_tray",
-    "X-Forget-About-Path": "/trays"
+    "X-Forget-About-Path": "/tray"
   });
   assert.equal(response.status, 200);
-  assert.match(checkoutRequests.at(-1).get("success_url"), /^http:\/\/127\.0\.0\.1:4192\/trays\?checkout=success/);
+  assert.match(checkoutRequests.at(-1).get("success_url"), /^http:\/\/127\.0\.0\.1:4192\/tray\?checkout=success/);
 });
 
 test("Stripe webhook accepts a valid signed checkout confirmation", async () => {

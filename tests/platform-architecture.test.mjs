@@ -12,7 +12,7 @@ test("movement trays are registered as a versioned generator under the tray bran
   assert.equal(generator.type, "movement_tray");
   assert.equal(generator.version, 1);
   assert.equal(brand.factoryLabel, "Tray");
-  assert.equal(brand.path, "trays");
+  assert.equal(brand.path, "tray");
   assert.equal(brand.tagline.primary, "Build the formation.");
   assert.equal(generator.defaultFilament.material, "pla");
   assert.deepEqual(generator.capabilities.variants, ["single_tray", "army_list", "storage_insert"]);

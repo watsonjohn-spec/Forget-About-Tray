@@ -25,12 +25,14 @@ a { color:inherit; }
 .home-tagline { max-width:360px; margin:0 auto 0 0; color:var(--muted); font:600 12px/1.35 Georgia,serif; }
 .home-header nav { display:flex; flex-wrap:wrap; gap:8px; }
 .home-header nav a { min-height:34px; padding:8px 10px; display:grid; place-items:center; border:1px solid var(--line); border-radius:8px; background:var(--white); font-size:10px; font-weight:850; text-decoration:none; text-transform:uppercase; }
-.home-main { width:min(1240px,calc(100% - 40px)); margin:0 auto; }
+.home-main { width:min(1240px,calc(100% - 40px)); margin:0 auto; position:relative; isolation:isolate; }
+.home-motto { position:absolute; top:22px; right:clamp(-44px,-3vw,0px); z-index:0; display:grid; gap:clamp(2px,.65vw,8px); pointer-events:none; color:rgba(38,60,43,.105); font:800 clamp(48px,11vw,150px)/.78 Georgia,serif; letter-spacing:-.075em; text-align:right; text-transform:uppercase; transform:rotate(-2deg); }
+.home-motto span { display:block; text-shadow:0 1px 0 rgba(255,255,255,.28); }
 .eyebrow { margin:0 0 10px; color:var(--accent-dark); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
-.home-hero { max-width:850px; padding:72px 0 34px; }
+.home-hero { max-width:850px; padding:72px 0 34px; position:relative; z-index:1; }
 .home-hero h1 { margin:0; font:600 clamp(38px,7vw,78px)/.95 Georgia,serif; letter-spacing:-.045em; }
 .home-hero p:last-child { max-width:660px; margin:18px 0 0; color:var(--muted); font-size:13px; line-height:1.7; }
-.generator-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+.generator-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; position:relative; z-index:1; }
 .generator-card { min-height:260px; padding:20px; position:relative; isolation:isolate; display:grid; align-content:end; gap:10px; overflow:hidden; border:1px solid color-mix(in srgb,var(--line) 76%,white); border-radius:18px; background:var(--panel); text-decoration:none; box-shadow:0 22px 55px rgba(42,65,45,.12); transition:transform .18s ease, box-shadow .18s ease; }
 .generator-card:hover { transform:translateY(-4px); box-shadow:0 30px 70px rgba(42,65,45,.17); }
 .generator-card span { position:absolute; inset:0; z-index:-1; display:block; background:var(--card-art); }
@@ -57,8 +59,8 @@ a { color:inherit; }
 .generator-card.factory { --card-art:repeating-linear-gradient(135deg,rgba(208,138,50,.16) 0 9px,transparent 9px 20px),linear-gradient(135deg,#eef1ed,#cfd8d9); }
 .generator-card.factory span::before { width:126px; height:78px; right:22px; top:55px; border-radius:8px 8px 3px 3px; background:rgba(69,85,91,.16); }
 .generator-card.factory span::after { width:18px; height:54px; right:108px; top:34px; background:rgba(69,85,91,.18); box-shadow:30px 8px 0 rgba(69,85,91,.18),60px -6px 0 rgba(69,85,91,.18); }
-.corporate-panel { margin:28px 0 70px; padding:24px; display:grid; grid-template-columns:.9fr 1.1fr; gap:24px; border:1px solid var(--line); border-radius:14px; background:rgba(255,253,244,.7); }
+.corporate-panel { margin:28px 0 70px; padding:24px; display:grid; grid-template-columns:.9fr 1.1fr; gap:24px; position:relative; z-index:1; border:1px solid var(--line); border-radius:14px; background:rgba(255,253,244,.7); }
 .corporate-panel h2 { margin:0; font:600 30px/1.08 Georgia,serif; }
 .corporate-panel p:last-child { margin:0; color:var(--muted); font-size:12px; line-height:1.7; }
 @media (max-width:900px){.home-header{align-items:flex-start;flex-direction:column}.generator-grid{grid-template-columns:1fr 1fr}.corporate-panel{grid-template-columns:1fr}}
-@media (max-width:620px){.home-main{width:calc(100% - 22px)}.home-hero{padding-top:42px}.generator-grid{grid-template-columns:1fr}.home-header nav{display:grid;grid-template-columns:repeat(3,1fr);width:100%}.home-header nav a{min-width:0}}
+@media (max-width:620px){.home-main{width:calc(100% - 22px)}.home-motto{top:20px;right:-8px;font-size:clamp(44px,18vw,84px);opacity:.8}.home-hero{padding-top:42px}.generator-grid{grid-template-columns:1fr}.home-header nav{display:grid;grid-template-columns:repeat(3,1fr);width:100%}.home-header nav a{min-width:0}}

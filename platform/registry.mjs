@@ -7,8 +7,8 @@ import { stitchOrganizerGenerator } from "./generators/stitch-organizer.mjs";
 const brands = [
   {
     key: "tray",
-    path: "trays",
-    aliases: ["tray", "tray/", "forget-about-tray", "forget-about-tray/"],
+    path: "tray",
+    aliases: ["trays", "trays/", "forget-about-tray", "forget-about-tray/"],
     name: "Forget About Tray",
     shortName: "Tray",
     studioName: "Forget About Tray",

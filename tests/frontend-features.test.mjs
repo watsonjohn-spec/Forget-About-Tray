@@ -106,7 +106,7 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.clientId, "ca-pub-6722120388841444");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.consentProvider, "google-cmp");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.mvpModeEnabled, true);
-  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["trays", "print", "factory"]));
+  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["tray", "print", "factory"]));
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.deferredPaths), JSON.stringify(["makeup", "paint", "stitch"]));
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.launchHoldExcludedPaths), JSON.stringify(["hub"]));
   assert.doesNotMatch(publicConfigSource, /sb_secret_|sk_(?:test|live)_|rk_(?:test|live)_|whsec_/);
@@ -177,7 +177,7 @@ test("makeup and factory OAuth keep users on the originating app after provider 
   assert.equal(sessionStorage.getItem("forget-about-pending-auth-return"), "/makeup/");
 
   let replaced = "";
-  context.window.location.pathname = "/trays";
+  context.window.location.pathname = "/tray";
   context.window.location.hash = "#access_token=abc&refresh_token=def&expires_in=3600";
   context.window.location.replace = (url) => { replaced = url; };
 
@@ -401,8 +401,8 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(rootIndexHtml, adsenseHeadScript);
   assert.equal(existsSync(new URL("home.html", root)), false);
   assert.equal(existsSync(new URL("home/index.html", root)), false);
-  assert.match(rootIndexHtml, /href="trays\/"/);
-  assert.match(rootIndexHtml, /data-launch-path="trays"/);
+  assert.match(rootIndexHtml, /href="tray\/"/);
+  assert.match(rootIndexHtml, /data-launch-path="tray"/);
   assert.match(rootIndexHtml, /data-launch-path="makeup"/);
   assert.match(rootIndexHtml, /href="print\/"/);
   assert.match(rootIndexHtml, /data-launch-path="factory"/);
@@ -564,6 +564,17 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(hubJs, /\/api\/hub\/dashboard/);
   assert.match(hubJs, /function renderFounderConsole/);
   assert.match(hubJs, /Executive Dashboard/);
+  assert.match(hubJs, /Factory Map with Active Printers/);
+  assert.match(hubJs, /Capacity Heat Maps/);
+  assert.match(hubJs, /Live Orders/);
+  assert.match(hubJs, /Printer Onboarding Funnel/);
+  assert.match(hubJs, /Generator Performance/);
+  assert.match(hubJs, /Marketing Funnel/);
+  assert.match(hubJs, /Financial KPIs/);
+  assert.match(hubJs, /Cash Runway/);
+  assert.match(hubJs, /Country Rollout Status/);
+  assert.match(hubJs, /White-label Pipeline/);
+  assert.match(hubJs, /Board Dashboard/);
   assert.match(hubJs, /Decision Centre/);
   assert.match(hubJs, /\/api\/hub\/printer-profiles\/\$\{encodeURIComponent\(profileId\)\}\/status/);
   assert.match(hubJs, /accountAuthFlow\.openCreateAccount/);
@@ -575,6 +586,11 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(serverSource, /\/api\/hub\/dashboard/);
   assert.match(serverSource, /\/api\/events/);
   assert.match(serverSource, /function buildFounderConsole/);
+  assert.match(serverSource, /capacityHeatMap/);
+  assert.match(serverSource, /marketingFunnel/);
+  assert.match(serverSource, /countryRollout/);
+  assert.match(serverSource, /whiteLabelPipeline/);
+  assert.match(serverSource, /MONTHLY_FIXED_COST_PENCE/);
   assert.match(serverSource, /recordPlatformEvent/);
   assert.match(serverSource, /platform_events\?select=\*/);
   assert.match(serverSource, /hubProfileStatusRoute/);

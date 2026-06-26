@@ -68,7 +68,7 @@ function adsenseSlots() {
 
 const launch = {
   mvpModeEnabled: envBoolean("MVP_LAUNCH_MODE", true),
-  publicPaths: envList("LAUNCH_PUBLIC_PATHS", "trays,print,factory"),
+  publicPaths: envList("LAUNCH_PUBLIC_PATHS", "tray,print,factory"),
   deferredPaths: envList("LAUNCH_DEFERRED_PATHS", "makeup,paint,stitch"),
   launchHoldExcludedPaths: envList("LAUNCH_HOLD_EXCLUDED_PATHS", "hub"),
   factoryLaunchHoldEnabled: envBoolean("FACTORY_LAUNCH_HOLD_ENABLED", true)
@@ -112,7 +112,6 @@ const excludedRouteDirectories = new Set([
   "supabase",
   "tests"
 ]);
-const routeAliases = new Map([["tray", "trays"]]);
 
 function publicRoutes() {
   const routes = new Set(["/"]);
@@ -121,7 +120,7 @@ function publicRoutes() {
     if (!entry.isDirectory() || excludedRouteDirectories.has(entry.name)) continue;
     const indexPath = new URL(`${entry.name}/index.html`, root);
     if (!existsSync(indexPath)) continue;
-    const route = routeAliases.get(entry.name) || entry.name;
+    const route = entry.name;
     if (!launch.mvpModeEnabled || allowed.has(route)) routes.add(`/${route}/`);
   }
   return [...routes].sort((a, b) => a.localeCompare(b));
