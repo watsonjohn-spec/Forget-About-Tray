@@ -7,6 +7,7 @@
   const launchConfig = siteConfig.launch || {};
   const analyticsConsentKey = "forget-about-analytics-consent";
   const launchHoldKey = "forget-about-launch-hold-dismissed";
+  const pendingAuthReturnKey = "forget-about-pending-auth-return";
   let analyticsLoaded = false;
   let analyticsHistoryPatched = false;
   let adsenseLoaded = false;
@@ -36,6 +37,59 @@
     } catch {
       /* Storage can be unavailable in private or embedded browsers. */
     }
+  }
+
+  function safeSessionStorageGet(key) {
+    try {
+      return window.sessionStorage?.getItem(key) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function safeSessionStorageRemove(key) {
+    try {
+      window.sessionStorage?.removeItem(key);
+    } catch {
+      /* Storage can be unavailable in private or embedded browsers. */
+    }
+  }
+
+  function pendingAuthReturnPath() {
+    const path = safeSessionStorageGet(pendingAuthReturnKey);
+    if (!path.startsWith("/") || path.startsWith("//")) return "";
+    return path;
+  }
+
+  function currentAuthCallbackParameters() {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const search = new URLSearchParams(window.location.search.replace(/^\?/, ""));
+    return { hash, search };
+  }
+
+  function hasAuthCallbackParameters() {
+    const { hash, search } = currentAuthCallbackParameters();
+    return Boolean(
+      hash.get("access_token") ||
+      hash.get("error") ||
+      hash.get("error_description") ||
+      search.get("code") ||
+      search.get("error") ||
+      search.get("error_description")
+    );
+  }
+
+  function reroutePendingAuthCallback() {
+    const pendingPath = pendingAuthReturnPath();
+    if (!pendingPath || pendingPath === `${window.location.pathname}${window.location.search}`) return false;
+    if (!hasAuthCallbackParameters()) return false;
+    safeSessionStorageRemove(pendingAuthReturnKey);
+    const target = new URL(pendingPath, window.location.origin);
+    const { search } = currentAuthCallbackParameters();
+    search.forEach((value, key) => target.searchParams.append(key, value));
+    target.hash = window.location.hash;
+    window.location.replace(target.toString());
+    return true;
   }
 
   function publicApiBase() {
@@ -216,6 +270,10 @@
     return new Set(Array.isArray(launchConfig.launchHoldExcludedPaths) ? launchConfig.launchHoldExcludedPaths : ["hub"]);
   }
 
+  function launchStaticPagePaths() {
+    return new Set(["terms", "privacy", "cookie", "refunds", "contact", "support"]);
+  }
+
   function currentRoutePath() {
     const path = window.location.pathname.toLowerCase().split("/").filter(Boolean)[0] || "";
     return path;
@@ -246,6 +304,7 @@
 
   function renderLaunchHold() {
     if (launchHoldExcludedPaths().has(currentRoutePath())) return;
+    if (launchStaticPagePaths().has(currentRoutePath())) return;
     if (!launchHoldEnabled() || safeStorageGet(launchHoldKey) || document.getElementById("launchHold")) return;
     const hold = document.createElement("section");
     hold.id = "launchHold";
@@ -967,6 +1026,14 @@
         </section>
       </div>
       <section class="site-footer-legal" aria-label="Legal information">
+        <nav class="site-footer-links" aria-label="Legal and support pages">
+          <a href="/terms/">Terms</a>
+          <a href="/privacy/">Privacy</a>
+          <a href="/cookie/">Cookie</a>
+          <a href="/refunds/">Refunds and cancellations</a>
+          <a href="/contact/">Contact</a>
+          <a href="/support/">Support</a>
+        </nav>
         <details>
           <summary>Terms</summary>
           <p>Draft terms: Forget About provides generator tools, downloadable STL files, and access to independent print providers. Generated files are supplied for your own permitted use unless a separate commercial licence is agreed. You are responsible for checking measurements, compatibility, rights to any uploaded or referenced content, and whether a print is suitable for its intended use. We may refuse, remove, cancel, or refund requests that appear unsafe, unlawful, infringing, misleading, abusive, technically unsuitable, or outside a provider's stated capabilities. Print providers remain independent businesses responsible for their own production quality, listings, tax, safety, and customer communications.</p>
@@ -1001,6 +1068,7 @@
     refreshAds: refreshAdSensePortals
   };
 
+  if (reroutePendingAuthCallback()) return;
   applyLaunchScope();
   decorateAdSensePortals();
   normalizeExistingAccountButtons();

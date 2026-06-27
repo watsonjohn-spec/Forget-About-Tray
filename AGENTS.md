@@ -74,7 +74,11 @@ The static site is published from the repo, and the Node backend is hosted separ
 
 Documentation is part of the product. Update docs whenever a task changes architecture, generator behaviour, payment flow, account flow, deployment, privacy/security, or operational workflow.
 
-For regular code review that updates design decisions, use `.agents/decision-review-agent.md` with `docs/playbooks/decision-review-agent.md`. The agent must document what changed and why, may use project conversation evidence when available, and must ask or flag when the rationale is not recoverable from repo evidence. Scheduled ChatGPT runs are draft-first and need explicit user approval before any GitHub write action.
+Documentation and decision updates must include both what changed and why it changed. If the reason is not clear from code, repo docs, commits, or user context, ask or record an explicit follow-up rather than inventing it.
+
+When a task changes standing repo instructions, architecture rules, review expectations, deployment rules, security rules, or agent behaviour, update this `AGENTS.md` file in the same change set.
+
+For regular code review that updates design decisions, use `.agents/decision-review-agent.md` with `docs/playbooks/decision-review-agent.md`. The agent must document what changed and why, may use project conversation evidence when available, and must ask or flag when the rationale is not recoverable from repo evidence. Scheduled ChatGPT runs should run daily when changes exist, are draft-first, and need explicit user approval before any GitHub write action.
 
 Use:
 

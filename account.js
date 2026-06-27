@@ -44,6 +44,10 @@
     return `${url.pathname}${url.search}`;
   }
 
+  function authCallbackUrl() {
+    return new URL("/", window.location.origin).toString();
+  }
+
   function pendingAuthReturnPath() {
     const path = sessionStorage.getItem(pendingAuthReturnKey) || "";
     if (!path.startsWith("/") || path.startsWith("//")) return "";
@@ -253,10 +257,9 @@
     if (!enabledOauthProviders.has(provider)) throw new Error(`${provider[0].toUpperCase() + provider.slice(1)} sign-in is not available yet.`);
     await loadConfig();
     const url = new URL(`${config.supabaseUrl}/auth/v1/authorize`);
-    const returnUrl = appUrl();
     sessionStorage.setItem(pendingAuthReturnKey, appPath());
     url.searchParams.set("provider", provider);
-    url.searchParams.set("redirect_to", returnUrl);
+    url.searchParams.set("redirect_to", authCallbackUrl());
     window.location.assign(url.toString());
   }
 
@@ -294,7 +297,7 @@
         <p>Create an account to save designs, orders, downloads, and print requests. Names help us keep orders and account records readable.</p>
         <div class="shared-auth-field-grid">
           <label>First name<input name="firstName" autocomplete="given-name" required></label>
-          <label>Last name<input name="lastName" autocomplete="family-name" required></label>
+          <label>Second name<input name="lastName" autocomplete="family-name" required></label>
         </div>
         <label>Email address<input name="email" type="email" autocomplete="email" required value="${email}"></label>
         <label>Password<input name="password" type="password" autocomplete="new-password" minlength="8" required value="${password}"></label>

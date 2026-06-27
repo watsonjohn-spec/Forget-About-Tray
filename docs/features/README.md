@@ -13,7 +13,7 @@ Use this file as the top-level index for product capabilities. Keep it high leve
 ## Account
 
 - Email/password auth.
-- Google auth where configured.
+- Google auth where configured, with provider callbacks relayed from `/` back to the generator route that started sign-in.
 - Shared account dropdown across generator routes.
 - Profile and address management.
 - Password change.

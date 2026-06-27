@@ -70,7 +70,7 @@ The factory payout flow uses Stripe Connect Accounts v2 recipient accounts. A pr
 
 Set `PRINT_AUTO_COMPLETE_DAYS` to control the buyer confirmation window for posted jobs. The default is 14 days. Configure a scheduled worker or Render Cron job to call `POST /api/tasks/auto-complete-posted` with `Authorization: Bearer <TASK_RUNNER_SECRET>`. When a posted job is still awaiting buyer confirmation after that window, the task auto-completes it and releases the provider payout if the connected account can receive transfers.
 
-To enable Google and Apple sign-in, open **Supabase Dashboard → Authentication → Providers**, configure Google and Apple, then add the deployed app URL to **Authentication → URL Configuration → Redirect URLs**. Email and password sign-in remains available.
+To enable Google and Apple sign-in, open **Supabase Dashboard -> Authentication -> Providers**, configure Google and Apple, then add the deployed root app URL, such as `https://forgetabout.im/`, to **Authentication -> URL Configuration -> Redirect URLs**. The app stores the intended generator path before OAuth and relays the provider callback from `/` back to that route. Email and password sign-in remains available.
 
 `npm run public-config` generates `public-config.js` using only public browser configuration such as `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, analytics IDs, and optional AdSense publisher/ad-unit IDs. These values are designed to be public and allow account login, analytics, and configured ad portals to work on the deployed site. The Supabase secret key is never included. `Publish to GitHub.cmd` runs this automatically before publishing.
 

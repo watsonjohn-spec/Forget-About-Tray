@@ -1045,6 +1045,28 @@ ins.adsbygoogle[data-ad-status="unfilled"] {
   gap: 10px;
 }
 
+.site-footer-links {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.site-footer-links a {
+  min-height: 34px;
+  padding: 8px 10px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--site-footer-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .055);
+  color: var(--site-footer-text);
+  font-size: 10px;
+  font-weight: 850;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
 .site-footer-legal details {
   border: 1px solid var(--site-footer-line);
   border-radius: 10px;

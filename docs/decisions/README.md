@@ -46,9 +46,19 @@ Decision: Maintain a dedicated decision review agent and playbook that can run a
 
 Reason: The platform now spans multiple brands, shared services, Supabase, Stripe, events, factory operations, and deployment paths. Durable decisions need to outlive chat sessions and individual pull request summaries, but repo writes still need an approval boundary.
 
-Consequences: Substantive code changes should include a decision-review pass before merge or deployment. Scheduled ChatGPT runs should draft proposed `docs/decisions/README.md` and related-doc updates, show the evidence used, and ask for approval before any GitHub write action. The agent should ask for missing rationale instead of inventing it.
+Consequences: Substantive code changes should include a decision-review pass before merge or deployment. Scheduled ChatGPT runs should run daily when changes exist, draft proposed `docs/decisions/README.md` and related-doc updates, show the evidence used, and ask for approval before any GitHub write action. The agent should ask for missing rationale instead of inventing it.
 
 Follow-ups: After the approval workflow is proven, decide whether a write-capable Codex or GitHub workflow should apply approved patches and open pull requests automatically.
+
+### 2026-06-26 Launch Hardening Routes And OAuth Callback Relay
+
+Decision: Add standalone public policy and support routes for `/terms/`, `/privacy/`, `/cookie/`, `/refunds/`, `/contact/`, and `/support/`, link them from the shared footer, include them in the sitemap, and use `/` as the shared Supabase OAuth callback before relaying users back to the generator route that started sign-in.
+
+Reason: Launch users need legal, privacy, refund, contact, and support information available before payment or account use, and route-specific OAuth callbacks can mismatch provider configuration as more brand routes are added. A shared root callback keeps Supabase provider setup simpler while preserving the customer's route-scoped journey.
+
+Consequences: Static policy/support pages become part of the public launch surface and must stay aligned with payment, privacy, refunds, and support operations. OAuth sign-in depends on session storage to remember the intended return route, so private or embedded browsers without session storage may fall back to the root journey.
+
+Follow-ups: Deploy the routes to GitHub Pages, verify the live `/terms/`, `/privacy/`, `/cookie/`, `/refunds/`, `/contact/`, and `/support/` URLs no longer return 404, and replace draft policy copy with reviewed legal wording before full launch.
 
 ## Entry Template
 

@@ -13,7 +13,7 @@ Brands and generators are deliberately separate. A brand can expose several gene
 
 The active brand is derived from the URL. It is not selected from inside a brand app. The browser sends the active brand and generator with platform API requests, and orders retain both values permanently.
 
-Authentication and checkout return URLs preserve the entry path, so the same brand remains active for the complete customer session and payment journey.
+Authentication and checkout return URLs preserve the entry path, so the same brand remains active for the complete customer session and payment journey. OAuth provider sign-in uses `/` as the shared Supabase callback and stores the intended generator route in session storage; the home shell relays the returned auth hash to that route before the generator account code creates the session.
 
 Login surfaces must stay functionally and structurally identical across customer generators and the shared print factory. Email/password sign-in, enabled OAuth providers, account creation, password reset, provider-status messaging, and recovery handling are shared account behavior; only palette, surface name, and logo mark should vary.
 

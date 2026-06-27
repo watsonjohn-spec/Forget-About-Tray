@@ -76,6 +76,7 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.match(account, /async function signInWithProvider\(provider\)/);
   assert.match(account, /async function passwordGrant\(email, password\)/);
   assert.match(account, /async function signUp\(email, password, profile = \{\}\)/);
+  assert.match(account, /Second name/);
   assert.match(account, /first_name: firstName/);
   assert.match(account, /last_name: lastName/);
   assert.match(account, /full_name: fullName/);
@@ -106,7 +107,7 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.clientId, "ca-pub-6722120388841444");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.consentProvider, "google-cmp");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.mvpModeEnabled, true);
-  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["tray", "print", "factory"]));
+  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["tray", "print", "factory", "terms", "privacy", "cookie", "refunds", "contact", "support"]));
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.deferredPaths), JSON.stringify(["makeup", "paint", "stitch"]));
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.launchHoldExcludedPaths), JSON.stringify(["hub"]));
   assert.doesNotMatch(publicConfigSource, /sb_secret_|sk_(?:test|live)_|rk_(?:test|live)_|whsec_/);
@@ -173,7 +174,7 @@ test("makeup and factory OAuth keep users on the originating app after provider 
   await context.window.accountService.signInWithProvider("google");
 
   const authUrl = new URL(assigned[0]);
-  assert.equal(authUrl.searchParams.get("redirect_to"), "https://app.test/makeup/");
+  assert.equal(authUrl.searchParams.get("redirect_to"), "https://app.test/");
   assert.equal(sessionStorage.getItem("forget-about-pending-auth-return"), "/makeup/");
 
   let replaced = "";
@@ -214,7 +215,7 @@ test("makeup and factory OAuth keep users on the originating app after provider 
   await factoryContext.window.accountService.signInWithProvider("google");
 
   const factoryAuthUrl = new URL(factoryAssigned[0]);
-  assert.equal(factoryAuthUrl.searchParams.get("redirect_to"), "https://app.test/factory/");
+  assert.equal(factoryAuthUrl.searchParams.get("redirect_to"), "https://app.test/");
   assert.equal(factorySessionStorage.getItem("forget-about-pending-auth-return"), "/factory/");
 
   let factoryReplaced = "";
@@ -226,6 +227,33 @@ test("makeup and factory OAuth keep users on the originating app after provider 
 
   assert.equal(factoryReplaced, "https://app.test/factory/#access_token=abc&refresh_token=def&expires_in=3600");
   assert.equal(factorySessionStorage.getItem("forget-about-pending-auth-return"), null);
+});
+
+test("home shell relays Supabase OAuth callbacks to the pending generator route", async () => {
+  const siteWide = await readFile(new URL("site-wide.js", root), "utf8");
+  const sessionStorage = storageMock({ "forget-about-pending-auth-return": "/makeup/" });
+  let replaced = "";
+  const context = {
+    URL,
+    URLSearchParams,
+    window: {
+      MOVEMENT_TRAY_PUBLIC_CONFIG: {},
+      location: {
+        origin: "https://app.test",
+        pathname: "/",
+        search: "",
+        hash: "#access_token=abc&refresh_token=def&expires_in=3600",
+        replace: (url) => { replaced = url; }
+      },
+      localStorage: storageMock(),
+      sessionStorage
+    }
+  };
+
+  vm.runInNewContext(siteWide, context);
+
+  assert.equal(replaced, "https://app.test/makeup/#access_token=abc&refresh_token=def&expires_in=3600");
+  assert.equal(sessionStorage.getItem("forget-about-pending-auth-return"), null);
 });
 
 test("UAT shell keeps primary actions visible and separates account pages", async () => {
@@ -380,10 +408,18 @@ test("UAT2 previews, explicit login, factory workflow, and makeup account tools 
 });
 
 test("site shell, footer, and prototype generators are present", async () => {
-  const [rootIndexHtml, footerCss, footerJs, accountPassword, printHtml, paintHtml, stitchHtml, hubHtml, hubCss, printJs, paintJs, stitchJs, hubJs, generatorQuotes, serverSource, uploadedPrint, adsTxt] = await Promise.all([
+  const [rootIndexHtml, footerCss, footerJs, legalCss, termsHtml, privacyHtml, cookieHtml, refundsHtml, contactHtml, supportHtml, sitemap, accountPassword, printHtml, paintHtml, stitchHtml, hubHtml, hubCss, printJs, paintJs, stitchJs, hubJs, generatorQuotes, serverSource, uploadedPrint, adsTxt] = await Promise.all([
     readFile(new URL("index.html", root), "utf8"),
     readFile(new URL("site-wide.css", root), "utf8"),
     readFile(new URL("site-wide.js", root), "utf8"),
+    readFile(new URL("legal.css", root), "utf8"),
+    readFile(new URL("terms/index.html", root), "utf8"),
+    readFile(new URL("privacy/index.html", root), "utf8"),
+    readFile(new URL("cookie/index.html", root), "utf8"),
+    readFile(new URL("refunds/index.html", root), "utf8"),
+    readFile(new URL("contact/index.html", root), "utf8"),
+    readFile(new URL("support/index.html", root), "utf8"),
+    readFile(new URL("sitemap.xml", root), "utf8"),
     readFile(new URL("account-password.js", root), "utf8"),
     readFile(new URL("print/index.html", root), "utf8"),
     readFile(new URL("paint/index.html", root), "utf8"),
@@ -415,8 +451,29 @@ test("site shell, footer, and prototype generators are present", async () => {
   assert.match(footerJs, /launchPublicPaths/);
   assert.match(footerJs, /launchDeferredPaths/);
   assert.match(footerJs, /launchHoldExcludedPaths/);
+  assert.match(footerJs, /function launchStaticPagePaths\(\)/);
   assert.match(footerJs, /launchHoldExcludedPaths\(\)\.has\(currentRoutePath\(\)\)/);
+  assert.match(footerJs, /launchStaticPagePaths\(\)\.has\(currentRoutePath\(\)\)/);
   assert.match(footerJs, /launch-deferred-banner/);
+  for (const href of ["/terms/", "/privacy/", "/cookie/", "/refunds/", "/contact/", "/support/"]) {
+    assert.match(footerJs, new RegExp(`href="${href}"`));
+    assert.match(sitemap, new RegExp(`https://forgetabout\\.im${href}`));
+  }
+  assert.match(legalCss, /\.legal-main/);
+  assert.match(legalCss, /\.legal-action/);
+  assert.match(termsHtml, /Terms of use/);
+  assert.match(privacyHtml, /Data we use/);
+  assert.match(cookieHtml, /Cookies and consent/);
+  assert.match(refundsHtml, /Before payment/);
+  assert.match(refundsHtml, /Digital STL access/);
+  assert.match(contactHtml, /help@forgetabout\.im/);
+  assert.match(supportHtml, /Do not send passwords/);
+  for (const html of [termsHtml, privacyHtml, cookieHtml, refundsHtml, contactHtml, supportHtml]) {
+    assert.match(html, /site-wide\.css/);
+    assert.match(html, /legal\.css/);
+    assert.match(html, /public-config\.js/);
+    assert.match(html, /site-wide\.js/);
+  }
   assert.match(footerJs, /analyticsConsentGranted/);
   assert.match(footerJs, /loadGoogleAnalytics/);
   assert.match(footerJs, /send_page_view: false/);

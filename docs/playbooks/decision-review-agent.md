@@ -7,7 +7,7 @@ Keep `docs/decisions/README.md` and related project docs aligned with the code w
 When to use:
 
 - Before merging a feature branch or pull request that changes shared platform behaviour.
-- Weekly when several small changes landed without an explicit decision review.
+- Daily when project conversations, commits, pull requests, or uncommitted repo changes exist since the previous decision review.
 - Before production deployment when auth, payment, Supabase, events, factory handoff, routing, generator behaviour, or operational workflow changed.
 
 Prerequisites:
@@ -29,15 +29,17 @@ ChatGPT scheduled setup:
 1. In ChatGPT, connect GitHub to the repository `watsonjohn-spec/Forget-About-Tray` if available in Settings -> Apps.
 2. Open or create a dedicated Forget About project conversation.
 3. Start ChatGPT agent mode and ask it to run the prompt below.
-4. After the first run completes, use the schedule/clock control to repeat weekly, preferably Friday morning.
+4. After the first run completes, use the schedule/clock control to repeat daily.
 5. Keep app permissions at a setting that requires approval before changes are made outside ChatGPT.
 
 Suggested ChatGPT scheduled prompt:
 
 ```text
-Every Friday morning, act as the Forget About decision review agent.
+Every day, act as the Forget About decision review agent.
 
 Review my available ChatGPT conversations for this project, plus the GitHub repository watsonjohn-spec/Forget-About-Tray, for decisions made since the last review that should be reflected in docs/decisions/README.md or related docs.
+
+If there are no project conversations, commits, pull requests, or uncommitted repo changes since the previous review, report "No decision-documentation update needed" and stop.
 
 Use the rules in .agents/decision-review-agent.md if you can read the repository. If you cannot read that file, follow this summary:
 - capture what changed, why it changed, consequences, and follow-ups;

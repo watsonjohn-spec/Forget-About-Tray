@@ -21,7 +21,7 @@ Related docs to update when the review shows they changed:
 Run this agent:
 
 - before merging a feature branch or pull request that touches shared platform behaviour;
-- weekly, preferably Friday, if multiple small code changes landed without a decision review;
+- daily when project conversations, commits, pull requests, or uncommitted repo changes exist since the previous decision review;
 - before production deployment when auth, payment, Supabase, events, factory handoff, routing, generator behaviour, or operational workflow changed.
 
 ## Inputs
