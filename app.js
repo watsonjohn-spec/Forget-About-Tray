@@ -737,7 +737,7 @@ async function showPrintOrder() {
     <div><dt>Base</dt><dd>${pendingExportConfig.baseSize} x ${pendingExportConfig.baseDepth} mm</dd></div>
     <div><dt>Outer size</dt><dd>${metrics.outerWidth.toFixed(1)} x ${metrics.outerDepth.toFixed(1)} mm</dd></div>
   `;
-  await configureStripeCheckout();
+  await configurePaymentCheckout();
 }
 
 function showUnlockExports() {
@@ -759,7 +759,7 @@ function formatMoney(amount, currency) {
   return new Intl.NumberFormat(undefined, { style: "currency", currency: currency.toUpperCase() }).format(amount / 100);
 }
 
-async function configureStripeCheckout() {
+async function configurePaymentCheckout() {
   const button = document.getElementById("stripeCheckoutButton");
   const status = document.getElementById("stripeCheckoutStatus");
   const quotesContainer = document.getElementById("providerQuotes");
@@ -776,15 +776,16 @@ async function configureStripeCheckout() {
         body: JSON.stringify({ config: pendingExportConfig, name: pendingExportPrefix || "Printed design" })
       })
     ]);
-    if (!configResponse.ok || !quoteResponse.ok) throw new Error("Stripe checkout backend is not available.");
+    if (!configResponse.ok || !quoteResponse.ok) throw new Error("Payment backend is not available.");
     const config = await configResponse.json();
     const result = await quoteResponse.json();
     marketplaceQuotes = result.quotes || [];
     populateProviderFilters();
     renderProviderQuotes();
-    if (!config.enabled) throw new Error(config.reason || "Stripe is not configured.");
+    if (!config.enabled) throw new Error(config.reason || "Payment provider is not configured.");
+    const providerLabel = config.providerLabel || "payment";
     status.textContent = marketplaceQuotes.length
-      ? `${marketplaceQuotes.length} printer option${marketplaceQuotes.length === 1 ? "" : "s"} available. Select one to continue in ${config.mode === "test" ? "Stripe test mode" : "Stripe live mode"}.`
+      ? `${marketplaceQuotes.length} printer option${marketplaceQuotes.length === 1 ? "" : "s"} available. Select one to continue in ${providerLabel} ${config.mode === "test" ? "test mode" : "live mode"}.`
       : result.message || "No matching printers are available yet.";
   } catch (error) {
     quotesContainer.innerHTML = `<div class="provider-empty">${escapeHtml(error.message)}</div>`;
@@ -838,11 +839,11 @@ function renderProviderQuotes() {
   document.getElementById("stripeCheckoutButton").disabled = !selectedMarketplaceQuoteId;
 }
 
-async function beginStripeCheckout() {
+async function beginPaymentCheckout() {
   const button = document.getElementById("stripeCheckoutButton");
   const status = document.getElementById("stripeCheckoutStatus");
   button.disabled = true;
-  status.textContent = "Creating secure Stripe Checkout...";
+  status.textContent = "Creating secure payment...";
   try {
     if (!selectedMarketplaceQuoteId) throw new Error("Select a printer before continuing.");
     const response = await authorizedFetch("/api/marketplace/checkout/session", {
@@ -850,7 +851,7 @@ async function beginStripeCheckout() {
       body: JSON.stringify({ quoteId: selectedMarketplaceQuoteId })
     });
     const result = await response.json();
-    if (!response.ok || !result.url) throw new Error(result.error || "Stripe Checkout could not be created.");
+    if (!response.ok || !result.url) throw new Error(result.error || "Secure payment could not be created.");
     window.location.assign(result.url);
   } catch (error) {
     status.textContent = error.message;
@@ -862,15 +863,15 @@ async function configureUnlockCheckout() {
   const button = document.getElementById("unlockCheckoutButton");
   const status = document.getElementById("unlockCheckoutStatus");
   button.disabled = true;
-  status.textContent = "Checking Stripe configuration...";
+  status.textContent = "Checking payment configuration...";
   try {
     const response = await fetch(checkoutApiUrl("/api/checkout/config"), { headers: platformHeaders() });
-    if (!response.ok) throw new Error("Stripe checkout backend is not available.");
+    if (!response.ok) throw new Error("Payment backend is not available.");
     const config = await response.json();
     document.getElementById("unlockExportsPrice").textContent = formatMoney(config.unlimitedExportsPrice, config.currency);
-    if (!config.enabled) throw new Error(config.reason || "Stripe is not configured.");
+    if (!config.enabled) throw new Error(config.reason || "Payment provider is not configured.");
     button.disabled = false;
-    status.textContent = `${config.mode === "test" ? "Stripe test mode" : "Stripe live mode"} - one payment unlocks your account.`;
+    status.textContent = `${config.providerLabel || "Payment"} ${config.mode === "test" ? "test mode" : "live mode"} - one payment unlocks your account.`;
   } catch (error) {
     status.textContent = `${error.message} Open the checkout-enabled version of the site to purchase.`;
   }
@@ -880,14 +881,14 @@ async function beginUnlockCheckout() {
   const button = document.getElementById("unlockCheckoutButton");
   const status = document.getElementById("unlockCheckoutStatus");
   button.disabled = true;
-  status.textContent = "Creating secure Stripe Checkout...";
+  status.textContent = "Creating secure payment...";
   try {
     const response = await authorizedFetch("/api/checkout/unlock/session", {
       method: "POST",
       body: "{}"
     });
     const result = await response.json();
-    if (!response.ok || !result.url) throw new Error(result.error || "Stripe Checkout could not be created.");
+    if (!response.ok || !result.url) throw new Error(result.error || "Secure payment could not be created.");
     window.location.assign(result.url);
   } catch (error) {
     status.textContent = error.message;
@@ -895,14 +896,19 @@ async function beginUnlockCheckout() {
   }
 }
 
-async function verifyUnlockPurchase(sessionId) {
+async function verifyUnlockPurchase(paymentReference) {
   try {
     const response = await authorizedFetch("/api/checkout/unlock/verify", {
       method: "POST",
-      body: JSON.stringify({ sessionId })
+      body: JSON.stringify({ sessionId: paymentReference, paymentReference })
     });
     const result = await response.json();
-    if (!response.ok || !result.unlocked) throw new Error(result.error || "Stripe could not confirm the purchase.");
+    if (!response.ok) throw new Error(result.error || "Payment could not be checked.");
+    if (result.pending) {
+      showToast(result.message || "Payment is waiting for secure confirmation.");
+      return;
+    }
+    if (!result.unlocked) throw new Error(result.error || "Payment could not confirm the purchase.");
     unlimitedExportsVerified = true;
     accountExportState.unlimitedExports = true;
     showToast("Unlimited STL exports unlocked on your account.");
@@ -913,11 +919,16 @@ async function verifyUnlockPurchase(sessionId) {
   }
 }
 
-async function verifyPrintPurchase(sessionId) {
+async function verifyPrintPurchase(paymentReference) {
   try {
-    const response = await authorizedFetch("/api/checkout/print/verify", { method: "POST", body: JSON.stringify({ sessionId }) });
+    const response = await authorizedFetch("/api/checkout/print/verify", { method: "POST", body: JSON.stringify({ sessionId: paymentReference, paymentReference }) });
     const result = await response.json();
-    if (!response.ok || !result.paid) throw new Error(result.error || "Print payment could not be confirmed.");
+    if (!response.ok) throw new Error(result.error || "Print payment could not be checked.");
+    if (result.pending) {
+      showToast(result.message || "Payment is waiting for secure confirmation.");
+      return;
+    }
+    if (!result.paid) throw new Error(result.error || "Print payment could not be confirmed.");
     showToast("Print order confirmed and sent to the factory.");
   } catch (error) {
     showToast(error.message);
@@ -1863,9 +1874,10 @@ function showOrderDetail(orderId) {
 async function processCheckoutResult() {
   const checkoutParameters = new URLSearchParams(window.location.search);
   const checkoutResult = checkoutParameters.get("checkout");
-  if (checkoutResult === "success") await verifyPrintPurchase(checkoutParameters.get("session_id"));
-  if (checkoutResult === "cancelled") showToast("Stripe Checkout was cancelled.");
-  if (checkoutResult === "unlock-success") await verifyUnlockPurchase(checkoutParameters.get("session_id"));
+  const paymentReference = checkoutParameters.get("payment_ref") || checkoutParameters.get("session_id");
+  if (checkoutResult === "success") await verifyPrintPurchase(paymentReference);
+  if (checkoutResult === "cancelled") showToast("Payment was cancelled.");
+  if (checkoutResult === "unlock-success") await verifyUnlockPurchase(paymentReference);
   if (checkoutResult === "unlock-cancelled") showToast("Unlimited STL unlock was cancelled.");
   if (checkoutResult && checkoutResult !== "unlock-success") history.replaceState({}, "", window.location.pathname);
 }
@@ -2279,7 +2291,7 @@ document.getElementById("chooseEmailExport").addEventListener("click", async () 
 });
 document.getElementById("chooseUnlimitedExport").addEventListener("click", showUnlockExports);
 document.getElementById("choosePrintOrder").addEventListener("click", showPrintOrder);
-document.getElementById("stripeCheckoutButton").addEventListener("click", beginStripeCheckout);
+document.getElementById("stripeCheckoutButton").addEventListener("click", beginPaymentCheckout);
 document.getElementById("providerQuotes").addEventListener("click", (event) => {
   const button = event.target.closest("[data-provider-quote]");
   if (!button) return;

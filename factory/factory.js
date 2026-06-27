@@ -378,8 +378,7 @@ function renderPayouts() {
   const transfers = filteredTransfers(factoryDashboardState.transfers);
   const held = allJobs.filter((job) => job.payout_status === "held").reduce((total, job) => total + Number(job.provider_share_pence || 0), 0);
   document.getElementById("heldPayoutTotal").textContent = money(held);
-  const payment = factoryDashboardState.paymentAccount;
-  document.getElementById("connectStatus").textContent = payment?.onboarding_complete ? "Stripe Connect ready" : "Stripe Connect not onboarded";
+  document.getElementById("connectStatus").textContent = "Manual payout queue";
   document.getElementById("factoryPayouts").innerHTML = transfers.length ? transfers.map((transfer) => `
     <article class="payout-card"><div><strong>${money(transfer.amount_pence, transfer.currency)}</strong><p>${escapeHtml(labelText(transfer.status))} | Created ${new Date(transfer.created_at).toLocaleDateString()}${transferJob(transfer)?.design_snapshot?.name ? ` | ${escapeHtml(transferJob(transfer).design_snapshot.name)}` : ""}</p></div><span class="status-pill">${escapeHtml(labelText(transfer.status))}</span></article>
   `).join("") : '<div class="empty-state">No provider transfers match these filters yet.</div>';
@@ -503,19 +502,21 @@ document.querySelectorAll("[data-oauth-provider]").forEach((button) => {
 
 document.getElementById("factoryLogout").addEventListener("click", async () => { await accountService.signOut(); setAuthenticated(false); });
 document.getElementById("factoryRefresh").addEventListener("click", async () => { await loadDashboard(); toast("Factory data refreshed"); });
-document.getElementById("startConnectOnboarding").addEventListener("click", async () => {
+document.getElementById("startConnectOnboarding").addEventListener("click", async (event) => {
   try {
+    if (event.currentTarget.disabled) return;
     const result = await factoryFetch("/api/factory/connect/start", { method: "POST", body: "{}" });
     window.location.assign(result.url);
   } catch (error) {
     toast(error.message);
   }
 });
-document.getElementById("refreshConnectStatus").addEventListener("click", async () => {
+document.getElementById("refreshConnectStatus").addEventListener("click", async (event) => {
   try {
+    if (event.currentTarget.disabled) return;
     const result = await factoryFetch("/api/factory/connect/status", { method: "POST", body: "{}" });
     await loadDashboard();
-    toast(result.paymentAccount?.onboarding_complete ? "Stripe Connect is ready" : "Stripe still needs more onboarding information");
+    toast(result.paymentAccount?.onboarding_complete ? "Payment account is ready" : "Payment account still needs setup");
   } catch (error) {
     toast(error.message);
   }

@@ -120,14 +120,27 @@ function selectedPrintJobs(url) {
   });
 }
 
-function stripeSignature(rawBody) {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const signature = createHmac("sha256", webhookSecret).update(`${timestamp}.${rawBody}`).digest("hex");
-  return `t=${timestamp},v1=${signature}`;
+function worldpaySignature(rawBody) {
+  return `test-key/SHA256/${createHmac("sha256", webhookSecret).update(rawBody).digest("hex")}`;
 }
 
 function latestCheckoutMetadata() {
   const checkout = checkoutRequests.at(-1);
+  if (!(checkout instanceof URLSearchParams)) {
+    const orderId = checkout.transactionReference.match(/[0-9a-f-]{36}/)?.[0] || orders.at(-1)?.id;
+    const job = printJobs.find((candidate) => candidate.order_id === orderId);
+    return {
+      orderId,
+      printJobId: job?.id,
+      quoteId: job?.quote_id,
+      amount: Number(checkout.value?.amount || 0),
+      purchaseType: orders.find((order) => order.id === orderId)?.order_type === "unlimited_stl" ? "unlimited_stl" : "marketplace_print",
+      brandKey: orders.find((order) => order.id === orderId)?.brand_key,
+      generatorType: orders.find((order) => order.id === orderId)?.generator_type,
+      printerProfileId: job?.printer_profile_id,
+      paymentReference: checkout.transactionReference
+    };
+  }
   return {
     orderId: checkout.get("metadata[order_id]"),
     printJobId: checkout.get("metadata[print_job_id]"),
@@ -142,48 +155,27 @@ function latestCheckoutMetadata() {
 
 async function postCheckoutCompletedWebhook(metadata, extraSession = {}) {
   const event = {
-    id: `evt_${metadata.printJobId || metadata.orderId || Date.now()}`,
-    type: "checkout.session.completed",
-    data: {
-      object: {
-        id: `cs_${metadata.orderId || Date.now()}`,
-        payment_status: "paid",
-        amount_total: metadata.amount,
-        payment_intent: `pi_${metadata.orderId || Date.now()}`,
-        created: Math.floor(Date.now() / 1000),
-        metadata: {
-          purchase_type: metadata.purchaseType,
-          user_id: paidUserId,
-          order_id: metadata.orderId,
-          print_job_id: metadata.printJobId,
-          quote_id: metadata.quoteId,
-          brand_key: metadata.brandKey,
-          generator_type: metadata.generatorType,
-          printer_profile_id: metadata.printerProfileId
-        },
-        customer_details: {
-          name: "Paid Customer",
-          email: "paid@example.test",
-          address: { line1: "1 Test Street", city: "Leeds", postal_code: "LS1 1AA", country: "GB" }
-        },
-        shipping_details: {
-          name: "Paid Customer",
-          address: { line1: "1 Test Street", city: "Leeds", postal_code: "LS1 1AA", country: "GB" }
-        },
-        ...extraSession
-      }
-    }
+    eventId: `wp_${metadata.printJobId || metadata.orderId || Date.now()}`,
+    eventType: "sentForSettlement",
+    transactionReference: metadata.paymentReference,
+    value: { amount: metadata.amount, currency: "GBP" },
+    ...extraSession
   };
   const rawBody = JSON.stringify(event);
-  return fetch(`${baseUrl}/api/stripe/webhook`, {
+  return fetch(`${baseUrl}/api/worldpay/webhook`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Stripe-Signature": stripeSignature(rawBody) },
+    headers: { "Content-Type": "application/json", "Event-Signature": worldpaySignature(rawBody) },
     body: rawBody
   });
 }
 
 const mockSupabase = createServer(async (request, response) => {
   const url = new URL(request.url, `http://127.0.0.1:${mockPort}`);
+  if (url.pathname === "/payment_pages" && request.method === "POST") {
+    const body = await requestJson(request);
+    checkoutRequests.push(body);
+    return sendJson(response, 200, { id: `wp_${Date.now()}`, _links: { paymentPage: { href: "https://payments.worldpay.test/session" } } });
+  }
   if (url.pathname === "/v1/checkout/sessions") {
     let body = "";
     for await (const chunk of request) body += chunk;
@@ -242,6 +234,16 @@ const mockSupabase = createServer(async (request, response) => {
 
   if (url.pathname === "/rest/v1/profiles") {
     const userId = url.searchParams.get("user_id")?.replace("eq.", "");
+    const emailEq = url.searchParams.get("email")?.replace("eq.", "");
+    const emailIn = url.searchParams.get("email")?.match(/^in\.\((.*)\)$/)?.[1]?.split(",").map((value) => decodeURIComponent(value).toLowerCase()) || [];
+    if (emailEq || emailIn.length) {
+      const wanted = (emailEq ? [emailEq] : emailIn).map((value) => value.toLowerCase());
+      const rows = [
+        { user_id: paidUserId, email: "paid@example.test", display_name: "Paid Customer", default_address: { line1: "1 Test Street", city: "Leeds", postcode: "LS1 1AA", country: "GB" } },
+        { user_id: freeUserId, email: "free@example.test", display_name: null, default_address: { line1: "1 Test Street", city: "Leeds", postcode: "LS1 1AA", country: "GB" } }
+      ].filter((profile) => wanted.includes(profile.email));
+      return sendJson(response, 200, rows);
+    }
     if (request.method === "PATCH") {
       if (url.searchParams.get("free_export_used") === "eq.false" && profiles.get(userId)) {
         return sendJson(response, 200, []);
@@ -385,6 +387,12 @@ const mockSupabase = createServer(async (request, response) => {
     return sendJson(response, 200, {});
   }
 
+  if (url.pathname === "/rest/v1/payment_events") {
+    if (request.method === "GET") return sendJson(response, 200, []);
+    await requestJson(request);
+    return sendJson(response, 200, {});
+  }
+
   if (url.pathname === "/rest/v1/order_customer_snapshots" && request.method === "POST") {
     const saved = await requestJson(request);
     const existing = orderCustomerSnapshots.find((snapshot) => snapshot.order_id === saved.order_id);
@@ -428,7 +436,10 @@ const mockSupabase = createServer(async (request, response) => {
       ), patch);
       return sendJson(response, 200, updated);
     }
-    return sendJson(response, 200, orderRowsForUser(eqParam(url, "user_id"), eqParam(url, "brand_key")));
+    const id = eqParam(url, "id");
+    const rows = orderRowsForUser(eqParam(url, "user_id"), eqParam(url, "brand_key"))
+      .filter((order) => !id || order.id === id);
+    return sendJson(response, 200, rows);
   }
 
   if (url.pathname === "/rest/v1/order_items" && request.method === "POST") {
@@ -554,6 +565,14 @@ test.before(async () => {
       SUPABASE_SECRET_KEY: "secret-test-key",
       DOWNLOAD_TOKEN_SECRET: "test-download-secret",
       TASK_RUNNER_SECRET: "test-task-secret",
+      PAYMENT_PROVIDER: "worldpay",
+      WORLDPAY_ENVIRONMENT: "try",
+      WORLDPAY_API_BASE: `http://127.0.0.1:${mockPort}`,
+      WORLDPAY_MERCHANT_ENTITY: "test-entity",
+      WORLDPAY_USERNAME: "test-user",
+      WORLDPAY_PASSWORD: "test-password",
+      WORLDPAY_WEBHOOK_SECRET: webhookSecret,
+      LAUNCH_PRINTER_EMAILS: "paid@example.test",
       STRIPE_SECRET_KEY: "rk_test_abcdefghijklmnopqrstuvwxyz123456",
       STRIPE_WEBHOOK_SECRET: webhookSecret,
       STRIPE_API_BASE: `http://127.0.0.1:${mockPort}`,
@@ -639,16 +658,22 @@ test("enabled brand route serves the shared app shell", async () => {
   assert.equal(legacy.headers.get("location"), "/tray/");
 });
 
-test("corporate landing page links to active generators", async () => {
+test("corporate landing page opens the tray-only MVP entry point", async () => {
   const landing = await fetch(`${baseUrl}/`);
   assert.equal(landing.status, 200);
   const html = await landing.text();
-  assert.match(html, /Forget About/);
-  assert.match(html, /Generator directory/);
+  assert.match(html, /Forget About Tray/);
+  assert.match(html, /Opening the tray builder/);
+  assert.match(html, /http-equiv="refresh" content="0; url=tray\/"/);
+  assert.match(html, /window\.location\.replace/);
+  assert.match(html, /href="tray\/"/);
+  assert.doesNotMatch(html, /href="makeup\/"/);
+  assert.doesNotMatch(html, /href="print\/"/);
+  assert.doesNotMatch(html, /href="paint\/"/);
+  assert.doesNotMatch(html, /href="stitch\/"/);
   const homeAlias = await fetch(`${baseUrl}/home/`);
   assert.equal(homeAlias.status, 404);
   for (const route of ["/tray/", "/makeup/", "/print/", "/paint/", "/stitch/", "/factory/"]) {
-    assert.match(html, new RegExp(`href="${route.slice(1).replace("/", "\\/")}`));
     const response = await fetch(`${baseUrl}${route}`);
     assert.equal(response.status, 200);
   }
@@ -660,9 +685,9 @@ test("sitemap, robots, and launch signup endpoint are exposed", async () => {
   assert.match(sitemap.headers.get("content-type"), /application\/xml/);
   const sitemapXml = await sitemap.text();
   assert.match(sitemapXml, /https:\/\/forgetabout\.im\/tray\//);
-  assert.match(sitemapXml, /https:\/\/forgetabout\.im\/print\//);
   assert.match(sitemapXml, /https:\/\/forgetabout\.im\/factory\//);
   assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/trays\//);
+  assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/print\//);
   assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/makeup\//);
   assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/paint\//);
   assert.doesNotMatch(sitemapXml, /https:\/\/forgetabout\.im\/stitch\//);
@@ -747,13 +772,15 @@ test("hub route is restricted to the admin email and can approve provider profil
   assert.equal(printerProfile.accepting_jobs, true);
 });
 
-test("factory Stripe Connect onboarding uses Accounts v2 and a hosted account link", async () => {
-  const response = await api("/api/factory/connect/start", "paid-token", {}, { "X-Forget-About-Path": "/factory/" });
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { url: "https://connect.stripe.test/onboarding", mode: "onboarding" });
-  assert.equal(stripeAccountRequests.length, 1);
-  assert.equal(stripeAccountRequests[0].defaults.responsibilities.requirements_collector, undefined);
-  assert.equal(stripeAccountRequests[0].configuration.recipient.capabilities.stripe_balance.stripe_transfers.requested, true);
+test("factory payout account status is manual in Worldpay MVP mode", async () => {
+  const startResponse = await api("/api/factory/connect/start", "paid-token", {}, { "X-Forget-About-Path": "/factory/" });
+  assert.equal(startResponse.status, 503);
+  assert.match((await startResponse.json()).error, /manual payout queue/i);
+
+  const statusResponse = await api("/api/factory/connect/status", "paid-token", {}, { "X-Forget-About-Path": "/factory/" });
+  assert.equal(statusResponse.status, 200);
+  assert.deepEqual(await statusResponse.json(), { connected: false, paymentAccount: null, requirements: null, manualPayouts: true });
+  assert.equal(stripeAccountRequests.length, 0);
 });
 
 test("node host exposes a deployment health check", async () => {
@@ -813,7 +840,8 @@ test("marketplace quotes expose selectable providers and create held print jobs"
   assert.equal(printJobs.at(-1).status, "pending_payment");
   assert.equal(printJobs.at(-1).payout_status, "held");
   assert.equal(providerTransfers.at(-1).status, "held");
-  assert.match(checkoutRequests.at(-1).get("payment_intent_data[transfer_group]"), /^PRINT_JOB_/);
+  assert.match(checkoutRequests.at(-1).transactionReference, /^fa_[0-9a-f-]{36}$/);
+  assert.equal(checkoutRequests.at(-1).merchant.entity, "test-entity");
 });
 
 test("paid marketplace print jobs progress through customer confirmation and payout release", async () => {
@@ -848,26 +876,15 @@ test("paid marketplace print jobs progress through customer confirmation and pay
   assert.equal(customerMessageResponse.status, 200);
   assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.event_type === "customer_message"));
 
-  const existingPaymentAccount = paymentAccounts.find((account) => account.printer_profile_id === printerProfile.id);
-  const readyAccount = {
-    printer_profile_id: printerProfile.id,
-    stripe_connected_account_id: "acct_test_factory_provider",
-    transfers_enabled: true,
-    payouts_enabled: true,
-    onboarding_complete: true
-  };
-  if (existingPaymentAccount) Object.assign(existingPaymentAccount, readyAccount);
-  else paymentAccounts.push({ id: "50000000-0000-4000-8000-000000000099", ...readyAccount });
-
   const completeResponse = await api(`/api/account/print-jobs/${job.id}/complete`, "paid-token", { rating: 5, reviewText: "Great print." });
   assert.equal(completeResponse.status, 200);
   const completion = await completeResponse.json();
   assert.equal(completion.transfer.released, true);
+  assert.equal(completion.transfer.manual, true);
   assert.equal(job.status, "complete");
-  assert.equal(job.payout_status, "transferred");
-  assert.equal(providerTransfers.find((transfer) => transfer.print_job_id === job.id).status, "transferred");
-  assert.equal(stripeTransfers.at(-1).parameters.get("destination"), "acct_test_factory_provider");
-  assert.equal(stripeTransfers.at(-1).parameters.get("amount"), String(job.provider_share_pence));
+  assert.equal(job.payout_status, "ready");
+  assert.equal(providerTransfers.find((transfer) => transfer.print_job_id === job.id).status, "ready");
+  assert.equal(stripeTransfers.length, 0);
   assert.equal(providerReviews.find((review) => review.print_job_id === job.id).rating, 5);
   assert.equal(printerProfile.rating_count, providerReviews.length);
 });
@@ -900,16 +917,6 @@ test("posted jobs receive seven buyer chasers before automatic payout release", 
   }
   assert.equal(job.status, "posted");
 
-  const readyAccount = {
-    printer_profile_id: printerProfile.id,
-    stripe_connected_account_id: "acct_test_factory_provider",
-    transfers_enabled: true,
-    payouts_enabled: true,
-    onboarding_complete: true
-  };
-  const existingPaymentAccount = paymentAccounts.find((account) => account.printer_profile_id === printerProfile.id);
-  if (existingPaymentAccount) Object.assign(existingPaymentAccount, readyAccount);
-  else paymentAccounts.push({ id: "50000000-0000-4000-8000-000000000123", ...readyAccount });
   job.posted_at = new Date(Date.now() - 12 * day).toISOString();
 
   const releaseResponse = await fetch(`${baseUrl}/api/tasks/auto-complete-posted`, {
@@ -921,7 +928,7 @@ test("posted jobs receive seven buyer chasers before automatic payout release", 
   assert.equal(release.chasers, 0);
   assert.equal(release.completed, 1);
   assert.equal(job.status, "complete");
-  assert.equal(job.payout_status, "transferred");
+  assert.equal(job.payout_status, "ready");
   assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.event_type === "auto_complete"));
 });
 
@@ -973,15 +980,11 @@ test("providers can decline paid jobs before production and trigger a buyer refu
   assert.equal(order.status, "paid");
 
   const declineResponse = await api(`/api/factory/jobs/${job.id}/decline`, "paid-token", { reason: "Printer unavailable." });
-  assert.equal(declineResponse.status, 200);
-  const decline = await declineResponse.json();
-  assert.equal(decline.declined, true);
-  assert.equal(job.status, "refunded");
-  assert.equal(job.payout_status, "reversed");
-  assert.equal(order.status, "refunded");
-  assert.equal(providerTransfers.find((transfer) => transfer.print_job_id === job.id).status, "reversed");
-  assert.equal(refundRequests.at(-1).parameters.get("payment_intent"), order.stripe_payment_intent_id);
-  assert.ok(printJobEvents.some((event) => event.print_job_id === job.id && event.event_type === "decline"));
+  assert.equal(declineResponse.status, 400);
+  assert.match((await declineResponse.json()).error, /Worldpay refund automation is not configured yet/);
+  assert.equal(job.status, "order_made");
+  assert.equal(order.status, "paid");
+  assert.equal(refundRequests.length, 0);
 });
 
 test("uploaded STL files are stored privately and can be reloaded by the owner", async () => {
@@ -1073,34 +1076,35 @@ test("checkout returns to the originating brand path", async () => {
     "X-Forget-About-Path": "/tray"
   });
   assert.equal(response.status, 200);
-  assert.match(checkoutRequests.at(-1).get("success_url"), /^http:\/\/127\.0\.0\.1:4192\/tray\?checkout=success/);
+  assert.match(checkoutRequests.at(-1).resultURLs.successURL, /^http:\/\/127\.0\.0\.1:4192\/tray\?checkout=success/);
+  assert.match(checkoutRequests.at(-1).resultURLs.successURL, /payment_ref=fa_/);
 });
 
-test("Stripe webhook accepts a valid signed checkout confirmation", async () => {
-  const event = {
-    id: "evt_signed_checkout",
-    type: "checkout.session.completed",
-    data: {
-      object: {
-        id: "cs_signed_checkout",
-        payment_status: "paid",
-        amount_total: 1200,
-        created: Math.floor(Date.now() / 1000),
-        metadata: { order_id: "40000000-0000-4000-8000-000000000001", user_id: paidUserId, purchase_type: "printed_design" },
-        customer_details: { email: "paid@example.test", address: { country: "GB" } }
-      }
-    }
-  };
+test("Worldpay webhook accepts a valid signed payment confirmation", async () => {
+  const orderId = "40000000-0000-4000-8000-000000000001";
+  orders.push({
+    id: orderId,
+    user_id: paidUserId,
+    order_type: "printed_design",
+    brand_key: "tray",
+    generator_type: "movement_tray",
+    status: "pending_payment",
+    currency: "gbp",
+    total_inc_vat: 1200,
+    stripe_checkout_session_id: `fa_${orderId}`,
+    payment_provider: "worldpay",
+    payment_reference: `fa_${orderId}`
+  });
+  const event = { eventId: "evt_signed_checkout", eventType: "sentForSettlement", transactionReference: `fa_${orderId}`, value: { amount: 1200, currency: "GBP" } };
   const rawBody = JSON.stringify(event);
-  const timestamp = Math.floor(Date.now() / 1000);
-  const signature = createHmac("sha256", webhookSecret).update(`${timestamp}.${rawBody}`).digest("hex");
-  const response = await fetch(`${baseUrl}/api/stripe/webhook`, {
+  const response = await fetch(`${baseUrl}/api/worldpay/webhook`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Stripe-Signature": `t=${timestamp},v1=${signature}` },
+    headers: { "Content-Type": "application/json", "Event-Signature": worldpaySignature(rawBody) },
     body: rawBody
   });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { received: true });
+  assert.equal(orders.find((order) => order.id === orderId).status, "paid");
 });
 
 test("only one simultaneous sponsored-download claim succeeds", async () => {

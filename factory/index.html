@@ -125,16 +125,16 @@
       </section>
 
       <section class="factory-panel" data-factory-panel="payouts" hidden>
-        <div class="section-heading"><div><p class="eyebrow">Financials</p><h2>Held and completed payouts</h2></div><span class="status-pill" id="connectStatus">Stripe Connect not onboarded</span></div>
-        <p class="factory-note">Payouts are held while a job is producing or posted. They become eligible only after the order reaches complete.</p>
+        <div class="section-heading"><div><p class="eyebrow">Financials</p><h2>Held and completed payouts</h2></div><span class="status-pill" id="connectStatus">Manual payout queue</span></div>
+        <p class="factory-note">Payouts are held while a job is producing or posted. They become ready for manual payout only after the order reaches complete.</p>
         <div class="factory-filters">
           <label>Status<select id="payoutStatusFilter"><option value="">All payout states</option><option value="held">Held</option><option value="ready">Ready</option><option value="transferred">Transferred</option><option value="failed">Failed</option><option value="reversed">Reversed</option></select></label>
           <label>Brand<select id="payoutBrandFilter"><option value="">All brands</option><option value="tray">Tray</option><option value="makeup">Makeup</option><option value="paint">Paint</option><option value="stitch">Stitch</option><option value="print">Print</option></select></label>
           <label>Search<input id="payoutSearchFilter" type="search" placeholder="Invoice or order"></label>
         </div>
         <div class="connect-actions">
-          <button class="button button-primary" id="startConnectOnboarding" type="button">Open Stripe onboarding</button>
-          <button class="button button-secondary" id="refreshConnectStatus" type="button">Refresh Stripe status</button>
+          <button class="button button-primary" id="startConnectOnboarding" type="button" disabled>Worldpay payout setup pending</button>
+          <button class="button button-secondary" id="refreshConnectStatus" type="button" disabled>Manual payout status</button>
         </div>
         <div class="payout-grid" id="factoryPayouts"></div>
       </section>

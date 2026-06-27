@@ -12,7 +12,7 @@ Repeatable operating steps live here. Keep playbooks literal enough that a futur
 - Deploy the Node backend to Render.
 - Apply Supabase schema changes.
 - Configure Supabase OAuth providers.
-- Configure Stripe Checkout, webhooks, and Connect.
+- Configure payment checkout, webhooks, and provider payout handling.
 - Approve a new printer profile.
 - Investigate a failed print order.
 - Process a provider-declined refund.

@@ -16,11 +16,15 @@ Brands should share infrastructure but keep their visual identity and product co
 
 Reason: the platform needs reusable account, payment, event, and factory logic without making each product feel identical.
 
-### Stripe For Payments And Marketplace Payouts
+### Worldpay For MVP Customer Payments
 
-Use Stripe Checkout and Stripe Connect for customer payments, refunds, provider onboarding, and payout control.
+Use Worldpay Hosted Payment Pages for MVP customer payment routing. Keep payment creation and webhook confirmation server-side, and keep legacy Stripe code fallback-only behind `PAYMENT_PROVIDER=stripe`.
 
-Reason: the platform needs to control refunds, commissions, held payouts, and payment status before factory jobs become active.
+Reason: Stripe does not operate for the launch business location, while the platform still needs a hosted payment page, server-side secrets, and signed payment confirmation before orders enter the factory queue.
+
+Consequences: Printed-order checkout now requires a saved customer delivery address before payment, because Worldpay HPP is not being used as the source of fulfilment address data. Provider payouts move to a manual-ready state after customer completion until a Worldpay payout/refund automation path is selected and tested.
+
+Follow-ups: Configure live Worldpay credentials and webhook signing in the backend environment, run a paid Worldpay UAT order, and decide whether refunds/payouts are handled manually for launch or automated through a Worldpay API integration.
 
 ### Supabase As The Operational Data Store
 
@@ -59,6 +63,16 @@ Reason: Launch users need legal, privacy, refund, contact, and support informati
 Consequences: Static policy/support pages become part of the public launch surface and must stay aligned with payment, privacy, refunds, and support operations. OAuth sign-in depends on session storage to remember the intended return route, so private or embedded browsers without session storage may fall back to the root journey.
 
 Follow-ups: Deploy the routes to GitHub Pages, verify the live `/terms/`, `/privacy/`, `/cookie/`, `/refunds/`, `/contact/`, and `/support/` URLs no longer return 404, and replace draft policy copy with reviewed legal wording before full launch.
+
+### 2026-06-27 MVP Tray-Only Public Launch
+
+Decision: Use `/` as a redirect/fallback into `/tray/`, keep Factory available for the launch printer, and remove `/print/`, `/makeup/`, `/paint/`, and `/stitch/` from the MVP public launch config and sitemap without deleting their generators.
+
+Reason: The launch should be focused on Forget About Tray while preserving the broader platform code for later routes.
+
+Consequences: Deferred routes remain accessible to someone with the direct URL but show the private-beta banner and are not linked from the launch surface or sitemap. Customer print quotes are restricted to the printer profile attached to `watson.john@live.co.uk`.
+
+Follow-ups: Re-open public config and sitemap entries when each additional generator is ready for launch.
 
 ## Entry Template
 

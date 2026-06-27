@@ -295,10 +295,14 @@ test("movement tray generator renders Really Useful Box storage inserts", () => 
 
 test("marketplace payouts remain held until completion", async () => {
   const schema = await readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8");
-  assert.equal(marketplacePolicy.stripeChargeType, "separate_charges_and_transfers");
+  assert.equal(marketplacePolicy.paymentProvider, "worldpay");
+  assert.equal(marketplacePolicy.customerPaymentFlow, "hosted_payment_page");
+  assert.equal(marketplacePolicy.providerPayoutFlow, "manual_after_completion");
   assert.equal(marketplacePolicy.providerTransferStatus, "complete");
   assert.match(schema, /payout_status text not null default 'held'/);
   assert.match(schema, /provider_transfers/);
+  assert.match(schema, /payment_provider text not null default 'worldpay'/);
+  assert.match(schema, /create table if not exists public\.payment_events/);
   assert.match(schema, /refund_locked_at/);
   assert.match(schema, /delivery_chaser/);
   assert.match(schema, /customer_escalation/);
@@ -328,11 +332,11 @@ test("print estimates are calibrated against the Bambu P1S reference", () => {
 });
 
 test("factory portal keeps completion and payout release outside printer controls", async () => {
-  const [html, factorySource, serverSource, stripeClientSource, renderBlueprint] = await Promise.all([
+  const [html, factorySource, serverSource, worldpayClientSource, renderBlueprint] = await Promise.all([
     readFile(new URL("../factory/index.html", import.meta.url), "utf8"),
     readFile(new URL("../factory/factory.js", import.meta.url), "utf8"),
     readFile(new URL("../server.mjs", import.meta.url), "utf8"),
-    readFile(new URL("../server/stripe-client.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../server/worldpay-client.mjs", import.meta.url), "utf8"),
     readFile(new URL("../render.yaml", import.meta.url), "utf8")
   ]);
   assert.match(html, /id="factoryLoginForm"/);
@@ -345,33 +349,31 @@ test("factory portal keeps completion and payout release outside printer control
   assert.match(factorySource, /data-job-stl/);
   assert.match(factorySource, /data-save-job-note/);
   assert.match(factorySource, /status !== "pending_payment"/);
+  assert.match(html, /Worldpay payout setup pending/);
+  assert.match(factorySource, /Manual payout queue/);
   assert.match(serverSource, /Printers can only mark jobs as producing or posted/);
-  assert.match(serverSource, /\/v1\/refunds/);
-  assert.match(serverSource, /payment_intent: order\.stripe_payment_intent_id/);
+  assert.match(serverSource, /Worldpay refund automation is not configured yet/);
   assert.match(serverSource, /Choose a rating from 1 to 5 before confirming delivery/);
   assert.match(serverSource, /autoCompleteStalePostedJobs/);
   assert.match(serverSource, /PRINT_AUTO_COMPLETE_DAYS/);
   assert.match(serverSource, /TASK_RUNNER_SECRET/);
   assert.match(serverSource, /\/api\/tasks\/auto-complete-posted/);
   assert.match(serverSource, /status: "pending_review", accepting_jobs: false/);
-  assert.match(serverSource, /\/v2\/core\/accounts/);
-  assert.match(serverSource, /include\[0\]=configuration\.recipient&include\[1\]=requirements/);
-  assert.doesNotMatch(serverSource, /include\[\]=/);
-  assert.match(serverSource, /\/v1\/transfers/);
-  assert.doesNotMatch(serverSource, /requirements_collector: "stripe"/);
-  assert.match(serverSource, /print-job-transfer-\$\{job\.id\}/);
+  assert.match(serverSource, /manualPayouts: true/);
+  assert.match(serverSource, /status: "ready"/);
   assert.match(serverSource, /assertPrintJobTransition\(job\.status, "complete"\)/);
   assert.match(serverSource, /\/api\/marketplace\/quotes/);
-  assert.match(serverSource, /payment_intent_data\[transfer_group\]/);
-  assert.match(serverSource, /createStripeClient/);
-  assert.match(stripeClientSource, /"Stripe-Version": stripeApiVersion/);
-  assert.match(stripeClientSource, /stripeEventVerified/);
+  assert.match(serverSource, /createWorldpayPaymentPage/);
+  assert.match(serverSource, /\/api\/worldpay\/webhook/);
+  assert.match(worldpayClientSource, /\/payment_pages/);
+  assert.match(worldpayClientSource, /worldpayEventVerified/);
   assert.doesNotMatch(serverSource, /MARKETPLACE_INCLUDE_PENDING !== "false"/);
   assert.doesNotMatch(serverSource, /DOWNLOAD_TOKEN_SECRET \|\| stripeKey/);
   assert.doesNotMatch(serverSource, /fetch\(`\$\{stripeApiBase\}\/v1\/checkout\/sessions/);
   assert.doesNotMatch(serverSource, /const brandEntries =/);
   assert.match(renderBlueprint, /healthCheckPath: \/api\/health/);
   assert.match(renderBlueprint, /SUPABASE_SECRET_KEY/);
-  assert.match(renderBlueprint, /STRIPE_SECRET_KEY/);
+  assert.match(renderBlueprint, /WORLDPAY_MERCHANT_ENTITY/);
+  assert.match(renderBlueprint, /WORLDPAY_WEBHOOK_SECRET/);
   assert.match(renderBlueprint, /CHECKOUT_ALLOWED_ORIGIN/);
 });

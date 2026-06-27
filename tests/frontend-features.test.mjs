@@ -107,8 +107,8 @@ test("account dropdown and Supabase OAuth controls are wired", async () => {
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.clientId, "ca-pub-6722120388841444");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.adsense.consentProvider, "google-cmp");
   assert.equal(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.mvpModeEnabled, true);
-  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["tray", "print", "factory", "terms", "privacy", "cookie", "refunds", "contact", "support"]));
-  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.deferredPaths), JSON.stringify(["makeup", "paint", "stitch"]));
+  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.publicPaths), JSON.stringify(["tray", "factory", "terms", "privacy", "cookie", "refunds", "contact", "support"]));
+  assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.deferredPaths), JSON.stringify(["print", "makeup", "paint", "stitch"]));
   assert.equal(JSON.stringify(context.window.MOVEMENT_TRAY_PUBLIC_CONFIG.launch.launchHoldExcludedPaths), JSON.stringify(["hub"]));
   assert.doesNotMatch(publicConfigSource, /sb_secret_|sk_(?:test|live)_|rk_(?:test|live)_|whsec_/);
 });
@@ -436,15 +436,17 @@ test("site shell, footer, and prototype generators are present", async () => {
     readFile(new URL("ads.txt", root), "utf8")
   ]);
   const adsenseHeadScript = /pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=ca-pub-6722120388841444/;
-  assert.match(rootIndexHtml, /Generator directory/);
-  assert.match(rootIndexHtml, adsenseHeadScript);
+  assert.match(rootIndexHtml, /Forget About Tray/);
+  assert.match(rootIndexHtml, /Opening the tray builder/);
+  assert.match(rootIndexHtml, /http-equiv="refresh" content="0; url=tray\/"/);
+  assert.match(rootIndexHtml, /window\.location\.replace/);
   assert.equal(existsSync(new URL("home.html", root)), false);
   assert.equal(existsSync(new URL("home/index.html", root)), false);
   assert.match(rootIndexHtml, /href="tray\/"/);
-  assert.match(rootIndexHtml, /data-launch-path="tray"/);
-  assert.match(rootIndexHtml, /data-launch-path="makeup"/);
-  assert.match(rootIndexHtml, /href="print\/"/);
-  assert.match(rootIndexHtml, /data-launch-path="factory"/);
+  assert.doesNotMatch(rootIndexHtml, /href="makeup\/"/);
+  assert.doesNotMatch(rootIndexHtml, /href="print\/"/);
+  assert.doesNotMatch(rootIndexHtml, /href="paint\/"/);
+  assert.doesNotMatch(rootIndexHtml, /href="stitch\/"/);
   assert.match(footerJs, /help@forgetabout\.im/);
   assert.doesNotMatch(footerJs, /help@forget\.im/);
   assert.match(footerJs, /function applyLaunchScope\(\)/);

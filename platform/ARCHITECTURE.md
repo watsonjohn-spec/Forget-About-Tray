@@ -57,7 +57,7 @@ Brand URL
   -> save design or project
   -> download STL or enter print factory
   -> select colour and printer quote
-  -> Stripe Checkout
+  -> Worldpay Hosted Payment Page
   -> track order
 ```
 
@@ -88,9 +88,24 @@ pending_payment -> order_made -> producing -> posted -> complete
 
 Customer refunds are permitted before `producing`. Entering `producing` locks customer-initiated refunds.
 
-## Stripe Connect Funds Flow
+## MVP Payment And Payout Flow
 
-The marketplace uses separate charges and transfers:
+The MVP marketplace uses Worldpay Hosted Payment Pages and manual provider payout release:
+
+1. The customer pays the Forget About platform through a Worldpay Hosted Payment Page.
+2. A signed Worldpay payment event confirms the order before the print job enters the factory queue.
+3. The platform records the provider share as a held transfer.
+4. No payout is marked ready while the job is `order_made`, `producing`, or `posted`.
+5. When the job reaches `complete`, the held transfer becomes ready for manual payout.
+6. Payout state is recorded in `provider_transfers`.
+
+Legacy Stripe Checkout and Stripe Connect code remains fallback-only when `PAYMENT_PROVIDER=stripe` is deliberately configured. It is not the MVP launch path.
+
+This delayed payout rule must be enforced server-side. Browser requests must never be allowed to create payouts or directly set a job to `complete`.
+
+## Legacy Stripe Connect Funds Flow
+
+The legacy Stripe fallback uses separate charges and transfers:
 
 1. The customer pays the Forget About platform through Stripe Checkout.
 2. The platform records the provider share as a held transfer.
@@ -98,9 +113,7 @@ The marketplace uses separate charges and transfers:
 4. When the job reaches `complete`, the held transfer becomes ready and the server creates a Stripe transfer to the printer's connected account.
 5. Transfer identifiers and state are recorded in `provider_transfers`.
 
-This delayed transfer rule must be enforced server-side. Browser requests must never be allowed to create transfers or directly set a job to `complete`.
-
-New connected accounts should use Stripe Accounts v2. Public printer profiles and private Stripe connected-account records are stored separately.
+If this fallback is used again, new connected accounts should use Stripe Accounts v2. Public printer profiles and private connected-account records are stored separately.
 
 ## Credential Sharing Controls
 
@@ -123,7 +136,7 @@ This reduces casual credential sharing without treating normal device changes as
 - `designs`, `projects`, and generator catalogue tables own generator data.
 - `orders` and immutable customer snapshots own accounting and VAT records.
 - `printer_profiles` and `printer_capabilities` own public marketplace data.
-- `printer_payment_accounts` owns private Stripe Connect state.
+- `printer_payment_accounts` owns private legacy payout-account state.
 - `print_quotes`, `print_jobs`, and `print_job_events` own fulfilment.
 - `provider_transfers` owns delayed printer payout state.
 

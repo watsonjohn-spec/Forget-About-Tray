@@ -4,11 +4,13 @@ Use this file as the top-level index for product capabilities. Keep it high leve
 
 ## Customer Generators
 
-- Tray: movement trays, army-list parsing, storage box inserts, base catalogues, STL export, and print-factory handoff.
+- Tray: movement trays, army-list parsing, storage box inserts, base catalogues, STL export, and print-factory handoff. This is the only public customer generator in the MVP launch.
 - Makeup: caddies, freestanding cases, pegboard cases, product-slot catalogues, STL export, and print-factory handoff.
 - Print: uploaded STL preview, saved uploads, print quote routing, and factory handoff.
 - Paint: paint boxes and painting station concepts.
 - Stitch: thread-slot trays and floss-card generation.
+
+Makeup, Print, Paint, and Stitch remain in the codebase but are ringfenced from the MVP public launch surface until explicitly launched.
 
 ## Account
 
@@ -25,12 +27,14 @@ Use this file as the top-level index for product capabilities. Keep it high leve
 - Printer onboarding.
 - Provider capabilities by material, colour, printer bed, price, postage, and lead time.
 - Customer quote comparison.
-- Paid checkout before queue entry.
+- Worldpay-hosted paid checkout before queue entry.
 - Provider job status updates.
 - Customer/provider messaging.
 - Decline-and-refund before production.
 - Customer delivery confirmation, rating, and payout release.
 - Delivery chasers and automatic completion after the confirmation window.
+
+The MVP factory is restricted to the launch printer profile attached to `watson.john@live.co.uk`; provider payouts become ready for manual release after customer completion.
 
 ## Hub
 

@@ -223,6 +223,9 @@ create table if not exists public.orders (
 alter table public.orders add column if not exists brand_key text references public.brands(key);
 alter table public.orders add column if not exists generator_type text references public.generator_definitions(type);
 alter table public.orders add column if not exists refund_locked_at timestamptz;
+alter table public.orders add column if not exists payment_provider text not null default 'worldpay';
+alter table public.orders add column if not exists payment_reference text;
+create unique index if not exists orders_payment_reference_idx on public.orders(payment_provider, payment_reference) where payment_reference is not null;
 alter table public.orders drop constraint if exists orders_order_type_check;
 update public.orders set brand_key = 'tray' where brand_key is null;
 update public.orders set generator_type = 'movement_tray' where generator_type is null;
@@ -265,6 +268,8 @@ create table if not exists public.entitlements (
 
 alter table public.entitlements add column if not exists brand_key text references public.brands(key);
 alter table public.entitlements add column if not exists generator_type text references public.generator_definitions(type);
+alter table public.entitlements add column if not exists payment_provider text;
+alter table public.entitlements add column if not exists payment_reference text;
 update public.entitlements set brand_key = 'tray' where brand_key is null;
 update public.entitlements
 set generator_type = null
@@ -564,6 +569,14 @@ create table if not exists public.stripe_events (
   processed_at timestamptz not null default now()
 );
 
+create table if not exists public.payment_events (
+  payment_event_id text not null,
+  payment_provider text not null,
+  event_type text not null,
+  processed_at timestamptz not null default now(),
+  primary key (payment_provider, payment_event_id)
+);
+
 create table if not exists public.privacy_requests (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
@@ -670,6 +683,7 @@ alter table public.order_items enable row level security;
 alter table public.order_customer_snapshots enable row level security;
 alter table public.entitlements enable row level security;
 alter table public.stripe_events enable row level security;
+alter table public.payment_events enable row level security;
 alter table public.privacy_requests enable row level security;
 alter table public.brands enable row level security;
 alter table public.generator_definitions enable row level security;
@@ -877,5 +891,5 @@ grant insert, update, delete on public.printer_capabilities to authenticated;
 grant update (display_name, description, based_in, postcode_area, lead_time_days, accepting_jobs, updated_at) on public.printer_profiles to authenticated;
 revoke update on public.profiles from authenticated;
 grant update (display_name, default_address, marketing_consent, updated_at) on public.profiles to authenticated;
-grant all on public.profiles, public.launch_signups, public.tray_designs, public.army_lists, public.orders, public.order_items, public.order_customer_snapshots, public.entitlements, public.stripe_events, public.privacy_requests, public.brands, public.generator_definitions, public.brand_generators, public.designs, public.projects, public.generator_catalogues, public.generator_catalogue_items, public.usage_allowances, public.account_devices, public.printer_profiles, public.printer_payment_accounts, public.printer_capabilities, public.print_quotes, public.print_jobs, public.print_job_events, public.provider_transfers, public.provider_reviews, public.email_outbox to service_role;
+grant all on public.profiles, public.launch_signups, public.tray_designs, public.army_lists, public.orders, public.order_items, public.order_customer_snapshots, public.entitlements, public.stripe_events, public.payment_events, public.privacy_requests, public.brands, public.generator_definitions, public.brand_generators, public.designs, public.projects, public.generator_catalogues, public.generator_catalogue_items, public.usage_allowances, public.account_devices, public.printer_profiles, public.printer_payment_accounts, public.printer_capabilities, public.print_quotes, public.print_jobs, public.print_job_events, public.provider_transfers, public.provider_reviews, public.email_outbox to service_role;
 grant usage, select on sequence public.order_invoice_number_seq to service_role;

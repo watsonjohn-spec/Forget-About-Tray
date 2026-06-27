@@ -59,7 +59,8 @@ Screenshot capture through the in-app browser timed out on `Page.captureScreensh
 - Public signup/reset email still needs verification through a working transactional email path. Existing go-live notes say public signup/reset email was blocked by Supabase built-in email quota unless custom SMTP is configured or quota resets.
 - Scheduled task secret could not be safely verified with a live POST in this run because the endpoint can mutate production order state if configured. Use Render env inspection or an explicitly approved safe staging/prod probe.
 - Render latest deployed commit still needs dashboard, MCP, CLI, or a commit field in `/api/health` to verify directly.
-- Stripe live webhook, refunds, payouts, and order durability still need Stripe/Supabase/Render evidence from authenticated flows.
+- Payment UAT must be rerun through Worldpay Hosted Payment Pages after the MVP payment-provider change on 2026-06-27; prior Stripe test-mode evidence is no longer sufficient for launch.
+- Worldpay live webhook, refunds, manual payout handling, and order durability still need Worldpay/Supabase/Render evidence from authenticated flows.
 
 ## Safe Production Config Checks
 

@@ -12,15 +12,15 @@ The platform has three major layers:
 
 ## Data And Services
 
-Supabase stores auth-linked profiles, saved designs/projects, print quotes, print jobs, provider profiles, provider capabilities, order records, privacy records, launch signups, and the append-only event log. Stripe handles checkout, webhooks, refunds, Connect onboarding, and held provider payouts.
+Supabase stores auth-linked profiles, saved designs/projects, print quotes, print jobs, provider profiles, provider capabilities, order records, privacy records, launch signups, and the append-only event log. The MVP payment route uses Worldpay Hosted Payment Pages for customer payment collection and signed payment confirmation. Legacy Stripe code remains as an explicit fallback only when `PAYMENT_PROVIDER=stripe` is deliberately configured.
 
 The Node backend owns privileged operations:
 
-- Stripe checkout and webhook handling.
+- Payment checkout and webhook handling.
 - Supabase service-key writes.
 - Factory quote generation.
 - Print-job state transitions.
-- Provider payout release.
+- Provider payout release or manual payout readiness.
 - Scheduled delivery chasers and auto-completion.
 - Account export and security status.
 
@@ -34,4 +34,4 @@ Customer routes should feel like separate apps. A user arriving at `/makeup` sho
 
 ## Shared UI And Logic
 
-The shared shell provides account controls, save/export actions, footer/legal copy, analytics, ads, launch hold, and order-management UI. Generator-specific pages should reuse shared services rather than duplicating those flows.
+The shared shell provides account controls, save/export actions, footer/legal copy, analytics, ads, launch hold, and order-management UI. Generator-specific pages should reuse shared services rather than duplicating those flows. During the MVP launch, `/` redirects to `/tray/`, `/print/`, `/makeup/`, `/paint/`, and `/stitch/` remain ringfenced, and customer print quotes are restricted to the launch printer profile attached to `watson.john@live.co.uk`.

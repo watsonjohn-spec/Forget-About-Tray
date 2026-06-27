@@ -38,7 +38,9 @@ These event names are the platform-level contract for dashboards, automations, f
 - `payment.completed`
 - `refund.processed`
 
-Lower-level operational events are also allowed, such as `email.queued`, `marketplace.quotes_created`, `printer.message.sent`, and `factory.order.delivery_chaser_sent`. They should not replace the canonical events above when a canonical business milestone has happened.
+Lower-level operational events are also allowed, such as `email.queued`, `marketplace.quotes_created`, `printer.message.sent`, `factory.order.delivery_chaser_sent`, and `payment.webhook_processed`. They should not replace the canonical events above when a canonical business milestone has happened.
+
+Payment-provider webhook processing should emit `payment.webhook_processed` with the provider and provider event type in `payload`. `payment.completed` remains the canonical business milestone and must only be emitted after signed server-side payment confirmation or a verified provider API response.
 
 `printer.review.submitted` is reserved for the future provider-to-customer review flow. Do not reuse it for order notes or customer support messages.
 

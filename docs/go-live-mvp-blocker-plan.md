@@ -11,7 +11,7 @@ Primary launch blocker:
 Public launch scope should be limited to:
 
 1. Tray generator
-2. Uploaded Print route
+2. Factory route for the launch printer
 3. Account/order history
 4. Payment/entitlement flow
 5. Minimum viable print-factory/provider route only if it is safe enough
@@ -21,17 +21,17 @@ Makeup, Stitch and Paint should be hidden, beta-gated, or explicitly deferred un
 ## Critical Blockers
 
 ### Scope and Auth
-- [x] BLK-001 Freeze MVP to Tray + Uploaded Print only for launch.
+- [x] BLK-001 Freeze MVP to Tray only for customers, with Factory available for the launch printer.
 - [ ] BLK-002 User registration, login, logout and password reset work end-to-end.
 
 ### Customer Journey
 - [ ] BLK-003 Complete Tray route works: login → create tray → save design → reload design → export STL → account/order history visible where applicable.
-- [ ] BLK-004 Complete Uploaded Print route works: login → upload STL → save/request print → choose provider/test provider → pay → order visible.
+- [ ] BLK-004 Deferred generators and Uploaded Print are ringfenced from the MVP public launch surface.
 - [ ] BLK-010 Customer account order drill-down works.
 
 ### Payments
-- [ ] BLK-005 Stripe live mode configured safely, with live keys only in production env vars.
-- [ ] BLK-006 Stripe live webhook configured and tested.
+- [ ] BLK-005 Worldpay live mode configured safely, with credentials only in production env vars.
+- [ ] BLK-006 Worldpay live webhook configured and tested.
 - [ ] BLK-007 Successful payment creates a durable order.
 - [ ] BLK-008 Failed payment does not create a fulfilled/paid order.
 - [ ] BLK-009 Refund flow updates customer/order state and preserves audit trail.
@@ -44,7 +44,7 @@ Makeup, Stitch and Paint should be hidden, beta-gated, or explicitly deferred un
 ### Storage and Data
 - [ ] BLK-014 Generated and uploaded STL storage is durable across refresh/redeploy.
 - [ ] BLK-015 Design records are separate from order records.
-- [ ] BLK-020 Purchase data retained in accounting-friendly shape: date, customer, product, amount, VAT/tax basis, Stripe ref, refund ref.
+- [ ] BLK-020 Purchase data retained in accounting-friendly shape: date, customer, product, amount, VAT/tax basis, payment provider ref, refund ref.
 
 ### Security
 - [ ] BLK-016 RLS enabled for all private user/order/provider/file tables.
@@ -119,7 +119,7 @@ For every completed blocker, comment with at least one of:
 - PR/commit link
 - screenshot path or uploaded screenshot
 - UAT result
-- Stripe test/live event ID
+- Worldpay test/live event ID
 - Supabase record/storage evidence
 - Render deploy/log evidence
 - written test note explaining exact route tested
@@ -134,7 +134,7 @@ For every completed blocker, comment with at least one of:
   - BLK-004: Uploaded Print live partial pass: uploaded-print design saves. Print quote stage is blocked because live provider profile `Bongo Bill` is still `pending_review`, so no active provider quote is returned.
   - BLK-010/BLK-015/BLK-020: Account data export live partial pass: designs and orders are returned as separate collections. Populated order drill-down still needs a paid order.
   - BLK-014/BLK-017: Initially blocked because `/api/account/stl-upload` returned `Bucket not found`. Applied the live Supabase `user-stl-uploads` bucket and owner-only storage policies from `supabase/schema.sql`; rerun passed live upload, owner download, cross-user 403, and empty-upload rejection.
-  - BLK-018: Public config live pass: `https://forgetabout.im/public-config.js` contains no secret-looking Supabase, Stripe, restricted key, or webhook values.
+  - BLK-018: Public config live pass: `https://forgetabout.im/public-config.js` contains no secret-looking Supabase, Stripe, restricted key, or webhook values. Re-run this check for Worldpay values before launch.
   - BLK-023: Live sponsored STL permit blocked: `/api/account/use-free-export` returned `STL download signing is not configured`, indicating `DOWNLOAD_TOKEN_SECRET` is missing on the Render service.
   - BLK-026: Live pass: `https://forgetabout.im/` returns 200, `https://www.forgetabout.im/` returns 301 to apex, `/trays/`, `/print/`, `/factory/`, and Render `/api/health` load over HTTPS.
   - BLK-027/BLK-028: Blocked: `/privacy/`, `/terms/`, `/cookie/`, `/refunds/`, `/contact/`, and `/support/` return 404 and legal pages are not in the public sitemap.
@@ -143,7 +143,7 @@ For every completed blocker, comment with at least one of:
 ## Deployment Runbook
 - [ ] Confirm all critical blockers complete or deliberately deferred with John approval.
 - [ ] Compile production env var inventory.
-- [ ] Confirm Stripe live account verified.
+- [ ] Confirm Worldpay live account verified.
 - [ ] Set Render production branch and env vars.
 - [ ] Configure Supabase production project, RLS, storage and backups.
 - [ ] Deploy latest release/main commit.
@@ -153,7 +153,7 @@ For every completed blocker, comment with at least one of:
 - [ ] Run critical UAT subset.
 - [ ] Run low-value live transaction and refund once John has registered/verified site/company.
 - [ ] Soft launch to 5–10 friendly users.
-- [ ] Check Render/Supabase/Stripe logs twice daily during first week.
+- [ ] Check Render/Supabase/Worldpay logs twice daily during first week.
 
 ## Rollback Plan
 - [ ] If critical production bug: pause launch promotion and disable checkout/affected route.
@@ -166,8 +166,8 @@ For every completed blocker, comment with at least one of:
 ## Inputs Needed From John Before Final Live Execution
 - [ ] Company/trading entity details: company name, number, registered address, VAT status if applicable.
 - [ ] DNS access for forgetabout.im.
-- [ ] Stripe live account access and verified account status.
-- [ ] Stripe live webhook signing secret, set only via secure env vars.
+- [ ] Worldpay live account access and verified account status.
+- [ ] Worldpay live webhook signing secret, set only via secure env vars.
 - [ ] Production Supabase project details and secure env var process.
 - [ ] Render production service access.
 - [ ] Support email account, e.g. support@forgetabout.im.
@@ -187,7 +187,7 @@ Go-live requires:
 - 0 failed critical UAT cases.
 - Production rollback tested.
 - Legal pages live.
-- Stripe live test complete.
+- Worldpay live test complete.
 - Soft launch complete.
 
 ## Instruction to Codex

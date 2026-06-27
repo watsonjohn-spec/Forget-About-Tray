@@ -6,12 +6,14 @@ import { marketplacePolicy, publicPlatformConfig, resolvePlatformContext } from 
 import { assertPrintJobTransition } from "./platform/print-factory.mjs";
 import { calibratedMaterialCm3, defaultPrintTimeModel, estimatedPrintHours, estimatedWeightGramsFromGeometry } from "./platform/print-estimates.mjs";
 import { createStripeClient } from "./server/stripe-client.mjs";
+import { createWorldpayClient } from "./server/worldpay-client.mjs";
 
 const port = Number(process.env.PORT || 4173);
 const root = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const paymentProvider = String(process.env.PAYMENT_PROVIDER || "worldpay").toLowerCase() === "stripe" ? "stripe" : "worldpay";
 const stripeKey = process.env.STRIPE_SECRET_KEY || "";
 const allowLiveStripe = process.env.ALLOW_LIVE_STRIPE === "true";
-const currency = (process.env.STRIPE_CURRENCY || "gbp").toLowerCase();
+const currency = (process.env.PAYMENT_CURRENCY || process.env.STRIPE_CURRENCY || "gbp").toLowerCase();
 const basePrice = Number(process.env.PRINT_BASE_PRICE_PENCE || 800);
 const pricePerCm3 = Number(process.env.PRINT_PRICE_PER_CM3_PENCE || 25);
 const marketplacePlatformFeePence = Number(process.env.MARKETPLACE_PLATFORM_FEE_PENCE || 50);
@@ -28,7 +30,21 @@ const unlimitedExportsPrice = Number(process.env.UNLIMITED_EXPORTS_PRICE_PENCE |
 const stripeApiBase = process.env.STRIPE_API_BASE || "https://api.stripe.com";
 const stripeApiVersion = process.env.STRIPE_API_VERSION || "2026-05-27.dahlia";
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
-const allowedCountries = (process.env.STRIPE_ALLOWED_COUNTRIES || "GB,US").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean);
+const allowedCountries = (process.env.PAYMENT_ALLOWED_COUNTRIES || process.env.STRIPE_ALLOWED_COUNTRIES || "GB").split(",").map((country) => country.trim().toUpperCase()).filter(Boolean);
+const worldpayEnvironment = process.env.WORLDPAY_ENVIRONMENT || "try";
+const worldpayApiBase = process.env.WORLDPAY_API_BASE || (worldpayEnvironment === "live" ? "https://access.worldpay.com" : "https://try.access.worldpay.com");
+const allowLiveWorldpay = process.env.ALLOW_LIVE_WORLDPAY === "true";
+const worldpayMerchantEntity = process.env.WORLDPAY_MERCHANT_ENTITY || "";
+const worldpayAuthorization = process.env.WORLDPAY_AUTHORIZATION || "";
+const worldpayUsername = process.env.WORLDPAY_USERNAME || "";
+const worldpayPassword = process.env.WORLDPAY_PASSWORD || "";
+const worldpayWebhookSecret = process.env.WORLDPAY_WEBHOOK_SECRET || "";
+const worldpayNarrativeLine1 = process.env.WORLDPAY_NARRATIVE_LINE1 || "Forget About";
+const worldpayCustomisationId = process.env.WORLDPAY_CUSTOMISATION_ID || "";
+const launchPrinterEmails = (process.env.LAUNCH_PRINTER_EMAILS || process.env.LAUNCH_PRINTER_EMAIL || "watson.john@live.co.uk")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 const allowedOrigins = (process.env.CHECKOUT_ALLOWED_ORIGIN || "https://forgetabout.im,https://watsonjohn-spec.github.io")
   .split(",")
   .map((origin) => origin.trim().replace(/\/$/, ""))
@@ -62,6 +78,18 @@ const { stripeReady, stripeJson, stripeForm, stripeEventVerified } = createStrip
   stripeApiBase,
   stripeApiVersion,
   stripeWebhookSecret
+});
+const { worldpayReady, createWorldpayPaymentPage, worldpayEventVerified } = createWorldpayClient({
+  apiBase: worldpayApiBase,
+  environment: worldpayEnvironment,
+  allowLiveWorldpay,
+  merchantEntity: worldpayMerchantEntity,
+  authorization: worldpayAuthorization,
+  username: worldpayUsername,
+  password: worldpayPassword,
+  webhookSecret: worldpayWebhookSecret,
+  narrativeLine1: worldpayNarrativeLine1,
+  customisationId: worldpayCustomisationId
 });
 
 const standardColours = [
@@ -143,6 +171,102 @@ function publicQuote(row, profile, capability) {
     currency: row.currency,
     expiresAt: row.expires_at
   };
+}
+
+function paymentProviderLabel(provider = paymentProvider) {
+  return provider === "stripe" ? "Stripe" : "Worldpay";
+}
+
+function checkoutReadiness() {
+  return paymentProvider === "stripe" ? stripeReady() : worldpayReady();
+}
+
+function worldpayTransactionReference(orderId) {
+  return `fa_${orderId}`;
+}
+
+function orderIdFromPaymentReference(reference) {
+  return String(reference || "").match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0] || "";
+}
+
+function addressFromProfile(profile = {}) {
+  const source = profile.default_address || {};
+  return {
+    line1: cleanText(source.line1 || source.address1 || "", 120),
+    line2: cleanText(source.line2 || source.address2 || "", 120),
+    city: cleanText(source.city || source.town || "", 80),
+    county: cleanText(source.county || source.state || "", 80),
+    postcode: cleanText(source.postcode || source.postal_code || source.postalCode || "", 20),
+    country: cleanText(source.country || source.country_code || source.countryCode || "GB", 2).toUpperCase()
+  };
+}
+
+function addressComplete(address = {}) {
+  return Boolean(address.line1 && address.city && address.postcode && address.country);
+}
+
+function worldpayBillingAddress(address = {}) {
+  return {
+    address1: address.line1,
+    address2: address.line2 || undefined,
+    city: address.city,
+    state: address.county || undefined,
+    postalCode: address.postcode,
+    countryCode: address.country || "GB"
+  };
+}
+
+async function loadCustomerProfile(userId) {
+  const profiles = await supabaseAdmin(`profiles?select=*&user_id=eq.${encodeURIComponent(userId)}&limit=1`);
+  return profiles?.[0] || null;
+}
+
+async function requireCustomerDeliverySnapshot(user) {
+  const profile = await loadCustomerProfile(user.id);
+  const address = addressFromProfile(profile || {});
+  if (!addressComplete(address)) {
+    throw new Error("Add your delivery address in Account > Profile and address before ordering a printed tray.");
+  }
+  return {
+    customerName: profile?.display_name || user.email || null,
+    customerEmail: user.email || profile?.email || null,
+    billingAddress: address,
+    deliveryAddress: address,
+    countryCode: address.country
+  };
+}
+
+function worldpayResultUrls(request, origin, successCheckout, cancelCheckout, paymentReference) {
+  const returnOrigin = checkoutReturnOrigin(request, origin);
+  const success = new URL(returnOrigin);
+  success.searchParams.set("checkout", successCheckout);
+  success.searchParams.set("payment_ref", paymentReference);
+  const cancel = new URL(returnOrigin);
+  cancel.searchParams.set("checkout", cancelCheckout);
+  cancel.searchParams.set("payment_ref", paymentReference);
+  return {
+    successURL: success.toString(),
+    pendingURL: success.toString(),
+    failureURL: cancel.toString(),
+    errorURL: cancel.toString(),
+    cancelURL: cancel.toString(),
+    expiryURL: cancel.toString()
+  };
+}
+
+function launchPrinterProfileQuery() {
+  if (!launchPrinterEmails.length) return "";
+  const escaped = launchPrinterEmails.map((email) => encodeURIComponent(email)).join(",");
+  return launchPrinterEmails.length === 1
+    ? `profiles?select=user_id&email=eq.${encodeURIComponent(launchPrinterEmails[0])}&limit=1`
+    : `profiles?select=user_id&email=in.(${escaped})`;
+}
+
+async function launchPrinterUserIds() {
+  const query = launchPrinterProfileQuery();
+  if (!query) return new Set();
+  const rows = await supabaseAdmin(query);
+  return new Set((rows || []).map((row) => row.user_id).filter(Boolean));
 }
 
 function sendJson(response, status, body, origin = "") {
@@ -1045,6 +1169,7 @@ async function syncPrinterPaymentAccount(profile) {
 
 async function startFactoryConnect(request, response) {
   const origin = checkoutOrigin(request);
+  if (paymentProvider !== "stripe") return sendJson(response, 503, { error: "Automated provider payouts are disabled for the Worldpay MVP. Use the manual payout queue." }, origin);
   const readiness = stripeReady();
   if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
   try {
@@ -1117,6 +1242,7 @@ async function startFactoryConnect(request, response) {
 
 async function factoryConnectStatus(request, response) {
   const origin = checkoutOrigin(request);
+  if (paymentProvider !== "stripe") return sendJson(response, 200, { connected: false, paymentAccount: null, requirements: null, manualPayouts: true }, origin);
   const readiness = stripeReady();
   if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
   try {
@@ -1136,9 +1262,6 @@ async function factoryConnectStatus(request, response) {
 
 async function releaseProviderTransfer(job) {
   if (job.status !== "complete" || job.payout_status !== "held") return { released: false, reason: "not_eligible" };
-  const paymentAccounts = await supabaseAdmin(`printer_payment_accounts?select=*&printer_profile_id=eq.${encodeURIComponent(job.printer_profile_id)}&limit=1`);
-  const paymentAccount = paymentAccounts?.[0];
-  if (!paymentAccount?.transfers_enabled) return { released: false, reason: "connect_not_ready" };
   const transferRecord = {
     print_job_id: job.id,
     printer_profile_id: job.printer_profile_id,
@@ -1152,6 +1275,24 @@ async function releaseProviderTransfer(job) {
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify(transferRecord)
   });
+  if (paymentProvider !== "stripe") {
+    await Promise.all([
+      supabaseAdmin(`provider_transfers?print_job_id=eq.${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ status: "ready", updated_at: new Date().toISOString() })
+      }),
+      supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ payout_status: "ready", updated_at: new Date().toISOString() })
+      })
+    ]);
+    return { released: true, transferId: null, manual: true };
+  }
+  const paymentAccounts = await supabaseAdmin(`printer_payment_accounts?select=*&printer_profile_id=eq.${encodeURIComponent(job.printer_profile_id)}&limit=1`);
+  const paymentAccount = paymentAccounts?.[0];
+  if (!paymentAccount?.transfers_enabled) return { released: false, reason: "connect_not_ready" };
   try {
     const parameters = new URLSearchParams({
       amount: String(job.provider_share_pence),
@@ -1403,7 +1544,7 @@ async function completePrintJob(job, { actorUserId = null, note = "Customer conf
     note,
     eventType: automatic ? "auto_complete" : "status"
   });
-  const completedJob = saved?.[0] || { ...job, status: "complete", completed_at: completedAt };
+  const completedJob = { ...job, ...(saved?.[0] || {}), status: "complete", completed_at: saved?.[0]?.completed_at || completedAt, payout_status: saved?.[0]?.payout_status || job.payout_status };
   const transfer = await releaseProviderTransfer(completedJob);
   return { job: completedJob, transfer };
 }
@@ -1687,6 +1828,7 @@ async function declineFactoryJob(request, response, jobId) {
     if (!job) throw new Error("Print job not found.");
     if (job.status !== "order_made") throw new Error("Jobs can only be declined before production starts.");
     const order = Array.isArray(job.orders) ? job.orders[0] : job.orders;
+    if (paymentProvider !== "stripe") throw new Error("Worldpay refund automation is not configured yet. Issue the refund in Worldpay before cancelling this job in the platform.");
     if (!order?.stripe_payment_intent_id) throw new Error("The original payment could not be found for refund.");
     const body = await readJson(request);
     const reason = cleanText(body.reason, 500) || "Provider declined the job before production.";
@@ -1961,11 +2103,14 @@ async function createMarketplaceQuotes(request, response) {
     const preferredPrinterProfileId = cleanText(rawParameters.preferredPrinterProfileId || parameters.preferredPrinterProfileId || "", 80);
     const geometry = generator.buildGeometry(parameters);
     const envelope = geometryEnvelope(geometry);
-    const [profiles, capabilities] = await Promise.all([
+    const [profiles, capabilities, launchProfileUserIds] = await Promise.all([
       supabaseAdmin("printer_profiles?select=*&status=neq.suspended&order=rating_average.desc,lead_time_days.asc"),
-      supabaseAdmin("printer_capabilities?select=*&active=eq.true&order=colour_name.asc")
+      supabaseAdmin("printer_capabilities?select=*&active=eq.true&order=colour_name.asc"),
+      launchPrinterUserIds()
     ]);
-    const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile]));
+    const launchRestricted = launchPrinterEmails.length > 0;
+    const launchProfiles = (profiles || []).filter((profile) => !launchRestricted || launchProfileUserIds.has(profile.user_id));
+    const profileMap = new Map(launchProfiles.map((profile) => [profile.id, profile]));
     const expandedCapabilities = (capabilities || []).flatMap((capability) => (
       capability.colour_key === "all"
         ? standardColours.filter((colour) => colour.key !== "all").map((colour) => ({
@@ -2053,7 +2198,9 @@ async function createMarketplaceQuotes(request, response) {
       return sendJson(response, 200, {
         quotes: [],
         dimensions: envelope,
-        message: "No providers currently have an active printer capability large enough for this design."
+        message: launchRestricted && !launchProfileUserIds.size
+          ? "The launch printer profile is not active yet."
+          : "No providers currently have an active printer capability large enough for this design."
       }, origin);
     }
     const saved = await supabaseAdmin("print_quotes", {
@@ -2097,7 +2244,7 @@ async function createMarketplaceQuotes(request, response) {
 async function createMarketplaceCheckout(request, response) {
   const origin = checkoutOrigin(request);
   if (!checkoutOriginAllowed(request)) return sendJson(response, 403, { error: "Origin is not allowed." });
-  const readiness = stripeReady();
+  const readiness = checkoutReadiness();
   if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
   try {
     const user = await authenticateUser(request);
@@ -2111,38 +2258,61 @@ async function createMarketplaceCheckout(request, response) {
     const profiles = await supabaseAdmin(`printer_profiles?select=*&id=eq.${encodeURIComponent(quote.printer_profile_id)}&limit=1`);
     const profile = profiles?.[0];
     if (!profile || profile.status === "suspended") throw new Error("That printer is no longer available.");
+    if (launchPrinterEmails.length) {
+      const allowedPrinterUsers = await launchPrinterUserIds();
+      if (!allowedPrinterUsers.has(profile.user_id)) throw new Error("Only the launch printer is available for MVP orders.");
+    }
+    const deliverySnapshot = await requireCustomerDeliverySnapshot(user);
     const orderId = randomUUID();
     const printJobId = randomUUID();
-    const returnOrigin = checkoutReturnOrigin(request, origin);
     const designName = cleanText(quote.design_snapshot?.name || generator.name, 80);
-    const parameters = new URLSearchParams({
-      mode: "payment",
-      success_url: `${returnOrigin}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${returnOrigin}?checkout=cancelled`,
-      billing_address_collection: "required",
-      "line_items[0][price_data][currency]": quote.currency,
-      "line_items[0][price_data][unit_amount]": String(quote.total_inc_vat_pence),
-      "line_items[0][price_data][product_data][name]": `${designName} printed by ${profile.display_name}`.slice(0, 120),
-      "line_items[0][price_data][product_data][description]": generator.describe(quote.design_snapshot.parameters).slice(0, 500),
-      "line_items[0][quantity]": "1",
-      "payment_intent_data[transfer_group]": `PRINT_JOB_${printJobId}`,
-      "metadata[purchase_type]": "marketplace_print",
-      "metadata[user_id]": user.id,
-      "metadata[order_id]": orderId,
-      "metadata[print_job_id]": printJobId,
-      "metadata[quote_id]": quote.id,
-      "metadata[brand_key]": brand.key,
-      "metadata[generator_type]": generator.type,
-      "metadata[printer_profile_id]": profile.id
-    });
-    if (user.email) parameters.set("customer_email", user.email);
-    parameters.set("shipping_address_collection[allowed_countries][0]", marketplacePolicy.countryCode);
-    const session = await stripeForm("/v1/checkout/sessions", parameters);
-    if (!session.url) throw new Error("Stripe Checkout could not be created.");
+    let session;
+    let paymentReference;
+    if (paymentProvider === "stripe") {
+      const returnOrigin = checkoutReturnOrigin(request, origin);
+      const parameters = new URLSearchParams({
+        mode: "payment",
+        success_url: `${returnOrigin}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${returnOrigin}?checkout=cancelled`,
+        billing_address_collection: "required",
+        "line_items[0][price_data][currency]": quote.currency,
+        "line_items[0][price_data][unit_amount]": String(quote.total_inc_vat_pence),
+        "line_items[0][price_data][product_data][name]": `${designName} printed by ${profile.display_name}`.slice(0, 120),
+        "line_items[0][price_data][product_data][description]": generator.describe(quote.design_snapshot.parameters).slice(0, 500),
+        "line_items[0][quantity]": "1",
+        "payment_intent_data[transfer_group]": `PRINT_JOB_${printJobId}`,
+        "metadata[purchase_type]": "marketplace_print",
+        "metadata[user_id]": user.id,
+        "metadata[order_id]": orderId,
+        "metadata[print_job_id]": printJobId,
+        "metadata[quote_id]": quote.id,
+        "metadata[brand_key]": brand.key,
+        "metadata[generator_type]": generator.type,
+        "metadata[printer_profile_id]": profile.id
+      });
+      if (user.email) parameters.set("customer_email", user.email);
+      parameters.set("shipping_address_collection[allowed_countries][0]", marketplacePolicy.countryCode);
+      session = await stripeForm("/v1/checkout/sessions", parameters);
+      paymentReference = session.id;
+      if (!session.url) throw new Error("Stripe Checkout could not be created.");
+    } else {
+      paymentReference = worldpayTransactionReference(orderId);
+      session = await createWorldpayPaymentPage({
+        transactionReference: paymentReference,
+        amount: quote.total_inc_vat_pence,
+        currency: quote.currency,
+        description: `${designName} printed by ${profile.display_name}`,
+        resultUrls: worldpayResultUrls(request, origin, "success", "cancelled", paymentReference),
+        customer: { email: user.email },
+        billingAddress: worldpayBillingAddress(deliverySnapshot.billingAddress)
+      });
+    }
     await createPendingOrder({
       id: orderId,
       userId: user.id,
-      sessionId: session.id,
+      sessionId: paymentReference,
+      paymentProvider,
+      paymentReference,
       orderType: "printed_design",
       amount: quote.total_inc_vat_pence,
       description: `${designName} printed by ${profile.display_name}`,
@@ -2155,7 +2325,8 @@ async function createMarketplaceCheckout(request, response) {
         postageExVat: Number(quote.postage_pence),
         vatRate: marketplaceVatPercent,
         vatAmount: Number(quote.vat_amount_pence)
-      }
+      },
+      customerSnapshot: deliverySnapshot
     });
     await supabaseAdmin("print_jobs", {
       method: "POST",
@@ -2207,10 +2378,11 @@ async function createMarketplaceCheckout(request, response) {
         printerProfileId: profile.id,
         amountPence: quote.total_inc_vat_pence,
         providerSharePence: quote.provider_share_pence,
-        stripeCheckoutSessionId: session.id
+        paymentProvider,
+        paymentReference
       }
     });
-    sendJson(response, 200, { url: session.url, amount: quote.total_inc_vat_pence, currency: quote.currency, mode: readiness.mode }, origin);
+    sendJson(response, 200, { url: session.url, amount: quote.total_inc_vat_pence, currency: quote.currency, mode: readiness.mode, provider: readiness.provider, providerLabel: readiness.label }, origin);
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Printer checkout could not be created." }, origin);
   }
@@ -2219,7 +2391,7 @@ async function createMarketplaceCheckout(request, response) {
 async function createStripeCheckout(request, response) {
   const origin = checkoutOrigin(request);
   if (!checkoutOriginAllowed(request)) return sendJson(response, 403, { error: "Origin is not allowed." });
-  const readiness = stripeReady();
+  const readiness = checkoutReadiness();
   if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
 
   try {
@@ -2230,45 +2402,65 @@ async function createStripeCheckout(request, response) {
     const priced = priceGeneratedDesign(generator, printable);
     const prefix = String(body.name || "Printed design").slice(0, 80);
     const orderId = randomUUID();
-    const returnOrigin = checkoutReturnOrigin(request, origin);
-    const parameters = new URLSearchParams({
-      mode: "payment",
-      success_url: `${returnOrigin}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${returnOrigin}?checkout=cancelled`,
-      billing_address_collection: "required",
-      "line_items[0][price_data][currency]": currency,
-      "line_items[0][price_data][unit_amount]": String(priced.amount),
-      "line_items[0][price_data][product_data][name]": prefix,
-      "line_items[0][price_data][product_data][description]": generator.describe(priced.config),
-      "line_items[0][quantity]": "1",
-      "metadata[purchase_type]": "printed_tray",
-      "metadata[user_id]": user.id,
-      "metadata[order_id]": orderId,
-      "metadata[brand_key]": brand.key,
-      "metadata[generator_type]": generator.type,
-      "metadata[generator_version]": String(generator.version),
-      "metadata[columns]": String(priced.config.columns),
-      "metadata[rows]": String(priced.config.rows),
-      "metadata[base_width_mm]": String(priced.config.baseSize),
-      "metadata[base_depth_mm]": String(priced.config.baseDepth),
-      "metadata[outer_width_mm]": priced.outerWidth.toFixed(1),
-      "metadata[outer_depth_mm]": priced.outerDepth.toFixed(1)
-    });
-    if (user.email) parameters.set("customer_email", user.email);
-    allowedCountries.forEach((country, index) => parameters.set(`shipping_address_collection[allowed_countries][${index}]`, country));
-    const session = await stripeForm("/v1/checkout/sessions", parameters);
-    if (!session.url) throw new Error("Stripe Checkout could not be created.");
+    const deliverySnapshot = await requireCustomerDeliverySnapshot(user);
+    let session;
+    let paymentReference;
+    if (paymentProvider === "stripe") {
+      const returnOrigin = checkoutReturnOrigin(request, origin);
+      const parameters = new URLSearchParams({
+        mode: "payment",
+        success_url: `${returnOrigin}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${returnOrigin}?checkout=cancelled`,
+        billing_address_collection: "required",
+        "line_items[0][price_data][currency]": currency,
+        "line_items[0][price_data][unit_amount]": String(priced.amount),
+        "line_items[0][price_data][product_data][name]": prefix,
+        "line_items[0][price_data][product_data][description]": generator.describe(priced.config),
+        "line_items[0][quantity]": "1",
+        "metadata[purchase_type]": "printed_tray",
+        "metadata[user_id]": user.id,
+        "metadata[order_id]": orderId,
+        "metadata[brand_key]": brand.key,
+        "metadata[generator_type]": generator.type,
+        "metadata[generator_version]": String(generator.version),
+        "metadata[columns]": String(priced.config.columns),
+        "metadata[rows]": String(priced.config.rows),
+        "metadata[base_width_mm]": String(priced.config.baseSize),
+        "metadata[base_depth_mm]": String(priced.config.baseDepth),
+        "metadata[outer_width_mm]": priced.outerWidth.toFixed(1),
+        "metadata[outer_depth_mm]": priced.outerDepth.toFixed(1)
+      });
+      if (user.email) parameters.set("customer_email", user.email);
+      allowedCountries.forEach((country, index) => parameters.set(`shipping_address_collection[allowed_countries][${index}]`, country));
+      session = await stripeForm("/v1/checkout/sessions", parameters);
+      paymentReference = session.id;
+      if (!session.url) throw new Error("Stripe Checkout could not be created.");
+    } else {
+      paymentReference = worldpayTransactionReference(orderId);
+      session = await createWorldpayPaymentPage({
+        transactionReference: paymentReference,
+        amount: priced.amount,
+        currency,
+        description: prefix,
+        resultUrls: worldpayResultUrls(request, origin, "success", "cancelled", paymentReference),
+        customer: { email: user.email },
+        billingAddress: worldpayBillingAddress(deliverySnapshot.billingAddress)
+      });
+    }
     await createPendingOrder({
       id: orderId,
       userId: user.id,
-      sessionId: session.id,
+      sessionId: paymentReference,
+      paymentProvider,
+      paymentReference,
       orderType: "printed_tray",
       amount: priced.amount,
       description: prefix,
       brandKey: brand.key,
       generatorType: generator.type,
       designSnapshot: { generatorVersion: generator.version, parameters: printable },
-      trayConfiguration: generator.type === "movement_tray" ? printable : null
+      trayConfiguration: generator.type === "movement_tray" ? printable : null,
+      customerSnapshot: deliverySnapshot
     });
     await recordPlatformEvent({
       eventType: "checkout.print_started",
@@ -2279,13 +2471,13 @@ async function createStripeCheckout(request, response) {
       sourcePath: sourcePathFromRequest(request),
       entityType: "order",
       entityId: orderId,
-      payload: { amountPence: priced.amount, stripeCheckoutSessionId: session.id, designName: prefix }
+      payload: { amountPence: priced.amount, paymentProvider, paymentReference, designName: prefix }
     });
-    sendJson(response, 200, { url: session.url, amount: priced.amount, currency, mode: readiness.mode }, origin);
+    sendJson(response, 200, { url: session.url, amount: priced.amount, currency, mode: readiness.mode, provider: readiness.provider, providerLabel: readiness.label }, origin);
   } catch (error) {
     const rawMessage = error.cause?.message || error.message || "Checkout request failed.";
     const message = rawMessage.includes("Invalid API Key")
-      ? "Stripe rejected the server key. Restart the Movement Tray server after changing .env, or replace the key in Stripe."
+      ? `${paymentProviderLabel()} rejected the server key. Restart the Movement Tray server after changing .env, or replace the key in the payment dashboard.`
       : rawMessage;
     sendJson(response, 400, { error: message }, origin);
   }
@@ -2294,37 +2486,54 @@ async function createStripeCheckout(request, response) {
 async function createUnlockCheckout(request, response) {
   const origin = checkoutOrigin(request);
   if (!checkoutOriginAllowed(request)) return sendJson(response, 403, { error: "Origin is not allowed." });
-  const readiness = stripeReady();
+  const readiness = checkoutReadiness();
   if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
 
   try {
     const user = await authenticateUser(request);
     const { brand, generator } = requestPlatformContext(request);
     const orderId = randomUUID();
-    const returnOrigin = checkoutReturnOrigin(request, origin);
-    const parameters = new URLSearchParams({
-      mode: "payment",
-      success_url: `${returnOrigin}?checkout=unlock-success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${returnOrigin}?checkout=unlock-cancelled`,
-      billing_address_collection: "required",
-      "line_items[0][price_data][currency]": currency,
-      "line_items[0][price_data][unit_amount]": String(unlimitedExportsPrice),
-      "line_items[0][price_data][product_data][name]": "Unlimited STL exports",
-      "line_items[0][price_data][product_data][description]": `One-off purchase for unlimited ${brand.name} STL downloads`,
-      "line_items[0][quantity]": "1",
-      "metadata[purchase_type]": "unlimited_stl",
-      "metadata[user_id]": user.id,
-      "metadata[order_id]": orderId,
-      "metadata[brand_key]": brand.key,
-      "metadata[generator_type]": generator.type
-    });
-    if (user.email) parameters.set("customer_email", user.email);
-    const session = await stripeForm("/v1/checkout/sessions", parameters);
-    if (!session.url) throw new Error("Stripe Checkout could not be created.");
+    let session;
+    let paymentReference;
+    if (paymentProvider === "stripe") {
+      const returnOrigin = checkoutReturnOrigin(request, origin);
+      const parameters = new URLSearchParams({
+        mode: "payment",
+        success_url: `${returnOrigin}?checkout=unlock-success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${returnOrigin}?checkout=unlock-cancelled`,
+        billing_address_collection: "required",
+        "line_items[0][price_data][currency]": currency,
+        "line_items[0][price_data][unit_amount]": String(unlimitedExportsPrice),
+        "line_items[0][price_data][product_data][name]": "Unlimited STL exports",
+        "line_items[0][price_data][product_data][description]": `One-off purchase for unlimited ${brand.name} STL downloads`,
+        "line_items[0][quantity]": "1",
+        "metadata[purchase_type]": "unlimited_stl",
+        "metadata[user_id]": user.id,
+        "metadata[order_id]": orderId,
+        "metadata[brand_key]": brand.key,
+        "metadata[generator_type]": generator.type
+      });
+      if (user.email) parameters.set("customer_email", user.email);
+      session = await stripeForm("/v1/checkout/sessions", parameters);
+      paymentReference = session.id;
+      if (!session.url) throw new Error("Stripe Checkout could not be created.");
+    } else {
+      paymentReference = worldpayTransactionReference(orderId);
+      session = await createWorldpayPaymentPage({
+        transactionReference: paymentReference,
+        amount: unlimitedExportsPrice,
+        currency,
+        description: `Unlimited ${brand.name} STL exports`,
+        resultUrls: worldpayResultUrls(request, origin, "unlock-success", "unlock-cancelled", paymentReference),
+        customer: { email: user.email }
+      });
+    }
     await createPendingOrder({
       id: orderId,
       userId: user.id,
-      sessionId: session.id,
+      sessionId: paymentReference,
+      paymentProvider,
+      paymentReference,
       orderType: "unlimited_stl",
       amount: unlimitedExportsPrice,
       description: `Unlimited ${brand.name} STL exports`,
@@ -2340,9 +2549,9 @@ async function createUnlockCheckout(request, response) {
       sourcePath: sourcePathFromRequest(request),
       entityType: "order",
       entityId: orderId,
-      payload: { amountPence: unlimitedExportsPrice, stripeCheckoutSessionId: session.id }
+      payload: { amountPence: unlimitedExportsPrice, paymentProvider, paymentReference }
     });
-    sendJson(response, 200, { url: session.url, amount: unlimitedExportsPrice, currency, mode: readiness.mode }, origin);
+    sendJson(response, 200, { url: session.url, amount: unlimitedExportsPrice, currency, mode: readiness.mode, provider: readiness.provider, providerLabel: readiness.label }, origin);
   } catch (error) {
     sendJson(response, 400, { error: error.cause?.message || error.message || "Checkout request failed." }, origin);
   }
@@ -2351,21 +2560,32 @@ async function createUnlockCheckout(request, response) {
 async function verifyUnlockCheckout(request, response) {
   const origin = checkoutOrigin(request);
   if (!checkoutOriginAllowed(request)) return sendJson(response, 403, { error: "Origin is not allowed." });
-  const readiness = stripeReady();
+  const readiness = checkoutReadiness();
   if (!readiness.ready) return sendJson(response, 503, { error: readiness.reason }, origin);
 
   try {
     const user = await authenticateUser(request);
     const { brand, generator } = requestPlatformContext(request);
     const body = await readJson(request);
-    const sessionId = String(body.sessionId || "");
-    if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) throw new Error("Invalid Stripe Checkout session.");
-    const session = await stripeJson(`/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
-    if (session.payment_status !== "paid" || session.metadata?.purchase_type !== "unlimited_stl" || session.metadata?.user_id !== user.id
-      || session.metadata?.brand_key !== brand.key || session.metadata?.generator_type !== generator.type) {
-      return sendJson(response, 402, { error: "The unlimited STL purchase is not paid." }, origin);
+    const sessionId = String(body.sessionId || body.paymentReference || "");
+    if (paymentProvider === "stripe" || /^cs_[A-Za-z0-9_]+$/.test(sessionId)) {
+      if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) throw new Error("Invalid Stripe Checkout session.");
+      const session = await stripeJson(`/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
+      if (session.payment_status !== "paid" || session.metadata?.purchase_type !== "unlimited_stl" || session.metadata?.user_id !== user.id
+        || session.metadata?.brand_key !== brand.key || session.metadata?.generator_type !== generator.type) {
+        return sendJson(response, 402, { error: "The unlimited STL purchase is not paid." }, origin);
+      }
+      await finalizeCheckoutSession(session);
+      return sendJson(response, 200, { unlocked: true }, origin);
     }
-    await finalizeCheckoutSession(session);
+    const orderId = orderIdFromPaymentReference(sessionId);
+    const orders = orderId ? await supabaseAdmin(`orders?select=*&id=eq.${encodeURIComponent(orderId)}&user_id=eq.${encodeURIComponent(user.id)}&limit=1`) : [];
+    const order = orders?.[0];
+    if (!order || order.order_type !== "unlimited_stl" || order.brand_key !== brand.key || order.generator_type !== generator.type) {
+      return sendJson(response, 404, { error: "The unlimited STL purchase could not be found." }, origin);
+    }
+    if (order.status !== "paid") return sendJson(response, 200, { unlocked: false, pending: true, message: "Waiting for secure payment confirmation." }, origin);
+    await finalizePaidOrder({ order, provider: "worldpay", paymentReference: sessionId });
     sendJson(response, 200, { unlocked: true }, origin);
   } catch (error) {
     sendJson(response, 400, { error: error.cause?.message || error.message || "Checkout verification failed." }, origin);
@@ -2377,14 +2597,22 @@ async function verifyPrintCheckout(request, response) {
   try {
     const user = await authenticateUser(request);
     const body = await readJson(request);
-    const sessionId = String(body.sessionId || "");
-    if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) throw new Error("Invalid Stripe Checkout session.");
-    const session = await stripeJson(`/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
-    if (session.payment_status !== "paid" || session.metadata?.purchase_type !== "marketplace_print" || session.metadata?.user_id !== user.id) {
-      return sendJson(response, 402, { error: "The print order payment is not confirmed." }, origin);
+    const sessionId = String(body.sessionId || body.paymentReference || "");
+    if (paymentProvider === "stripe" || /^cs_[A-Za-z0-9_]+$/.test(sessionId)) {
+      if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) throw new Error("Invalid Stripe Checkout session.");
+      const session = await stripeJson(`/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
+      if (session.payment_status !== "paid" || session.metadata?.purchase_type !== "marketplace_print" || session.metadata?.user_id !== user.id) {
+        return sendJson(response, 402, { error: "The print order payment is not confirmed." }, origin);
+      }
+      await finalizeCheckoutSession(session);
+      return sendJson(response, 200, { paid: true, orderId: session.metadata?.order_id }, origin);
     }
-    await finalizeCheckoutSession(session);
-    sendJson(response, 200, { paid: true, orderId: session.metadata?.order_id }, origin);
+    const orderId = orderIdFromPaymentReference(sessionId);
+    const orders = orderId ? await supabaseAdmin(`orders?select=*&id=eq.${encodeURIComponent(orderId)}&user_id=eq.${encodeURIComponent(user.id)}&limit=1`) : [];
+    const order = orders?.[0];
+    if (!order || !["printed_design", "printed_tray"].includes(order.order_type)) return sendJson(response, 404, { error: "The print order could not be found." }, origin);
+    if (order.status !== "paid") return sendJson(response, 200, { paid: false, pending: true, orderId: order.id, message: "Waiting for secure payment confirmation." }, origin);
+    sendJson(response, 200, { paid: true, orderId: order.id }, origin);
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Print checkout could not be verified." }, origin);
   }
@@ -2605,8 +2833,8 @@ async function requestAccountDeletion(request, response) {
 }
 
 async function createPendingOrder({
-  id, userId, sessionId, orderType, amount, description, brandKey = "tray", generatorType = "movement_tray",
-  designSnapshot = null, trayConfiguration = null, financials = null
+  id, userId, sessionId, paymentProvider: orderPaymentProvider = paymentProvider, paymentReference = sessionId, orderType, amount, description, brandKey = "tray", generatorType = "movement_tray",
+  designSnapshot = null, trayConfiguration = null, financials = null, customerSnapshot = null
 }) {
   const order = {
     id,
@@ -2623,7 +2851,9 @@ async function createPendingOrder({
       postage_ex_vat: financials.postageExVat,
       vat_rate: financials.vatRate,
       vat_amount: financials.vatAmount
-    } : {})
+    } : {}),
+    payment_provider: orderPaymentProvider,
+    payment_reference: paymentReference
   };
   try {
     await supabaseAdmin("orders", {
@@ -2632,7 +2862,7 @@ async function createPendingOrder({
       body: JSON.stringify(order)
     });
   } catch {
-    const { brand_key, generator_type, ...legacyOrder } = order;
+    const { brand_key, generator_type, payment_provider, payment_reference, ...legacyOrder } = order;
     await supabaseAdmin("orders", {
       method: "POST",
       headers: { Prefer: "return=minimal" },
@@ -2654,68 +2884,119 @@ async function createPendingOrder({
       body: JSON.stringify(legacyItem)
     });
   }
+  if (customerSnapshot) {
+    await supabaseAdmin("order_customer_snapshots?on_conflict=order_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({
+        order_id: id,
+        customer_name: customerSnapshot.customerName || null,
+        customer_email: customerSnapshot.customerEmail || null,
+        billing_address: customerSnapshot.billingAddress || {},
+        delivery_address: customerSnapshot.deliveryAddress || customerSnapshot.billingAddress || {},
+        country_code: customerSnapshot.countryCode || null
+      })
+    });
+  }
 }
 
-async function finalizeCheckoutSession(session) {
-  const orderId = session.metadata?.order_id;
-  const userId = session.metadata?.user_id;
-  if (!orderId || !userId || session.payment_status !== "paid") return;
-  const paidAt = new Date((session.created || Math.floor(Date.now() / 1000)) * 1000).toISOString();
-  await supabaseAdmin(`orders?id=eq.${encodeURIComponent(orderId)}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({
-      status: "paid",
-      stripe_payment_intent_id: session.payment_intent || null,
-      total_inc_vat: session.amount_total,
-      paid_at: paidAt,
-      tax_point: paidAt,
-      updated_at: new Date().toISOString()
-    })
-  });
-  const billing = session.customer_details?.address || {};
-  const shipping = session.shipping_details || session.collected_information?.shipping_details;
-  const delivery = shipping?.address || billing;
-  await supabaseAdmin("order_customer_snapshots?on_conflict=order_id", {
-    method: "POST",
-    headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-    body: JSON.stringify({
-      order_id: orderId,
-      customer_name: session.customer_details?.name || shipping?.name || null,
-      customer_email: session.customer_details?.email || null,
-      billing_address: billing,
-      delivery_address: delivery,
-      country_code: delivery.country || billing.country || null
-    })
-  });
+async function finalizePaidOrder({
+  order = null,
+  orderId = "",
+  userId = "",
+  purchaseType = "",
+  amountPence = null,
+  provider = paymentProvider,
+  checkoutSessionId = "",
+  paymentReference = "",
+  paymentIntentId = null,
+  brandKey = null,
+  generatorType = null,
+  paidAt = new Date().toISOString(),
+  customerDetails = null,
+  shippingDetails = null,
+  printJobId = ""
+}) {
+  const resolvedOrder = order || (await supabaseAdmin(`orders?select=*&id=eq.${encodeURIComponent(orderId)}&limit=1`))?.[0];
+  const finalOrderId = orderId || resolvedOrder?.id;
+  const finalUserId = userId || resolvedOrder?.user_id;
+  if (!finalOrderId || !finalUserId) return;
+  const finalPurchaseType = purchaseType || (resolvedOrder?.order_type === "unlimited_stl" ? "unlimited_stl" : resolvedOrder?.order_type === "printed_design" ? "marketplace_print" : resolvedOrder?.order_type || "");
+  const finalBrandKey = brandKey || resolvedOrder?.brand_key || "tray";
+  const finalGeneratorType = generatorType || resolvedOrder?.generator_type || undefined;
+  const finalAmount = Number(amountPence ?? resolvedOrder?.total_inc_vat ?? 0);
+  const finalPaymentReference = paymentReference || checkoutSessionId || resolvedOrder?.payment_reference || resolvedOrder?.stripe_checkout_session_id || finalOrderId;
+  const orderPatch = {
+    status: "paid",
+    total_inc_vat: finalAmount,
+    paid_at: paidAt,
+    tax_point: paidAt,
+    updated_at: new Date().toISOString(),
+    payment_provider: provider,
+    payment_reference: finalPaymentReference,
+    ...(provider === "stripe" ? { stripe_payment_intent_id: paymentIntentId || null } : {})
+  };
+  try {
+    await supabaseAdmin(`orders?id=eq.${encodeURIComponent(finalOrderId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(orderPatch)
+    });
+  } catch {
+    const { payment_provider, payment_reference, ...legacyPatch } = orderPatch;
+    await supabaseAdmin(`orders?id=eq.${encodeURIComponent(finalOrderId)}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(legacyPatch)
+    });
+  }
+  if (customerDetails) {
+    const billing = customerDetails.address || {};
+    const shipping = shippingDetails || null;
+    const delivery = shipping?.address || billing;
+    await supabaseAdmin("order_customer_snapshots?on_conflict=order_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({
+        order_id: finalOrderId,
+        customer_name: customerDetails.name || shipping?.name || null,
+        customer_email: customerDetails.email || null,
+        billing_address: billing,
+        delivery_address: delivery,
+        country_code: delivery.country || billing.country || null
+      })
+    });
+  }
   await recordPlatformEvent({
     eventType: "payment.completed",
-    actorUserId: userId,
+    actorUserId: finalUserId,
     actorRole: "customer",
-    brandKey: session.metadata?.brand_key || null,
-    generatorType: session.metadata?.generator_type || null,
+    brandKey: finalBrandKey,
+    generatorType: finalGeneratorType || null,
     entityType: "order",
-    entityId: orderId,
+    entityId: finalOrderId,
     payload: {
-      purchaseType: session.metadata?.purchase_type || "",
-      amountPence: session.amount_total,
-      stripeCheckoutSessionId: session.id,
-      stripePaymentIntentId: session.payment_intent || null,
-      countryCode: delivery.country || billing.country || null
+      purchaseType: finalPurchaseType,
+      amountPence: finalAmount,
+      paymentProvider: provider,
+      paymentReference: finalPaymentReference,
+      ...(provider === "stripe" ? { stripeCheckoutSessionId: checkoutSessionId, stripePaymentIntentId: paymentIntentId || null } : {})
     }
   });
-  if (session.metadata?.purchase_type === "unlimited_stl") {
+  if (finalPurchaseType === "unlimited_stl") {
     const { brand, generator } = resolvePlatformContext({
-      brandKey: session.metadata?.brand_key || "tray",
-      generatorType: session.metadata?.generator_type || undefined
+      brandKey: finalBrandKey || "tray",
+      generatorType: finalGeneratorType || undefined
     });
     const entitlement = {
-      user_id: userId,
+      user_id: finalUserId,
       entitlement_type: "unlimited_stl",
       brand_key: brand.key,
       generator_type: brand.entitlementScope === "generator" ? generator.type : null,
-      source_order_id: orderId,
-      stripe_checkout_session_id: session.id,
+      source_order_id: finalOrderId,
+      stripe_checkout_session_id: provider === "stripe" ? checkoutSessionId : null,
+      payment_provider: provider,
+      payment_reference: finalPaymentReference,
       granted_at: new Date().toISOString(),
       revoked_at: null
     };
@@ -2726,7 +3007,7 @@ async function finalizeCheckoutSession(session) {
         body: JSON.stringify(entitlement)
       });
     } catch {
-      const { brand_key, generator_type, ...legacyEntitlement } = entitlement;
+      const { brand_key, generator_type, payment_provider, payment_reference, ...legacyEntitlement } = entitlement;
       await supabaseAdmin("entitlements?on_conflict=user_id,entitlement_type", {
         method: "POST",
         headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -2735,39 +3016,63 @@ async function finalizeCheckoutSession(session) {
     }
     await recordPlatformEvent({
       eventType: "unlock.purchased",
-      actorUserId: userId,
+      actorUserId: finalUserId,
       actorRole: "customer",
       brandKey: brand.key,
       generatorType: generator.type,
       entityType: "entitlement",
-      entityId: orderId,
-      payload: { orderId, stripeCheckoutSessionId: session.id, entitlementScope: brand.entitlementScope }
+      entityId: finalOrderId,
+      payload: { orderId: finalOrderId, paymentProvider: provider, paymentReference: finalPaymentReference, entitlementScope: brand.entitlementScope }
     });
   }
-  if (session.metadata?.purchase_type === "marketplace_print" && session.metadata?.print_job_id) {
-    const printJobId = session.metadata.print_job_id;
-    const jobs = await supabaseAdmin(`print_jobs?select=*&id=eq.${encodeURIComponent(printJobId)}&order_id=eq.${encodeURIComponent(orderId)}&limit=1`);
+  if (finalPurchaseType === "marketplace_print") {
+    const jobs = printJobId
+      ? await supabaseAdmin(`print_jobs?select=*&id=eq.${encodeURIComponent(printJobId)}&order_id=eq.${encodeURIComponent(finalOrderId)}&limit=1`)
+      : await supabaseAdmin(`print_jobs?select=*&order_id=eq.${encodeURIComponent(finalOrderId)}&limit=1`);
     const job = jobs?.[0];
     if (job?.status === "pending_payment") {
       const updatedAt = new Date().toISOString();
       await Promise.all([
-        supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(printJobId)}`, {
+        supabaseAdmin(`print_jobs?id=eq.${encodeURIComponent(job.id)}`, {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ status: "order_made", updated_at: updatedAt })
         }),
         createPrintJobEvent({
-          printJobId,
-          actorUserId: userId,
+          printJobId: job.id,
+          actorUserId: finalUserId,
           actorRole: "customer",
           fromStatus: "pending_payment",
           toStatus: "order_made",
-          note: "Stripe confirmed customer payment.",
+          note: `${paymentProviderLabel(provider)} confirmed customer payment.`,
           eventType: "status"
         })
       ]);
     }
   }
+}
+
+async function finalizeCheckoutSession(session) {
+  const orderId = session.metadata?.order_id;
+  const userId = session.metadata?.user_id;
+  if (!orderId || !userId || session.payment_status !== "paid") return;
+  const paidAt = new Date((session.created || Math.floor(Date.now() / 1000)) * 1000).toISOString();
+  await finalizePaidOrder({
+    orderId,
+    userId,
+    purchaseType: session.metadata?.purchase_type || "",
+    amountPence: session.amount_total,
+    provider: "stripe",
+    checkoutSessionId: session.id,
+    paymentReference: session.id,
+    paymentIntentId: session.payment_intent || null,
+    brandKey: session.metadata?.brand_key || null,
+    generatorType: session.metadata?.generator_type || null,
+    paidAt,
+    customerDetails: session.customer_details || null,
+    shippingDetails: session.shipping_details || session.collected_information?.shipping_details || null,
+    printJobId: session.metadata?.print_job_id || ""
+  });
 }
 
 async function handleStripeWebhook(request, response) {
@@ -2795,6 +3100,73 @@ async function handleStripeWebhook(request, response) {
     sendJson(response, 200, { received: true });
   } catch (error) {
     sendJson(response, 400, { error: error.message || "Stripe webhook failed." });
+  }
+}
+
+function worldpayEventType(event) {
+  return String(event.eventType || event.type || event.eventDetails?.type || event.eventDetails?.eventType || event.notificationType || "").trim();
+}
+
+function worldpayTransactionReferenceFromEvent(event) {
+  return String(
+    event.transactionReference
+    || event.eventDetails?.transactionReference
+    || event.payment?.transactionReference
+    || event.data?.transactionReference
+    || event._embedded?.payment?.transactionReference
+    || ""
+  );
+}
+
+function worldpayAmountFromEvent(event) {
+  const value = event.value || event.eventDetails?.value || event.payment?.value || event.data?.value || {};
+  return Number(value.amount ?? event.amount ?? event.eventDetails?.amount ?? 0);
+}
+
+function worldpayPaymentConfirmed(event) {
+  const normalized = worldpayEventType(event).toLowerCase().replace(/[^a-z]/g, "");
+  return ["sentforsettlement", "settlementinstructed", "authorised", "authorized", "approved", "settled"].includes(normalized);
+}
+
+async function handleWorldpayWebhook(request, response) {
+  try {
+    const rawBody = await readBody(request);
+    if (!worldpayEventVerified(rawBody, request.headers)) return sendJson(response, 400, { error: "Invalid Worldpay webhook signature." });
+    const event = JSON.parse(rawBody);
+    const eventId = String(event.eventId || event.id || event.eventDetails?.eventId || "");
+    const eventType = worldpayEventType(event) || "worldpay.event";
+    const transactionReference = worldpayTransactionReferenceFromEvent(event);
+    const processedId = eventId || `${eventType}:${transactionReference}`;
+    const existing = await supabaseAdmin(`payment_events?select=payment_event_id&payment_provider=eq.worldpay&payment_event_id=eq.${encodeURIComponent(processedId)}&limit=1`).catch(() => []);
+    if (existing?.length) return sendJson(response, 200, { received: true });
+    if (transactionReference && worldpayPaymentConfirmed(event)) {
+      const orderId = orderIdFromPaymentReference(transactionReference);
+      const order = orderId ? (await supabaseAdmin(`orders?select=*&id=eq.${encodeURIComponent(orderId)}&limit=1`))?.[0] : null;
+      if (order) {
+        await finalizePaidOrder({
+          order,
+          provider: "worldpay",
+          paymentReference: transactionReference,
+          amountPence: worldpayAmountFromEvent(event) || order.total_inc_vat,
+          paidAt: new Date().toISOString()
+        });
+      }
+    }
+    await supabaseAdmin("payment_events", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ payment_event_id: processedId, payment_provider: "worldpay", event_type: eventType })
+    }).catch(() => null);
+    await recordPlatformEvent({
+      eventType: "payment.webhook_processed",
+      actorRole: "system",
+      entityType: "payment_event",
+      entityId: processedId,
+      payload: { paymentProvider: "worldpay", paymentEventType: eventType, transactionReference }
+    });
+    sendJson(response, 200, { received: true });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "Worldpay webhook failed." });
   }
 }
 
@@ -2840,11 +3212,15 @@ createServer(async (request, response) => {
     await handleStripeWebhook(request, response);
     return;
   }
+  if (request.method === "POST" && pathname === "/api/worldpay/webhook") {
+    await handleWorldpayWebhook(request, response);
+    return;
+  }
   if (request.method === "POST" && pathname === "/api/tasks/auto-complete-posted") {
     await runAutoCompleteTask(request, response);
     return;
   }
-  if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account") || pathname.startsWith("/api/factory") || pathname.startsWith("/api/hub") || pathname.startsWith("/api/marketplace") || pathname === "/api/launch-signup" || pathname === "/api/events")) {
+  if (request.method === "OPTIONS" && (pathname.startsWith("/api/checkout") || pathname.startsWith("/api/account") || pathname.startsWith("/api/factory") || pathname.startsWith("/api/hub") || pathname.startsWith("/api/marketplace") || pathname.startsWith("/api/worldpay") || pathname === "/api/launch-signup" || pathname === "/api/events")) {
     response.writeHead(204, {
       ...(origin ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin" } : {}),
       "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Forget-About-Brand, X-Forget-About-Generator, X-Forget-About-Path, X-Forget-About-Device",
@@ -2854,10 +3230,12 @@ createServer(async (request, response) => {
     return;
   }
   if (request.method === "GET" && pathname === "/api/checkout/config") {
-    const readiness = stripeReady();
+    const readiness = checkoutReadiness();
     sendJson(response, 200, {
       enabled: readiness.ready,
       mode: readiness.mode || "unconfigured",
+      provider: readiness.provider || paymentProvider,
+      providerLabel: readiness.label || paymentProviderLabel(),
       reason: readiness.reason || "",
       currency,
       basePrice,

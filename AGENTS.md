@@ -37,10 +37,10 @@ Build once at platform level when behaviour is common across brands. Do not copy
 
 - Do not introduce a second auth, order, payment, analytics, or event system.
 - Use Supabase for auth and platform persistence unless there is a deliberate architecture decision saying otherwise.
-- Use Stripe server-side flows for payment and marketplace payouts. Never expose secret keys to public JavaScript.
+- Use the configured server-side payment provider for payments. The MVP launch provider is Worldpay Hosted Payment Pages; legacy Stripe code is fallback-only unless `PAYMENT_PROVIDER=stripe` is deliberately set. Never expose payment secrets to public JavaScript.
 - Keep the event log append-only. Significant actions must emit platform events.
 - Keep customer brand journeys route-scoped. Users should not switch brands inside a customer generator app.
-- Factory providers are pooled across brands and can receive eligible print jobs from any brand.
+- Factory providers are pooled across brands in the platform architecture, but the MVP launch is ringfenced to the launch printer profile attached to `watson.john@live.co.uk`.
 - Keep generated STL logic deterministic and testable.
 - Keep UI changes consistent with the shared shell unless there is a brand-specific reason to diverge.
 
@@ -59,7 +59,7 @@ Build once at platform level when behaviour is common across brands. Do not copy
 
 ## Testing Expectations
 
-Run `npm.cmd run check` on Windows before handing work back when code changes. Prefer focused tests for narrow changes, and broaden coverage when touching shared account, checkout, event, Supabase, Stripe, generator registry, factory, or routing code.
+Run `npm.cmd run check` on Windows before handing work back when code changes. Prefer focused tests for narrow changes, and broaden coverage when touching shared account, checkout, event, Supabase, payment providers, generator registry, factory, or routing code.
 
 For browser smoke tests:
 
@@ -94,8 +94,9 @@ Use:
 - Keep `.env` secrets local and out of public config.
 - Use Supabase publishable keys only in public clients.
 - Use Supabase secret/service keys only in server-side code.
-- Use Stripe restricted or secret keys only in the backend.
-- Verify webhook signatures before trusting Stripe events.
+- Use Worldpay credentials only in the backend for the MVP payment path.
+- Use Stripe restricted or secret keys only in the backend if the legacy Stripe fallback is deliberately enabled.
+- Verify webhook signatures before trusting payment-provider events.
 - Keep marketplace payouts held until order completion rules are satisfied.
 - Store VAT, address, payment, order, refund, and fulfilment records in a GDPR-aware way with deletion/retention boundaries.
 - Do not weaken RLS, grants, or append-only event protections to fix a short-term error.
@@ -109,7 +110,7 @@ Before finishing a task, ask whether the change altered any of these:
 - Shared services.
 - Event names or payloads.
 - Supabase schema, RLS, storage, or Realtime.
-- Stripe, payouts, refunds, or VAT handling.
+- Payment providers, payouts, refunds, or VAT handling.
 - Deployment or environment setup.
 - Operational playbooks.
 

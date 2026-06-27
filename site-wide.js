@@ -259,11 +259,11 @@
   }
 
   function launchPublicPaths() {
-    return new Set(Array.isArray(launchConfig.publicPaths) ? launchConfig.publicPaths : ["tray", "print", "factory"]);
+    return new Set(Array.isArray(launchConfig.publicPaths) ? launchConfig.publicPaths : ["tray", "factory", "terms", "privacy", "cookie", "refunds", "contact", "support"]);
   }
 
   function launchDeferredPaths() {
-    return new Set(Array.isArray(launchConfig.deferredPaths) ? launchConfig.deferredPaths : ["makeup", "paint", "stitch"]);
+    return new Set(Array.isArray(launchConfig.deferredPaths) ? launchConfig.deferredPaths : ["print", "makeup", "paint", "stitch"]);
   }
 
   function launchHoldExcludedPaths() {
@@ -296,8 +296,8 @@
     banner.className = "launch-deferred-banner";
     banner.innerHTML = `
       <strong>Private beta route</strong>
-      <span>This generator is not part of the public launch MVP yet. The live launch is focused on Tray, Uploaded Print, and the Print Factory.</span>
-      <a href="../">Back to launch routes</a>
+      <span>This generator is not part of the public launch MVP yet. The live launch is focused on Tray and the launch factory.</span>
+      <a href="../tray/">Back to Tray</a>
     `;
     document.querySelector("main")?.prepend(banner);
   }
@@ -360,7 +360,9 @@
       }
     });
     document.body.append(hold);
-    hold.querySelector("input")?.focus({ preventScroll: true });
+    if (!window.matchMedia("(max-width: 720px), (pointer: coarse)").matches) {
+      hold.querySelector("input")?.focus({ preventScroll: true });
+    }
   }
 
   function pageKey() {

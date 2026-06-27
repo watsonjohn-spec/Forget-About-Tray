@@ -76,7 +76,7 @@ Steps:
    git --git-dir=.deploy-git --work-tree=. diff --name-status "$lastDecision..HEAD"
    ```
 
-4. Inspect changed files that affect architecture, routes, generators, shared services, Supabase, Stripe, events, deployment, or operations.
+4. Inspect changed files that affect architecture, routes, generators, shared services, Supabase, payment providers, events, deployment, or operations.
 5. Add or update entries in `docs/decisions/README.md` using the existing date, decision, reason, consequences, and follow-ups format.
 6. Update related docs when the changed code alters their contract:
 

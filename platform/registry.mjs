@@ -198,7 +198,9 @@ export const marketplacePolicy = {
   refundableBeforeStatus: "producing",
   providerTransferStatus: "complete",
   jobStatuses: ["pending_payment", "order_made", "producing", "posted", "complete", "cancelled", "refunded"],
-  stripeChargeType: "separate_charges_and_transfers"
+  paymentProvider: "worldpay",
+  customerPaymentFlow: "hosted_payment_page",
+  providerPayoutFlow: "manual_after_completion"
 };
 
 export function getBrand(key = "tray") {

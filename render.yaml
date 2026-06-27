@@ -9,6 +9,16 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "24"
+      - key: PAYMENT_PROVIDER
+        value: worldpay
+      - key: PAYMENT_CURRENCY
+        value: gbp
+      - key: PAYMENT_ALLOWED_COUNTRIES
+        value: GB
+      - key: WORLDPAY_ENVIRONMENT
+        value: try
+      - key: ALLOW_LIVE_WORLDPAY
+        value: "false"
       - key: ALLOW_LIVE_STRIPE
         value: "false"
       - key: STRIPE_API_VERSION
@@ -37,12 +47,24 @@ services:
         value: "500"
       - key: STRIPE_ALLOWED_COUNTRIES
         value: GB
+      - key: LAUNCH_PRINTER_EMAILS
+        value: watson.john@live.co.uk
       - key: CHECKOUT_ALLOWED_ORIGIN
         value: https://watsonjohn-spec.github.io
       - key: ACCOUNT_DEVICE_LIMIT
         value: "3"
       - key: ENFORCE_ACCOUNT_DEVICE_LIMIT
         value: "false"
+      - key: WORLDPAY_MERCHANT_ENTITY
+        sync: false
+      - key: WORLDPAY_USERNAME
+        sync: false
+      - key: WORLDPAY_PASSWORD
+        sync: false
+      - key: WORLDPAY_AUTHORIZATION
+        sync: false
+      - key: WORLDPAY_WEBHOOK_SECRET
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
